@@ -104,9 +104,9 @@ export class Game {
     this.viewmodel.position.set(0.27, -0.25, -0.5);
     this.viewmodel.visible = false;
     this.camera.add(this.viewmodel);
-    this.flashlight = new THREE.SpotLight(0xfff2cc, 0, 26, 0.5, 0.6, 1.2);
-    this.flashlight.position.set(0.2, -0.1, 0);
-    this.flashlight.target.position.set(0, 0, -1);
+    this.flashlight = new THREE.SpotLight(0xfff2cc, 0, 32, 0.52, 0.5, 1.2);
+    this.flashlight.position.set(0.1, -0.05, -1); // just past the blaster so it doesn't blow out the viewmodel
+    this.flashlight.target.position.set(0.1, -0.05, -2);
     this.camera.add(this.flashlight, this.flashlight.target);
     this.highlight = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(1, 1, 1)), new THREE.LineBasicMaterial({ color: 0xffe14d, depthTest: false, transparent: true }));
     this.highlight.visible = false; this.highlight.renderOrder = 5;
@@ -140,6 +140,9 @@ export class Game {
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    // keep the HUD readable (and non-overlapping) from small windows up to 4K
+    const scale = Math.max(0.5, Math.min(1.5, Math.min(w / 1280, h / 720)));
+    (this.hud.root.style as any).zoom = String(scale);
   }
 
   private loadMap(seed: number) {
@@ -276,6 +279,8 @@ export class Game {
     if (m.phase !== 'hunt') { this.panic = false; }
     if (m.phase === 'hiding' || m.phase === 'lobby') { this.world.darkTarget = 0; this.world.stopPoltergeist(); this.freezeUntil = 0; this.revealedUntil = 0; }
     if (m.phase === 'hiding') {
+      // new round: forget where everyone was, so nobody is drawn at a stale lobby position
+      for (const e of this.ents.values()) { e.buf.length = 0; e.lastSeen = -1e9; }
       this.sfx.play('hide'); this.sfx.music('sneak');
       // team is confirmed by the roster that follows; banner is shown from there
       this.bannerPending = 'hiding';
@@ -291,7 +296,8 @@ export class Game {
       const res: Results = m.results;
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
-      if (this.hasMe) this.fx.burst(this.body.x, this.body.y + 1, this.body.z, 60, CONFETTI, 5, 6, 1.2, 1.6);
+      // celebratory confetti a few steps ahead, so it never fills a first-person view
+      if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
     } else {
       this.sfx.music('lobby');
     }
@@ -854,8 +860,9 @@ export class Game {
       this.updateHud(dt);
       // in a blackout hunters only get a flashlight; props keep a little night vision
       const hunterView = this.team === 'hunter' && this.alive;
-      this.world.darkFloor = hunterView ? 0.05 : 0.3;
-      this.flashlight.intensity = hunterView && !this.quackedMe ? this.world.dark * 90 : 0;
+      // (values are linear light: 0.012 reads as near-black on screen, 0.12 as moonlit)
+      this.world.darkFloor = hunterView ? 0.02 : 0.12;
+      this.flashlight.intensity = hunterView && !this.quackedMe ? this.world.dark * 7 : 0;
     } else { this.highlight.visible = false; this.flashlight.intensity = 0; }
 
     this.world.update(dt);

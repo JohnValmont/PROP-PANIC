@@ -93,9 +93,10 @@ async function main() {
     a.send({ t: 'bots', n: 2 });
     await a.wait((m) => m.t === 'roster' && m.p.length === 4, 3000, 'bots');
     ok(a.roster.filter((r: any) => r.bot).length === 2, 'host added 2 labelled bots');
-    await a.walk(0.6);
-    await sleep(120);
-    ok(Math.hypot(a.snap.me[3], a.snap.me[5]) > 3, 'players can roam the lobby');
+    const l0 = a.snap.me.slice(0, 3);
+    await a.walk(0.5, Math.PI);
+    await sleep(150);
+    ok(Math.hypot(a.snap.me[0] - l0[0], a.snap.me[2] - l0[2]) > 1, 'players can roam the lobby');
 
     console.log('round start');
     a.msgs.length = 0; b.msgs.length = 0;

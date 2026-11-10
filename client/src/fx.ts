@@ -92,7 +92,7 @@ export class Fx {
 
   /** Expanding ring. kind 'pulse' = scanner wall sweeping outwards, 'shock' = blast dome. */
   ring(x: number, y: number, z: number, maxR: number, speed: number, color: number, kind: 'pulse' | 'shock') {
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: kind === 'pulse' ? 0.28 : 0.4, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
+    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: kind === 'pulse' ? 0.13 : 0.4, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending });
     const mesh = new THREE.Mesh(kind === 'pulse' ? this.shellGeo : this.sphereGeo, mat);
     mesh.position.set(x, kind === 'pulse' ? 1.4 : y + 0.5, z);
     let floor: THREE.Mesh | null = null;
@@ -145,7 +145,7 @@ export class Fx {
       r.t += dt;
       const rad = Math.min(r.maxR, Math.max(0.1, r.t * r.speed));
       const done = r.maxR / r.speed, fade = Math.max(0, 1 - Math.max(0, r.t - done) / r.hold);
-      if (r.floor) { r.mesh.scale.set(rad, 2.8, rad); r.floor.scale.set(rad, rad, 1); (r.floor.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade; (r.mesh.material as THREE.MeshBasicMaterial).opacity = 0.28 * fade; }
+      if (r.floor) { r.mesh.scale.set(rad, 2.8, rad); r.floor.scale.set(rad, rad, 1); (r.floor.material as THREE.MeshBasicMaterial).opacity = 0.9 * fade; (r.mesh.material as THREE.MeshBasicMaterial).opacity = 0.13 * fade; }
       else { r.mesh.scale.set(rad, rad * 0.7, rad); (r.mesh.material as THREE.MeshBasicMaterial).opacity = 0.4 * (1 - r.t / (done + r.hold)); }
       if (r.t > done + r.hold) {
         this.scene.remove(r.mesh); (r.mesh.material as THREE.Material).dispose();
