@@ -156,9 +156,8 @@ export class Room {
   }
 
   disconnect(p: Player) {
-    p.connected = false; p.dcAt = this.now; p.ws = null;
+    p.connected = false; p.dcAt = now(); p.ws = null;
     this.rosterDirty = true;
-    if (this.phase === 'lobby') this.removePlayer(p);
   }
 
   removePlayer(p: Player) {
@@ -605,9 +604,11 @@ export class Room {
     const dt = Math.min(0.2, (t - this.lastTick) / 1000);
     this.lastTick = t;
 
-    for (const p of [...this.players.values()]) if (p.human && !p.connected && t - p.dcAt > DC_GRACE_MS) this.removePlayer(p);
+    // seats are held through a refresh or a network blip; much longer mid-round than in the lobby
+    const grace = this.phase === 'lobby' ? 15_000 : DC_GRACE_MS;
+    for (const p of [...this.players.values()]) if (p.human && !p.connected && t - p.dcAt > grace) this.removePlayer(p);
     if (this.humans === 0) { if (!this.emptySince) this.emptySince = t; } else this.emptySince = 0;
-    if (this.emptySince && t - this.emptySince > (this.humanSlots ? DC_GRACE_MS + 2000 : 3000)) { this.closed = true; return; }
+    if (this.emptySince && t - this.emptySince > (this.humanSlots ? grace + 2000 : 3000)) { this.closed = true; return; }
 
     switch (this.phase) {
       case 'lobby': {
@@ -718,6 +719,7 @@ export class Room {
 
   private snapshot(t: number) {
     const rows: { p: Player; row: number[] }[] = [];
+    const flagsOf = new Map<Player, number>();
     for (const p of this.players.values()) {
       if (!p.alive || p.team === 'spec') continue;
       let f = F.ALIVE;
@@ -726,6 +728,7 @@ export class Room {
       if (p.ghostUntil > t) f |= F.GHOST;
       if (p.body.dashLeft > 0) f |= F.DASH;
       if (p.revealUntil > t) f |= F.REVEAL;
+      flagsOf.set(p, f);
       rows.push({ p, row: [p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f] });
     }
     const st = Math.round(t), ch = Math.round(this.chaos);
@@ -741,7 +744,7 @@ export class Room {
       }
       const b = p.body;
       const me = p.alive && p.team !== 'spec'
-        ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0]
+        ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0]
         : null;
       p.ws.send(JSON.stringify({ t: 's', st, ack: p.ack, me, p: list, ch }));
       if (p.cdDirty) { p.cdDirty = false; this.send(p, { t: 'cd', ...p.cd }); }

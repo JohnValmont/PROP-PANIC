@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>PROP PANIC — Blend in. Don't get caught.</title>
+  <meta name="description" content="A chaotic multiplayer prop-hunt party game in your browser. Become a rubber duck. Fool your friends. Don't get caught." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- non-blocking: the game must boot even if the font CDN is slow or unreachable -->
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2a4a'/%3E%3Cellipse cx='30' cy='42' rx='20' ry='14' fill='%23ffd166'/%3E%3Ccircle cx='40' cy='24' r='12' fill='%23ffd166'/%3E%3Crect x='48' y='22' width='12' height='6' rx='3' fill='%23f78c2b'/%3E%3Ccircle cx='43' cy='21' r='2.5' fill='%2322223b'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <!-- ============================== in-game HUD ============================== -->
+  <div id="hud" class="hidden">
+    <div id="vignette"></div>
+    <div id="panicFrame"></div>
+    <div id="blind"></div>
+
+    <div id="top">
+      <div id="counts"><span class="chip prop"><b id="propsAlive">0</b> props left</span></div>
+      <div id="phaseBox"><div id="phaseLabel">LOBBY</div><div id="timer"></div></div>
+      <div id="chaosWrap" title="Shooting innocent toys and taunting fills the Chaos meter"><span>CHAOS</span><div id="chaosBar"><i></i></div></div>
+    </div>
+
+    <div id="feed"></div>
+    <div id="crosshair"><i></i></div>
+    <div id="hitmark"></div>
+    <div id="prompt"></div>
+    <div id="banner"><div id="bannerTitle"></div><div id="bannerSub"></div></div>
+    <div id="popups"></div>
+    <div id="freeze">SCANNER — FREEZE!</div>
+    <div id="revealed">YOU'RE REVEALED — RUN!</div>
+
+    <div id="role"><div id="roleTeam"></div><div id="roleName"></div><div id="roleBar"><i></i></div></div>
+    <div id="abilities"></div>
+    <div id="meter"><span>PROP-O-METER</span><div><i></i></div></div>
+    <div id="hint"></div>
+    <div id="spectate"></div>
+
+    <div id="blindfold">
+      <div class="bfTitle">NO PEEKING!</div>
+      <div class="bfCount" id="bfCount">25</div>
+      <div class="bfSub">The props are hiding. You are the <b>HUNTER</b>.</div>
+      <div class="bfTips" id="bfTip"></div>
+    </div>
+
+    <div id="lobby" class="panel">
+      <div class="lobbyHead"><div><div class="tiny">ROOM CODE</div><div id="lobbyCode">----</div></div><button id="copyLink" class="btn small teal">Copy invite link</button></div>
+      <div id="lobbyPlayers"></div>
+      <div id="lobbyBots" class="row"><span>Bots</span><button class="btn tiny" id="botsMinus">−</button><b id="botsN">0</b><button class="btn tiny" id="botsPlus">+</button></div>
+      <div id="lobbyStatus"></div>
+      <button id="startBtn" class="btn big yellow">START ROUND</button>
+      <div class="tiny dim">Run around, press <kbd>E</kbd> on toys to transform, <kbd>T</kbd> to taunt.</div>
+    </div>
+
+    <div id="scoreboard" class="panel"></div>
+    <div id="results" class="panel"></div>
+    <div id="chatMenu" class="panel"></div>
+  </div>
+
+  <!-- ============================== main menu ============================== -->
+  <div id="menu">
+    <div class="menuCard">
+      <h1 class="logo"><span class="l1">PROP</span><span class="l2">PANIC</span></h1>
+      <div class="tagline">Blend in. Don't get caught.</div>
+      <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
+      <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
+      <div class="row">
+        <button id="createBtn" class="btn teal">Create private room</button>
+        <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
+      </div>
+      <div id="menuError"></div>
+      <div class="how">
+        <div><b class="tp">PROPS</b> turn into toys, hide in plain sight, taunt for points and drop decoys.</div>
+        <div><b class="th">HUNTERS</b> zap the fakes — but shoot too many innocent toys and you get turned into a duck.</div>
+        <div><b class="tc">CHAOS</b> builds all round: blackouts, haunted toys, forced shuffles. Survive the final PANIC!</div>
+      </div>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Mouse</kbd> look · <kbd>E</kbd>/<kbd>Click</kbd> act · <kbd>Q</kbd> <kbd>F</kbd> abilities · <kbd>Shift</kbd> dash · <kbd>T</kbd> taunt · <kbd>Tab</kbd> scores</div>
+    </div>
+  </div>
+
+  <div id="pause" class="overlay hidden">
+    <div class="menuCard small">
+      <h2>Paused</h2>
+      <button id="resumeBtn" class="btn big yellow">Click to play</button>
+      <div class="row"><button id="gfxBtn" class="btn teal">Graphics: High</button><button id="muteBtn" class="btn teal">Sound: On</button></div>
+      <button id="leaveBtn" class="btn pink">Leave game</button>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> ghost / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
+    </div>
+  </div>
+
+  <div id="conn" class="overlay hidden"><div class="menuCard small"><h2 id="connTitle">Reconnecting…</h2><div id="connSub" class="dim">Hold tight, your seat is being held.</div></div></div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

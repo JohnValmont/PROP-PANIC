@@ -171,6 +171,7 @@ export class Bot {
   private targetSeenAt = 0;
   private nextShot = 0;
   private known = new Map<number, number>();
+  private repathAt = 0;
 
   private setPath(room: Room, p: Player, x: number, z: number): boolean {
     const path = room.nav().path(p.body.x, p.body.z, x, z);
@@ -383,7 +384,7 @@ export class Bot {
         }
       }
       // occasionally lose patience with a perfectly innocent toy
-      if (this.state !== 'chase' && Math.random() < 0.03 && p.focus > 30) {
+      if (this.state !== 'chase' && Math.random() < 0.014 && p.focus > 55) {
         const near = room.map.decor.filter((d) => Math.abs(d.x - b.x) < 6 && Math.abs(d.z - b.z) < 6);
         const d = near[Math.floor(Math.random() * near.length)];
         if (d && this.los(room, p, d.x, d.y + PROPS[d.type].h / 2, d.z)) this.shootAt(room, p, d.x, d.y + PROPS[d.type].h / 2, d.z, t, 0.01);
@@ -406,15 +407,18 @@ export class Bot {
       if (!ok || t - this.targetSeenAt > 3500) { this.state = 'patrol'; this.path = []; this.targetId = -1; return 0; }
       const visible = this.los(room, p, tx, ty, tz);
       const dist = Math.hypot(tx - b.x, tz - b.z);
+      // close in before firing: long shots mostly hit innocent toys and burn focus
+      const far = dist > (w > 0.8 ? 12 : 8);
       if (visible) {
         this.targetSeenAt = t;
-        const want = Math.atan2(-(tx - b.x), -(tz - b.z));
-        this.yaw += Math.max(-10 * dt, Math.min(10 * dt, angDiff(this.yaw, want)));
-        if (t >= this.nextShot && Math.abs(angDiff(this.yaw, want)) < 0.5) this.shootAt(room, p, tx, ty, tz, t, 0.03 + 0.012 * Math.min(10, dist) / Math.max(0.4, w));
-        if (dist > 5) { p.yaw = this.yaw; return 0.8; }
-        return 0;
+        if (!far && t >= this.nextShot) this.shootAt(room, p, tx, ty, tz, t, 0.012 + 0.0028 * dist);
+        if (dist <= 4.5) {
+          const want = Math.atan2(-(tx - b.x), -(tz - b.z));
+          this.yaw += Math.max(-10 * dt, Math.min(10 * dt, angDiff(this.yaw, want)));
+          return 0;
+        }
       }
-      if (this.path.length === 0 || this.pi >= this.path.length) this.setPath(room, p, tx, tz);
+      if (this.path.length === 0 || this.pi >= this.path.length || t > this.repathAt) { this.repathAt = t + 1200; this.setPath(room, p, tx, tz); }
       return this.follow(room, p, dt)[0];
     }
 

@@ -16,7 +16,7 @@ const STATIC_DIR = process.env.PP_STATIC ?? path.resolve(process.cwd(), 'dist/cl
 
 // Short rounds for automated tests: PP_FAST=1
 if (process.env.PP_FAST) {
-  CFG.HIDE_MS = 2500; CFG.HUNT_MS = Number(process.env.PP_HUNT_MS ?? 14_000); CFG.END_MS = 2500;
+  CFG.HIDE_MS = Number(process.env.PP_HIDE_MS ?? 2500); CFG.HUNT_MS = Number(process.env.PP_HUNT_MS ?? 14_000); CFG.END_MS = Number(process.env.PP_END_MS ?? 2500);
   CFG.PANIC_MS = 6000; CFG.LOBBY_COUNTDOWN_MS = 1500; CFG.ROLLCALL_MS = 4000; CFG.ROLLCALL_PANIC_MS = 2000;
 }
 

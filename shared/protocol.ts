@@ -48,7 +48,7 @@ export interface SnapMsg {
   t: 's';
   st: number; // server time
   ack: number;
-  /** [x,y,z,vx,vy,vz,ground,dashLeft,dashCd,speedMul,hp,focus,hw,h,grav] */
+  /** [x,y,z,vx,vy,vz,ground,dashLeft,dashCd,speed,jumpV,hp,focus,hw,h,grav,canMove,flags] */
   me: number[] | null;
   p: EntRow[];
   ch: number; // chaos 0..100
