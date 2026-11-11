@@ -1,12 +1,14 @@
 /** Entry point: menu flow and the glue between DOM buttons and the Game. */
 import './style.css';
 import { Game } from './game';
+import { assets } from './assets';
 
 declare const __BUILD__: string;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+await assets.init(); // the asset manifest: which models, textures and skies exist
 const game = new Game($<HTMLCanvasElement>('c'));
-(window as any).__pp = game; // handy for debugging and automated tests; the server remains authoritative
+(window as any).__pp = game; (window as any).__assets = assets; // handy for debugging and automated tests; the server remains authoritative
 
 const menu = $('menu'), pause = $('pause'), conn = $('conn');
 const nameInput = $<HTMLInputElement>('nameInput'), codeInput = $<HTMLInputElement>('codeInput'), err = $('menuError');
@@ -80,8 +82,8 @@ document.addEventListener('keydown', (e) => {
 $('resumeBtn').onclick = () => { showPause(false); game.requestLock(); };
 $('leaveBtn').onclick = () => toMenu();
 const gfx = $('gfxBtn'), mute = $('muteBtn');
-const label = () => { gfx.textContent = `Graphics: ${game.quality === 'high' ? 'High' : 'Fast'}`; mute.textContent = `Sound: ${game.sfx.muted ? 'Off' : 'On'}`; };
-gfx.onclick = () => { game.setQuality(game.quality === 'high' ? 'low' : 'high'); label(); };
+const label = () => { gfx.textContent = `Graphics: ${game.quality === 'ultra' ? 'Ultra' : game.quality === 'high' ? 'High' : 'Fast'}`; mute.textContent = `Sound: ${game.sfx.muted ? 'Off' : 'On'}`; };
+gfx.onclick = () => { game.setQuality(game.quality === 'ultra' ? 'high' : game.quality === 'high' ? 'low' : 'ultra'); label(); };
 mute.onclick = () => { const m = game.sfx.toggleMute(); localStorage.setItem('pp_mute', m ? '1' : '0'); label(); };
 label();
 
@@ -137,7 +139,17 @@ document.addEventListener('mouseover', (e) => {
 
 // ---------------------------------------------------------------- live player count + boot splash
 fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online').textContent = `● ${h.humans} playing right now`; }).catch(() => {});
-requestAnimationFrame(() => requestAnimationFrame(() => { $('boot').classList.add('done'); setTimeout(() => $('boot').remove(), 600); }));
+{
+  // hold the splash until the first map's models and textures are in (or ten seconds, on a slow line)
+  const boot = $('boot'), bar = boot.querySelector<HTMLElement>('.bootBar i'), t0 = performance.now();
+  const tick = () => {
+    const waited = performance.now() - t0;
+    if (bar) { bar.style.animation = 'none'; bar.style.width = `${Math.round(Math.min(1, assets.progress) * 100)}%`; }
+    if ((assets.progress >= 0.999 && waited > 300) || waited > 10000) { boot.classList.add('done'); setTimeout(() => boot.remove(), 600); }
+    else requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(() => requestAnimationFrame(tick));
+}
 
 // ---------------------------------------------------------------- key bindings, settings from the menu, how-to
 import { ACTIONS, B, keyLabel, resetBinds, setBind } from './keys';

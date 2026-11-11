@@ -1,4 +1,7 @@
-/** Catalog of every object a prop player can disguise as. Sizes are in metres (w = x, h = y, d = z). */
+/**
+ * Catalog of every object a prop player can disguise as. Sizes are in metres (w = x, h = y, d = z)
+ * and match the scanned models in client/public/art/models (see tools/asset-list.mjs).
+ */
 export interface PropDef {
   id: string;
   name: string;
@@ -10,65 +13,82 @@ export interface PropDef {
 }
 
 export const PROPS: PropDef[] = [
-  { id: 'duck', name: 'Rubber Duck', w: 0.5, h: 0.5, d: 0.6 },
-  { id: 'ball', name: 'Beach Ball', w: 0.6, h: 0.6, d: 0.6, round: true },
-  { id: 'blockA', name: 'Letter Block', w: 0.6, h: 0.6, d: 0.6 },
-  { id: 'blockB', name: 'Number Block', w: 0.6, h: 0.6, d: 0.6 },
-  { id: 'blockC', name: 'Jumbo Block', w: 0.9, h: 0.9, d: 0.9 },
-  { id: 'teddy', name: 'Teddy Bear', w: 0.8, h: 1.0, d: 0.6 },
-  { id: 'bigteddy', name: 'Giant Teddy', w: 1.5, h: 1.9, d: 1.2 },
-  { id: 'robot', name: 'Toy Robot', w: 0.6, h: 1.0, d: 0.45 },
-  { id: 'rocket', name: 'Rocket', w: 0.7, h: 1.6, d: 0.7, round: true },
-  { id: 'car', name: 'Toy Car', w: 0.55, h: 0.45, d: 1.05 },
-  { id: 'drum', name: 'Drum', w: 0.6, h: 0.5, d: 0.6, round: true },
-  { id: 'cone', name: 'Traffic Cone', w: 0.45, h: 0.65, d: 0.45, round: true },
-  { id: 'boxS', name: 'Cardboard Box', w: 0.6, h: 0.5, d: 0.6 },
-  { id: 'boxL', name: 'Big Box', w: 1.0, h: 0.9, d: 1.0 },
-  { id: 'crate', name: 'Wooden Crate', w: 0.9, h: 0.9, d: 0.9 },
-  { id: 'gumball', name: 'Gumball Machine', w: 0.5, h: 1.3, d: 0.5, round: true },
-  { id: 'arcade', name: 'Arcade Cabinet', w: 0.8, h: 1.8, d: 0.9 },
-  { id: 'beanbag', name: 'Bean Bag', w: 1.0, h: 0.6, d: 1.0, round: true },
-  { id: 'plant', name: 'Potted Plant', w: 0.6, h: 1.3, d: 0.6, round: true },
-  { id: 'stool', name: 'Stool', w: 0.45, h: 0.6, d: 0.45, round: true },
-  { id: 'basket', name: 'Shopping Basket', w: 0.55, h: 0.35, d: 0.4 },
-  { id: 'register', name: 'Cash Register', w: 0.5, h: 0.45, d: 0.5 },
-  { id: 'rings', name: 'Stacking Rings', w: 0.5, h: 0.6, d: 0.5, round: true },
-  { id: 'train', name: 'Toy Train', w: 0.5, h: 0.55, d: 1.05 },
-  { id: 'dino', name: 'Dino', w: 0.5, h: 0.9, d: 1.1 },
-  { id: 'ufo', name: 'Toy UFO', w: 0.6, h: 0.4, d: 0.6, round: true },
-  { id: 'bin', name: 'Trash Bin', w: 0.5, h: 0.75, d: 0.5, round: true },
-  { id: 'sign', name: 'Wet Floor Sign', w: 0.5, h: 0.8, d: 0.4 },
-  { id: 'barrel', name: 'Barrel', w: 0.65, h: 0.85, d: 0.65, round: true },
-  { id: 'horse', name: 'Rocking Horse', w: 0.5, h: 1.0, d: 1.2 },
-  { id: 'lamp', name: 'Floor Lamp', w: 0.45, h: 1.7, d: 0.45, round: true },
-  { id: 'gift', name: 'Gift Box', w: 0.55, h: 0.55, d: 0.55 },
-  // ---- outdoor toys and clutter (Sunny Meadow)
-  { id: 'bush', name: 'Bush', w: 1.0, h: 0.8, d: 1.0, round: true },
-  { id: 'rock', name: 'Rock', w: 0.9, h: 0.55, d: 0.8, round: true },
-  { id: 'log', name: 'Log', w: 0.5, h: 0.5, d: 1.3 },
-  { id: 'stump', name: 'Tree Stump', w: 0.65, h: 0.5, d: 0.65, round: true },
-  { id: 'hay', name: 'Hay Bale', w: 1.1, h: 0.75, d: 0.75 },
-  { id: 'pumpkin', name: 'Pumpkin', w: 0.6, h: 0.5, d: 0.6, round: true },
-  { id: 'mushroom', name: 'Toadstool', w: 0.6, h: 0.7, d: 0.6, round: true },
-  { id: 'hamper', name: 'Picnic Hamper', w: 0.6, h: 0.4, d: 0.45 },
-  { id: 'cooler', name: 'Cooler', w: 0.65, h: 0.45, d: 0.45 },
-  { id: 'tent', name: 'Tent', w: 1.7, h: 1.3, d: 2.0 },
-  { id: 'scarecrow', name: 'Scarecrow', w: 0.9, h: 1.8, d: 0.4 },
-  { id: 'lantern', name: 'Camp Lantern', w: 0.3, h: 0.45, d: 0.3, round: true },
-  { id: 'wheelbarrow', name: 'Wheelbarrow', w: 0.65, h: 0.6, d: 1.3 },
-  { id: 'signpost', name: 'Signpost', w: 0.8, h: 1.3, d: 0.2 },
-  { id: 'gnome', name: 'Garden Gnome', w: 0.4, h: 0.75, d: 0.4, round: true },
-  { id: 'watercan', name: 'Watering Can', w: 0.55, h: 0.4, d: 0.3 },
-  { id: 'bench', name: 'Park Bench', w: 1.5, h: 0.85, d: 0.55 },
+  { id: 'duck', name: 'Rubber Duck', w: 0.38, h: 0.51, d: 0.54 },
+  { id: 'barrel', name: 'Oil Barrel', w: 0.56, h: 0.88, d: 0.56, round: true },
+  { id: 'winebarrel', name: 'Wine Barrel', w: 0.74, h: 0.87, d: 0.76, round: true },
+  { id: 'crate', name: 'Wooden Crate', w: 0.48, h: 0.42, d: 1.05 },
+  { id: 'box', name: 'Cardboard Box', w: 0.46, h: 0.41, d: 0.62 },
+  { id: 'stool', name: 'Stool', w: 0.42, h: 0.64, d: 0.45 },
+  { id: 'chair', name: 'Wooden Chair', w: 0.43, h: 0.96, d: 0.54 },
+  { id: 'schoolchair', name: 'School Chair', w: 0.54, h: 0.96, d: 0.64 },
+  { id: 'monobloc', name: 'Plastic Chair', w: 0.64, h: 0.88, d: 0.63 },
+  { id: 'armchair', name: 'Armchair', w: 0.85, h: 1.06, d: 0.77 },
+  { id: 'ottoman', name: 'Ottoman', w: 0.8, h: 0.56, d: 0.56 },
+  { id: 'pillows', name: 'Cushions', w: 0.85, h: 0.41, d: 0.41 },
+  { id: 'plant', name: 'Potted Plant', w: 0.7, h: 0.84, d: 0.66, round: true },
+  { id: 'tallplant', name: 'Rubber Plant', w: 0.65, h: 1.47, d: 0.7, round: true },
+  { id: 'vase', name: 'Vase', w: 0.38, h: 0.76, d: 0.38, round: true },
+  { id: 'urn', name: 'Slim Vase', w: 0.25, h: 0.91, d: 0.25, round: true },
+  { id: 'brassvase', name: 'Brass Vase', w: 0.3, h: 0.9, d: 0.3, round: true },
+  { id: 'pot', name: 'Brass Pot', w: 0.48, h: 0.47, d: 0.48, round: true },
+  { id: 'tv', name: 'Old Television', w: 0.66, h: 0.5, d: 0.52 },
+  { id: 'boombox', name: 'Boombox', w: 0.72, h: 0.47, d: 0.19 },
+  { id: 'register', name: 'Cash Register', w: 0.54, h: 0.56, d: 0.56 },
+  { id: 'sign', name: 'Wet Floor Sign', w: 0.38, h: 0.79, d: 0.45 },
+  { id: 'bust', name: 'Marble Bust', w: 0.46, h: 0.88, d: 0.51 },
+  { id: 'extinguisher', name: 'Fire Extinguisher', w: 0.31, h: 0.72, d: 0.4 },
+  { id: 'jerrycan', name: 'Jerrycan', w: 0.42, h: 0.55, d: 0.21 },
+  { id: 'chest', name: 'Treasure Chest', w: 0.86, h: 0.55, d: 0.47 },
+  { id: 'basket', name: 'Wicker Basket', w: 0.69, h: 0.21, d: 0.53 },
+  { id: 'bucket', name: 'Wooden Bucket', w: 0.4, h: 0.61, d: 0.38, round: true },
+  { id: 'football', name: 'Football', w: 0.49, h: 0.48, d: 0.48, round: true },
+  { id: 'propane', name: 'Gas Bottle', w: 0.4, h: 0.66, d: 0.4, round: true },
+  { id: 'trashbag', name: 'Bin Bag', w: 0.53, h: 0.57, d: 0.46, round: true },
+  { id: 'clock', name: 'Grandfather Clock', w: 0.53, h: 1.86, d: 0.36 },
+  { id: 'toolchest', name: 'Tool Chest', w: 0.69, h: 0.65, d: 0.41 },
+  { id: 'nightstand', name: 'Nightstand', w: 0.6, h: 0.73, d: 0.45 },
+  { id: 'sidetable', name: 'Side Table', w: 0.61, h: 0.61, d: 0.5 },
+  { id: 'gnome', name: 'Garden Gnome', w: 0.35, h: 0.81, d: 0.28, round: true },
+  { id: 'horse', name: 'Horse Statue', w: 0.65, h: 0.88, d: 0.43 },
+  { id: 'cat', name: 'Cat Statue', w: 0.32, h: 0.59, d: 0.53 },
+  { id: 'handtruck', name: 'Hand Truck', w: 0.53, h: 1.26, d: 0.62 },
+  { id: 'chalkboard', name: 'Chalkboard', w: 0.78, h: 1.28, d: 0.65 },
+  { id: 'tyre', name: 'Old Tyre', w: 0.72, h: 0.25, d: 0.72, round: true },
+  { id: 'cement', name: 'Cement Bag', w: 0.51, h: 0.2, d: 0.77 },
+  { id: 'plasticcrate', name: 'Plastic Crate', w: 0.66, h: 0.33, d: 0.53 },
+  { id: 'cabinet', name: 'Cabinet', w: 1.08, h: 1.06, d: 0.56 },
+  { id: 'alarmclock', name: 'Giant Alarm Clock', w: 0.46, h: 0.61, d: 0.23 },
+  { id: 'megaphone', name: 'Megaphone', w: 0.59, h: 0.48, d: 0.36 },
+  { id: 'oillamp', name: 'Oil Lamp', w: 0.29, h: 1.04, d: 0.29, round: true },
+  { id: 'croissant', name: 'Giant Croissant', w: 0.64, h: 0.2, d: 0.24 },
+  // ---- outdoors (Sunny Meadow)
+  { id: 'rock', name: 'Boulder', w: 0.61, h: 0.58, d: 1.09 },
+  { id: 'stone', name: 'Rock', w: 0.82, h: 0.32, d: 0.45 },
+  { id: 'stump', name: 'Tree Stump', w: 0.86, h: 0.34, d: 0.95, round: true },
+  { id: 'log', name: 'Log', w: 1.37, h: 0.43, d: 0.41 },
+  { id: 'fern', name: 'Fern', w: 0.91, h: 0.47, d: 0.79, round: true },
+  { id: 'planter', name: 'Planter Box', w: 1, h: 0.47, d: 0.46 },
+  { id: 'claypot', name: 'Clay Pot', w: 0.53, h: 0.44, d: 0.53, round: true },
+  { id: 'bench', name: 'Bench', w: 1.28, h: 0.98, d: 0.55 },
+  { id: 'lantern', name: 'Lantern', w: 0.29, h: 0.69, d: 0.3, round: true },
+  { id: 'watercan', name: 'Watering Can', w: 0.29, h: 0.3, d: 0.68 },
+  { id: 'tub', name: 'Wooden Tub', w: 0.61, h: 0.35, d: 0.61, round: true },
+  { id: 'oildrum', name: 'Steel Drum', w: 0.49, h: 0.88, d: 0.48, round: true },
+  { id: 'hydrant', name: 'Fire Hydrant', w: 0.79, h: 0.72, d: 0.29 },
+  { id: 'compost', name: 'Compost Bag', w: 0.59, h: 0.48, d: 0.52 },
+  { id: 'lifebuoy', name: 'Lifebuoy', w: 0.78, h: 0.25, d: 0.84, round: true },
+  { id: 'cooler', name: 'Storage Tub', w: 0.72, h: 0.34, d: 0.5 },
+  { id: 'hamper', name: 'Picnic Basket', w: 0.69, h: 0.4, d: 0.51 },
+  { id: 'boots', name: 'Wellies', w: 0.89, h: 0.37, d: 0.27 },
 ];
 
 export const PROP_INDEX: Record<string, number> = {};
 PROPS.forEach((p, i) => (PROP_INDEX[p.id] = i));
 
-/** Disguises handed out at spawn so nobody starts as an obvious giant. */
-export const STARTER_PROPS = ['duck', 'ball', 'blockA', 'boxS', 'cone', 'gift', 'drum', 'rings'].map((id) => PROP_INDEX[id]);
+/** Disguises handed out at spawn so nobody starts as something huge. */
+export const STARTER_PROPS = ['duck', 'pot', 'football', 'jerrycan', 'bucket', 'vase', 'box', 'stool'].map((id) => PROP_INDEX[id]);
 
-export const MEADOW_STARTERS = ['rock', 'pumpkin', 'stump', 'mushroom', 'lantern', 'hamper', 'gnome', 'bush'].map((id) => PROP_INDEX[id]);
+export const MEADOW_STARTERS = ['stone', 'claypot', 'tub', 'lantern', 'bucket', 'gnome', 'football', 'hamper'].map((id) => PROP_INDEX[id]);
 
 /** Collision body used while wearing a disguise. Width is clamped so big props stay manoeuvrable. */
 export function propBody(def: PropDef): { hw: number; h: number } {

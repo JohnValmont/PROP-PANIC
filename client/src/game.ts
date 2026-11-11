@@ -8,32 +8,37 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { CFG, F, QUICK_CHAT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
-import { PROPS, propBody } from '../../shared/props';
+import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
 import type { Results, RosterEntry } from '../../shared/protocol';
 import { Sfx } from './audio';
 import { Fx, textSprite } from './fx';
 import { Hud, type AbilityView } from './hud';
 import { Net } from './net';
-import { DUCK_TYPE, blasterGeometry, eyesGeometry, hunterGeometry, propGeometry } from './propgeo';
+import { assets } from './assets';
+import { HunterRig, buildBlaster, buildEyes } from './hunter';
 import { WorldView } from './world';
 import { ACTIONS, B, keyLabel } from './keys';
 
 const STEP = 1 / 60;
+const DUCK_TYPE = PROP_INDEX['duck'];
+export type Quality = 'ultra' | 'high' | 'low';
 const INTERP_MS = 110;
 const CONFETTI = [0xef476f, 0xffd166, 0x06d6a0, 0x118ab2, 0x9b5de5, 0xf78c2b, 0xffffff];
 const lerpAngle = (a: number, b: number, k: number) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return a + d * k; };
 
 interface Sample { t: number; x: number; y: number; z: number; f: number; p: number; }
 interface Ent {
-  id: number; group: THREE.Group; model: THREE.Object3D | null; arm: THREE.Object3D | null; kind: string;
-  legL: THREE.Object3D | null; legR: THREE.Object3D | null; eyes: THREE.Mesh | null; stars: THREE.Sprite | null; eyeK: number;
+  id: number; group: THREE.Group; model: THREE.Object3D | null; rig: HunterRig | null; kind: string;
+  pitch: number; kick: number; vy: number;
+  eyes: THREE.Object3D | null; stars: THREE.Sprite | null; eyeK: number;
   buf: Sample[]; flags: number; lastSeen: number; label: THREE.Sprite | null; labelKey: string; marker: THREE.Sprite | null;
   hitT: number; hopT: number; x: number; y: number; z: number; f: number; speed: number; stepT: number; h: number;
 }
-interface DecoyView { mesh: THREE.Mesh; type: number; x: number; y: number; z: number; yaw: number; hopT: number; owner: number; }
+interface DecoyView { mesh: THREE.Object3D; type: number; x: number; y: number; z: number; yaw: number; hopT: number; owner: number; }
 interface Pending { seq: number; cmd: Cmd; }
 
 export class Game {
@@ -62,7 +67,7 @@ export class Game {
   private ents = new Map<number, Ent>();
   private decoys = new Map<number, DecoyView>();
   private offset = 0; private haveOffset = false;
-  private ghostMat: THREE.MeshLambertMaterial;
+  private ghostMat: THREE.MeshStandardMaterial;
 
   // local player
   team: Team = 'prop'; alive = false; disguise = 0;
@@ -89,10 +94,10 @@ export class Game {
   sens = 0.0022;
 
   // misc
-  private viewmodel: THREE.Mesh; private flashlight: THREE.SpotLight; private highlight: THREE.LineSegments;
+  private viewmodel: THREE.Object3D; private flashlight: THREE.SpotLight; private highlight: THREE.LineSegments;
   private last = performance.now(); private time = 0; private menuAngle = 0;
   private fpsAcc = 0; private fpsN = 0; private fpsChecked = false;
-  quality: 'high' | 'low' = 'high';
+  quality: Quality = 'high';
   fps = 60;
   renderEvery = 1;
   mapId = -1; nextMap = 0; invertY = false;
@@ -100,8 +105,8 @@ export class Game {
   helpOn = true;
   private slowSecs = 0;
   look = 0; baseFov = 78; xp = 0;
-  private composer!: EffectComposer; private bloom!: UnrealBloomPass;
-  private eyeMat!: THREE.MeshBasicMaterial; private muzzle!: THREE.Mesh;
+  private composer!: EffectComposer; private bloom!: UnrealBloomPass; private gtao!: GTAOPass;
+  private muzzle!: THREE.Mesh; private previewRig: HunterRig | null = null;
   private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0; private xpRound = -1;
   private hitch = 0;
   private frameN = 0;
@@ -110,26 +115,34 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.autoUpdate = false; // refreshed by hand in frame()
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.12;
     this.world = new WorldView(this.scene);
     this.fx = new Fx(this.scene);
     this.world.initEnv(this.renderer);
-    // post-processing (high quality only): HDR render -> bloom -> filmic tone mapping
+    // post-processing: HDR render -> ambient occlusion (ultra) -> bloom -> filmic tone mapping
     const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
     this.composer = new EffectComposer(this.renderer, rt);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.5, 1.2);
+    this.gtao = new GTAOPass(this.scene, this.camera, 4, 4);
+    this.gtao.updateGtaoMaterial({ radius: 0.45, distanceExponent: 1.4, thickness: 1.2, scale: 1.15, samples: 12, screenSpaceRadius: false });
+    this.gtao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: 6, rings: 2, samples: 12 });
+    this.gtao.blendIntensity = 0.9;
+    // cut-out foliage and see-through effects would smear the occlusion buffer: leave them out of it
+    const gt = this.gtao as any, hideForAO = gt.overrideVisibility.bind(gt);
+    gt.overrideVisibility = () => { hideForAO(); this.scene.traverse((o: any) => { if ((o.isMesh || o.isSprite) && o.visible && (o.material?.alphaTest > 0 || o.material?.transparent)) { gt._visibilityCache.set(o, o.visible); o.visible = false; } }); };
+    this.composer.addPass(this.gtao);
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.32, 0.55, 1.15);
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
-    this.eyeMat = new THREE.MeshBasicMaterial({ vertexColors: true });
     this.muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.2, 1.2), transparent: true, opacity: 0.9 }));
     this.muzzle.position.set(0, 0, -0.46); this.muzzle.visible = false;
-    this.ghostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false });
+    this.ghostMat = new THREE.MeshStandardMaterial({ color: 0xa8dcff, roughness: 0.35, transparent: true, opacity: 0.36, depthWrite: false });
     this.scene.add(this.camera);
     this.camera.rotation.order = 'YXZ';
 
-    this.viewmodel = new THREE.Mesh(blasterGeometry(), this.world.material);
+    this.viewmodel = buildBlaster();
+    this.viewmodel.traverse((o) => { o.castShadow = false; });
     this.viewmodel.position.set(0.27, -0.25, -0.5);
     this.viewmodel.visible = false;
     this.camera.add(this.viewmodel);
@@ -143,7 +156,7 @@ export class Game {
     this.scene.add(this.highlight);
 
     const q = localStorage.getItem('pp_quality');
-    this.setQuality(q === 'low' ? 'low' : 'high');
+    this.setQuality(q === 'low' || q === 'high' || q === 'ultra' ? q : this.guessQuality());
     const s = Number(localStorage.getItem('pp_sens'));
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
@@ -168,16 +181,28 @@ export class Game {
   }
 
   // ================================================================ setup helpers
-  setQuality(q: 'high' | 'low') {
+  /** Integrated and mobile GPUs start one notch down; everything else gets the full pipeline. */
+  private guessQuality(): Quality {
+    try {
+      const gl = this.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
+      const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '').toLowerCase();
+      if (/swiftshader|llvmpipe|software/.test(name)) return 'low';
+      if (/intel|mali|adreno|powervr|apple gpu|uhd|iris/.test(name) || /Mobi|Android/i.test(navigator.userAgent)) return 'high';
+    } catch { /* ignore */ }
+    return 'ultra';
+  }
+
+  setQuality(q: Quality) {
     this.quality = q;
-    localStorage.setItem('pp_quality', q);
-    this.world.setQuality(q === 'high');
+    try { localStorage.setItem('pp_quality', q); } catch { /* ignore */ }
+    this.world.setQuality(q === 'ultra' ? 2 : q === 'high' ? 1 : 0);
+    this.gtao.enabled = q === 'ultra';
     this.resize();
   }
 
   private resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.renderer.setPixelRatio(this.quality === 'high' ? Math.min(window.devicePixelRatio, 2) : 1);
+    this.renderer.setPixelRatio(this.quality === 'ultra' ? Math.min(window.devicePixelRatio, 2) : this.quality === 'high' ? Math.min(window.devicePixelRatio, 1.5) : 1);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
@@ -233,12 +258,8 @@ export class Game {
     this.look = look & 63;
     try { localStorage.setItem('pp_look', String(this.look)); } catch { /* ignore */ }
     this.preview.clear();
-    const geo = hunterGeometry(this.look), mat = this.world.material, g = new THREE.Group();
-    const body = new THREE.Mesh(geo.body, mat), arm = new THREE.Mesh(geo.arm, mat), l1 = new THREE.Mesh(geo.leg, mat), l2 = new THREE.Mesh(geo.leg, mat);
-    arm.position.set(0.36, 1.28, 0); l1.position.set(-0.13, 0.74, 0); l2.position.set(0.13, 0.74, 0);
-    for (const m of [body, arm, l1, l2]) m.castShadow = true;
-    g.add(body, arm, l1, l2);
-    this.preview.add(g);
+    this.previewRig = new HunterRig(this.look);
+    this.preview.add(this.previewRig.root);
   }
 
   requestLock() { if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
@@ -398,7 +419,7 @@ export class Game {
       let e = this.ents.get(r.id);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
-        e = { id: r.id, group: new THREE.Group(), model: null, arm: null, legL: null, legR: null, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
+        e = { id: r.id, group: new THREE.Group(), model: null, rig: null, pitch: 0, kick: 0, vy: 0, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
         e.group.visible = false;
         this.scene.add(e.group);
         this.ents.set(r.id, e);
@@ -420,28 +441,20 @@ export class Game {
   private buildModel(e: Ent, kind: string) {
     if (e.model) e.group.remove(e.model);
     if (e.eyes) { e.group.remove(e.eyes); e.eyes = null; }
-    e.kind = kind; e.arm = e.legL = e.legR = null;
-    const mat = this.world.material;
+    e.kind = kind; e.rig = null;
     if (kind.startsWith('hunter')) {
-      const geo = hunterGeometry(Number(kind.slice(7)) || 0);
-      const g = new THREE.Group();
-      const body = new THREE.Mesh(geo.body, mat), arm = new THREE.Mesh(geo.arm, mat);
-      const legL = new THREE.Mesh(geo.leg, mat), legR = new THREE.Mesh(geo.leg, mat);
-      arm.position.set(0.36, 1.28, 0); legL.position.set(-0.13, 0.74, 0); legR.position.set(0.13, 0.74, 0);
-      for (const m of [body, arm, legL, legR]) m.castShadow = true;
-      g.add(body, arm, legL, legR);
-      e.model = g; e.arm = arm; e.legL = legL; e.legR = legR; e.h = CFG.HUNTER_H;
+      e.rig = new HunterRig(Number(kind.slice(7)) || 0);
+      e.model = e.rig.root; e.h = CFG.HUNTER_H;
     } else {
       const type = kind === 'duck' ? DUCK_TYPE : Number(kind.slice(5));
       const def = PROPS[type];
-      const m = new THREE.Mesh(propGeometry(type), mat);
-      m.castShadow = true;
+      const m = assets.propObject(type);
       if (kind === 'duck') m.scale.setScalar(1.5);
       e.model = m; e.h = def.h * (kind === 'duck' ? 1.5 : 1);
       if (kind !== 'duck') {
         // googly eyes: hidden until this prop gives itself away (taunt, panic, sneeze, scanner)
         const k = Math.max(0.55, Math.min(1.6, Math.min(def.w, def.h) / 0.6));
-        e.eyes = new THREE.Mesh(eyesGeometry(), this.eyeMat);
+        e.eyes = buildEyes();
         e.eyes.position.set(0, def.h + 0.07 * k, def.d * 0.22); // perched on top so they read from any angle
         e.eyes.userData.k = k; e.eyes.scale.setScalar(0.001); e.eyes.visible = false;
         e.group.add(e.eyes);
@@ -484,8 +497,7 @@ export class Game {
   }
 
   private addDecoy(d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }) {
-    const mesh = new THREE.Mesh(propGeometry(d.type), this.world.material);
-    mesh.castShadow = true;
+    const mesh = assets.propObject(d.type);
     mesh.position.set(d.x, d.y, d.z);
     mesh.rotation.y = d.yaw + Math.PI;
     this.scene.add(mesh);
@@ -504,6 +516,7 @@ export class Game {
       case 'shot': {
         const mine = m.by === me;
         const src = this.entPos(m.by);
+        const shooter = this.ents.get(m.by); if (shooter) shooter.kick = 1;
         const to = new THREE.Vector3(m.x, m.y, m.z);
         if (src) {
           const from = mine && !this.quackedMe
@@ -692,9 +705,10 @@ export class Game {
     const k = a === b ? 0 : (rt - a.t) / (b.t - a.t);
     const x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k, z = a.z + (b.z - a.z) * k;
     if (e.y > -40 && dt > 0) e.speed += (Math.hypot(x - e.x, z - e.z) / dt - e.speed) * 0.3; else e.speed = 0;
+    e.vy = dt > 0 && e.y > -40 ? (y - e.y) / dt : 0;
     e.x = x; e.y = y; e.z = z;
     e.f = lerpAngle(a.f, b.f, k);
-    if (e.arm) e.arm.rotation.x = -(a.p + (b.p - a.p) * k);
+    e.pitch = a.p + (b.p - a.p) * k;
   }
 
   private updateEnts(dt: number) {
@@ -710,7 +724,7 @@ export class Game {
         e.x = this.rpos.x; e.y = this.rpos.y; e.z = this.rpos.z; e.f = this.facing; e.speed = sp;
         e.flags = F.ALIVE | (this.body.dashLeft > 0 ? F.DASH : 0) | (this.revealedUntil > performance.now() ? F.REVEAL : 0) | (this.myFlags & (F.PANIC | F.GHOST));
         e.group.visible = !firstPerson;
-        if (e.arm) e.arm.rotation.x = -this.pitch;
+        e.pitch = this.pitch; e.vy = this.body.ground ? 0 : 5;
       } else {
         this.sampleEnt(e, rt, dt);
         // "not heard about recently" hides a player (ghosted, blindfold) — but never on the frame right after
@@ -728,17 +742,15 @@ export class Game {
       e.stepT += dt * (6 + e.speed * 1.6);
       let hop = 0, tilt = 0, sq = 0;
       if (isProp || e.kind === 'duck') { hop = Math.abs(Math.sin(e.stepT)) * 0.07 * move; tilt = Math.sin(e.stepT) * 0.09 * move; }
-      else hop = Math.abs(Math.sin(e.stepT * 1.6)) * 0.05 * move;
       if (e.flags & F.PANIC) { tilt += Math.sin(this.time * 46) * 0.1; sq += Math.sin(this.time * 31) * 0.06; if (Math.random() < dt * 14) this.fx.burst(e.x, e.y + e.h, e.z, 1, [0x9bdcff, 0xffffff], 1.4, 2, 0.6, 0.5); }
       if (e.flags & F.DASH && Math.random() < dt * 30) this.fx.burst(e.x, e.y + 0.1, e.z, 1, [0xffffff, 0xffe5ec], 0.8, 0.8, 0.9, 0.35, 2);
       if (e.hopT > 0) { e.hopT -= dt; hop += Math.sin((1 - e.hopT / 0.45) * Math.PI) * 0.3; sq += Math.sin(e.hopT * 30) * 0.1; }
       if (e.hitT > 0) { e.hitT -= dt; sq += Math.sin(e.hitT * 40) * 0.22 * (e.hitT / 0.3); }
       if (e.kind === 'duck') tilt += Math.sin(this.time * 9) * 0.15;
       const dizzy = (e.flags & F.DIZZY) !== 0;
-      if (e.legL && e.legR) {
-        const sw = Math.sin(e.stepT * 0.8) * 0.75 * move;
-        e.legL.rotation.x = sw; e.legR.rotation.x = -sw;
-        if (dizzy) tilt += Math.sin(this.time * 7) * 0.22;
+      if (e.rig) {
+        e.kick = Math.max(0, e.kick - dt * 6);
+        e.rig.pose({ time: this.time, stepT: e.stepT, move, pitch: e.pitch, air: Math.abs(e.vy) > 1.2, dizzy, kick: e.kick });
       }
       if (dizzy && !e.stars) { e.stars = textSprite('✦ ✦ ✦', '#ffe14d', 0.3, false); e.group.add(e.stars); }
       if (e.stars) { e.stars.visible = dizzy; e.stars.position.set(Math.sin(this.time * 6) * 0.25, e.h + 0.35, Math.cos(this.time * 6) * 0.25); }
@@ -753,9 +765,9 @@ export class Game {
       m.scale.set(base * (1 + sq), base * (1 - sq), base * (1 + sq));
       // ghosted props are see-through for friends, absent for hunters
       const ghost = (e.flags & F.GHOST) !== 0;
-      if (isProp) (m as THREE.Mesh).material = ghost ? this.ghostMat : this.world.material;
+      if (isProp) for (const c of m.children) { const want = ghost ? this.ghostMat : c.userData.mat; if ((c as THREE.Mesh).material !== want) (c as THREE.Mesh).material = want; }
       // hunter footsteps carry through the store
-      if (e.legL && e.speed > 2.5 && !mine) { if (e.stepT > Math.PI) { e.stepT -= Math.PI; this.sfx.play('step', [e.x, e.y, e.z], 0.9); } }
+      if (e.rig && e.speed > 2.5 && !mine) { if (e.stepT > Math.PI) { e.stepT -= Math.PI; this.sfx.play('step', [e.x, e.y, e.z], 0.9); } }
       // name labels: you can always recognise your own side
       let label = '';
       if (r && !mine) {
@@ -820,8 +832,7 @@ export class Game {
       this.preview.visible = true;
       this.preview.rotation.y = 0.35 + Math.sin(this.menuAngle * 0.9) * 0.3;
       this.preview.position.y = Math.abs(Math.sin(this.menuAngle * 2.2)) * 0.04;
-      const pm = this.preview.children[0] as THREE.Group | undefined;
-      if (pm && pm.children[1]) pm.children[1].rotation.x = -0.5 + Math.sin(this.menuAngle * 2.2) * 0.25;
+      this.previewRig?.pose({ time: this.menuAngle, stepT: 0, move: 0, pitch: 0.25 + Math.sin(this.menuAngle * 1.1) * 0.2, air: false, dizzy: false, kick: 0 });
       this.viewmodel.visible = false;
       return;
     }
@@ -1003,8 +1014,10 @@ export class Game {
       this.fps = this.fpsN / this.fpsAcc;
       if (!this.fpsChecked && this.inGame && this.time > 8 && !document.hidden) this.slowSecs = this.fps < 28 ? this.slowSecs + 1 : 0;
       if (!this.fpsChecked && this.slowSecs >= 4) {
-        this.fpsChecked = true;
-        if (this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); document.getElementById('gfxBtn')!.textContent = 'Graphics: Fast'; }
+        // step down one notch at a time; from ultra there is still somewhere left to go
+        this.slowSecs = 0;
+        if (this.quality === 'ultra') { this.setQuality('high'); this.hud.popup('Low frame rate: graphics set to High'); document.getElementById('gfxBtn')!.textContent = 'Graphics: High'; }
+        else { this.fpsChecked = true; if (this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); document.getElementById('gfxBtn')!.textContent = 'Graphics: Fast'; } }
       }
       this.fpsAcc = 0; this.fpsN = 0;
     }
@@ -1048,7 +1061,10 @@ export class Game {
     // renderEvery > 1 draws only every Nth frame (simulation and input still run every frame);
     // used by the automated browser test on machines without a GPU
     if (++this.frameN % this.renderEvery === 0) {
-      if (this.quality === 'high') this.composer.render(); else this.renderer.render(this.scene, this.camera);
+      this.renderer.toneMappingExposure = this.world.exposure;
+      // shadows are the most expensive pass: every frame on ultra, every other frame otherwise
+      this.renderer.shadowMap.needsUpdate = this.quality === 'ultra' || (this.frameN / this.renderEvery) % 2 === 0;
+      if (this.quality !== 'low') this.composer.render(); else this.renderer.render(this.scene, this.camera);
     }
   }
 }

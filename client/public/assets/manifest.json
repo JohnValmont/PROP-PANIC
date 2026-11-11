@@ -1,0 +1,780 @@
+{
+ "models": {
+  "alarmclock": {
+   "src": "alarm_clock_01",
+   "size": [
+    0.131,
+    0.174,
+    0.067
+   ],
+   "tris": 3399,
+   "kb": 126
+  },
+  "armchair": {
+   "src": "ArmChair_01",
+   "size": [
+    0.848,
+    1.065,
+    0.766
+   ],
+   "tris": 5626,
+   "kb": 502
+  },
+  "barrel": {
+   "src": "Barrel_01",
+   "size": [
+    0.563,
+    0.88,
+    0.563
+   ],
+   "tris": 2682,
+   "kb": 417
+  },
+  "basket": {
+   "src": "wicker_basket_01",
+   "size": [
+    0.383,
+    0.117,
+    0.294
+   ],
+   "tris": 3142,
+   "kb": 175
+  },
+  "bench": {
+   "src": "painted_wooden_bench",
+   "size": [
+    1.165,
+    0.889,
+    0.496
+   ],
+   "tris": 630,
+   "kb": 80
+  },
+  "boombox": {
+   "src": "boombox",
+   "size": [
+    0.724,
+    0.47,
+    0.186
+   ],
+   "tris": 3570,
+   "kb": 235
+  },
+  "boots": {
+   "src": "rubber_boots",
+   "size": [
+    0.889,
+    0.372,
+    0.266
+   ],
+   "tris": 3000,
+   "kb": 99
+  },
+  "box": {
+   "src": "cardboard_box_01",
+   "size": [
+    0.387,
+    0.342,
+    0.516
+   ],
+   "tris": 2500,
+   "kb": 114
+  },
+  "brassvase": {
+   "src": "brass_vase_01",
+   "size": [
+    0.227,
+    0.692,
+    0.227
+   ],
+   "tris": 2500,
+   "kb": 72
+  },
+  "bucket": {
+   "src": "wooden_bucket_01",
+   "size": [
+    0.366,
+    0.55,
+    0.342
+   ],
+   "tris": 2500,
+   "kb": 143
+  },
+  "bust": {
+   "src": "marble_bust_01",
+   "size": [
+    0.272,
+    0.515,
+    0.3
+   ],
+   "tris": 5000,
+   "kb": 339
+  },
+  "cabinet": {
+   "src": "painted_wooden_cabinet",
+   "size": [
+    1.195,
+    1.182,
+    0.617
+   ],
+   "tris": 2227,
+   "kb": 278
+  },
+  "cat": {
+   "src": "concrete_cat_statue",
+   "size": [
+    0.153,
+    0.283,
+    0.25
+   ],
+   "tris": 3000,
+   "kb": 227
+  },
+  "cement": {
+   "src": "cement_bag",
+   "size": [
+    0.462,
+    0.18,
+    0.7
+   ],
+   "tris": 844,
+   "kb": 59
+  },
+  "chair": {
+   "src": "painted_wooden_chair_01",
+   "size": [
+    0.432,
+    0.956,
+    0.54
+   ],
+   "tris": 724,
+   "kb": 93
+  },
+  "chalkboard": {
+   "src": "standing_chalkboard_01",
+   "size": [
+    0.92,
+    1.509,
+    0.759
+   ],
+   "tris": 1756,
+   "kb": 109
+  },
+  "chest": {
+   "src": "treasure_chest",
+   "size": [
+    0.955,
+    0.616,
+    0.522
+   ],
+   "tris": 6921,
+   "kb": 685
+  },
+  "claypot": {
+   "src": "planter_pot_clay",
+   "size": [
+    0.266,
+    0.222,
+    0.263
+   ],
+   "tris": 1800,
+   "kb": 88
+  },
+  "clock": {
+   "src": "vintage_grandfather_clock_01",
+   "size": [
+    0.626,
+    2.191,
+    0.427
+   ],
+   "tris": 5004,
+   "kb": 404
+  },
+  "compost": {
+   "src": "compost_bag_02",
+   "size": [
+    0.538,
+    0.434,
+    0.471
+   ],
+   "tris": 3000,
+   "kb": 146
+  },
+  "cooler": {
+   "src": "plastic_container",
+   "size": [
+    0.895,
+    0.43,
+    0.626
+   ],
+   "tris": 2999,
+   "kb": 97
+  },
+  "crate": {
+   "src": "wooden_crate_02",
+   "size": [
+    0.529,
+    0.464,
+    1.166
+   ],
+   "tris": 3499,
+   "kb": 377
+  },
+  "croissant": {
+   "src": "croissant",
+   "size": [
+    0.2,
+    0.062,
+    0.076
+   ],
+   "tris": 1990,
+   "kb": 147
+  },
+  "duck": {
+   "src": "rubber_duck_toy",
+   "size": [
+    0.213,
+    0.285,
+    0.3
+   ],
+   "tris": 3500,
+   "kb": 64
+  },
+  "extinguisher": {
+   "src": "korean_fire_extinguisher_01",
+   "size": [
+    0.279,
+    0.658,
+    0.367
+   ],
+   "tris": 3234,
+   "kb": 250
+  },
+  "fern": {
+   "src": "fern_02",
+   "size": [
+    1.973,
+    0.428,
+    1.724
+   ],
+   "tris": 4999,
+   "kb": 112
+  },
+  "firepit": {
+   "src": "stone_fire_pit",
+   "size": [
+    1.448,
+    0.388,
+    1.433
+   ],
+   "tris": 3000,
+   "kb": 571
+  },
+  "football": {
+   "src": "dirty_football",
+   "size": [
+    0.221,
+    0.22,
+    0.22
+   ],
+   "tris": 15422,
+   "kb": 288
+  },
+  "gnome": {
+   "src": "garden_gnome",
+   "size": [
+    0.257,
+    0.598,
+    0.209
+   ],
+   "tris": 3999,
+   "kb": 158
+  },
+  "hamper": {
+   "src": "wicker_basket_02",
+   "size": [
+    0.347,
+    0.2,
+    0.254
+   ],
+   "tris": 3500,
+   "kb": 220
+  },
+  "handtruck": {
+   "src": "hand_truck",
+   "size": [
+    0.593,
+    1.402,
+    0.692
+   ],
+   "tris": 5790,
+   "kb": 264
+  },
+  "horse": {
+   "src": "horse_statue_01",
+   "size": [
+    0.163,
+    0.22,
+    0.108
+   ],
+   "tris": 4623,
+   "kb": 141
+  },
+  "hydrant": {
+   "src": "fire_hydrant",
+   "size": [
+    0.873,
+    0.799,
+    0.317
+   ],
+   "tris": 3972,
+   "kb": 224
+  },
+  "jerrycan": {
+   "src": "metal_jerrycan",
+   "size": [
+    0.35,
+    0.455,
+    0.172
+   ],
+   "tris": 2499,
+   "kb": 167
+  },
+  "ladder": {
+   "src": "wooden_ladder",
+   "size": [
+    0.959,
+    1.335,
+    0.5
+   ],
+   "tris": 2500,
+   "kb": 158
+  },
+  "lantern": {
+   "src": "wooden_lantern_01",
+   "size": [
+    0.221,
+    0.53,
+    0.234
+   ],
+   "tris": 3030,
+   "kb": 197
+  },
+  "lifebuoy": {
+   "src": "lifebuoy",
+   "size": [
+    0.783,
+    0.155,
+    0.841
+   ],
+   "tris": 3000,
+   "kb": 172
+  },
+  "log": {
+   "src": "dead_tree_trunk",
+   "size": [
+    3.05,
+    0.287,
+    0.276
+   ],
+   "tris": 3000,
+   "kb": 576
+  },
+  "megaphone": {
+   "src": "Megaphone_01",
+   "size": [
+    0.371,
+    0.3,
+    0.227
+   ],
+   "tris": 2990,
+   "kb": 103
+  },
+  "monobloc": {
+   "src": "plastic_monobloc_chair_01",
+   "size": [
+    0.642,
+    0.88,
+    0.628
+   ],
+   "tris": 3356,
+   "kb": 156
+  },
+  "nightstand": {
+   "src": "ClassicNightstand_01",
+   "size": [
+    0.568,
+    0.7,
+    0.424
+   ],
+   "tris": 2002,
+   "kb": 84
+  },
+  "oildrum": {
+   "src": "Barrel_02",
+   "size": [
+    0.488,
+    0.88,
+    0.485
+   ],
+   "tris": 2688,
+   "kb": 197
+  },
+  "oillamp": {
+   "src": "vintage_oil_lamp",
+   "size": [
+    0.22,
+    0.802,
+    0.22
+   ],
+   "tris": 3003,
+   "kb": 138
+  },
+  "ottoman": {
+   "src": "Ottoman_01",
+   "size": [
+    0.885,
+    0.624,
+    0.621
+   ],
+   "tris": 3000,
+   "kb": 113
+  },
+  "picnictable": {
+   "src": "wooden_picnic_table",
+   "size": [
+    2.236,
+    0.746,
+    3.022
+   ],
+   "tris": 3997,
+   "kb": 597
+  },
+  "pillows": {
+   "src": "throw_pillows_01",
+   "size": [
+    0.94,
+    0.45,
+    0.45
+   ],
+   "tris": 3000,
+   "kb": 222
+  },
+  "plant": {
+   "src": "potted_plant_02",
+   "size": [
+    0.701,
+    0.84,
+    0.656
+   ],
+   "tris": 8948,
+   "kb": 585
+  },
+  "planter": {
+   "src": "planter_box_01",
+   "size": [
+    0.913,
+    0.425,
+    0.414
+   ],
+   "tris": 4000,
+   "kb": 162
+  },
+  "plasticcrate": {
+   "src": "plastic_crate_02",
+   "size": [
+    0.506,
+    0.254,
+    0.406
+   ],
+   "tris": 3500,
+   "kb": 134
+  },
+  "pot": {
+   "src": "brass_pot_01",
+   "size": [
+    0.302,
+    0.291,
+    0.301
+   ],
+   "tris": 2000,
+   "kb": 77
+  },
+  "propane": {
+   "src": "propane_tank",
+   "size": [
+    0.337,
+    0.553,
+    0.337
+   ],
+   "tris": 2499,
+   "kb": 120
+  },
+  "register": {
+   "src": "CashRegister_01",
+   "size": [
+    0.601,
+    0.621,
+    0.624
+   ],
+   "tris": 4502,
+   "kb": 388
+  },
+  "rock": {
+   "src": "namaqualand_boulder_06",
+   "size": [
+    0.674,
+    0.649,
+    1.211
+   ],
+   "tris": 3000,
+   "kb": 714
+  },
+  "schoolchair": {
+   "src": "SchoolChair_01",
+   "size": [
+    0.566,
+    1.006,
+    0.675
+   ],
+   "tris": 3000,
+   "kb": 92
+  },
+  "sidetable": {
+   "src": "side_table_01",
+   "size": [
+    0.55,
+    0.551,
+    0.45
+   ],
+   "tris": 2756,
+   "kb": 101
+  },
+  "sign": {
+   "src": "WetFloorSign_01",
+   "size": [
+    0.3,
+    0.63,
+    0.359
+   ],
+   "tris": 228,
+   "kb": 53
+  },
+  "stone": {
+   "src": "namaqualand_boulder_05",
+   "size": [
+    1.36,
+    0.534,
+    0.746
+   ],
+   "tris": 2200,
+   "kb": 214
+  },
+  "stool": {
+   "src": "painted_wooden_stool",
+   "size": [
+    0.385,
+    0.579,
+    0.406
+   ],
+   "tris": 676,
+   "kb": 106
+  },
+  "streetlamp": {
+   "src": "street_lamp_01",
+   "size": [
+    0.704,
+    3.871,
+    0.386
+   ],
+   "tris": 3998,
+   "kb": 103
+  },
+  "stump": {
+   "src": "tree_stump_01",
+   "size": [
+    1.426,
+    0.571,
+    1.589
+   ],
+   "tris": 2997,
+   "kb": 802
+  },
+  "tallplant": {
+   "src": "potted_plant_01",
+   "size": [
+    0.587,
+    1.335,
+    0.634
+   ],
+   "tris": 10974,
+   "kb": 779
+  },
+  "toolchest": {
+   "src": "metal_tool_chest",
+   "size": [
+    0.685,
+    0.652,
+    0.407
+   ],
+   "tris": 3999,
+   "kb": 152
+  },
+  "trashbag": {
+   "src": "trashbag",
+   "size": [
+    0.528,
+    0.575,
+    0.463
+   ],
+   "tris": 2500,
+   "kb": 129
+  },
+  "tub": {
+   "src": "wooden_bucket_02",
+   "size": [
+    0.614,
+    0.35,
+    0.614
+   ],
+   "tris": 3000,
+   "kb": 171
+  },
+  "tv": {
+   "src": "Television_01",
+   "size": [
+    0.6,
+    0.457,
+    0.471
+   ],
+   "tris": 1918,
+   "kb": 104
+  },
+  "tyre": {
+   "src": "old_tyre",
+   "size": [
+    0.6,
+    0.165,
+    0.6
+   ],
+   "tris": 2500,
+   "kb": 145
+  },
+  "urn": {
+   "src": "ceramic_vase_03",
+   "size": [
+    0.112,
+    0.414,
+    0.112
+   ],
+   "tris": 2000,
+   "kb": 101
+  },
+  "vase": {
+   "src": "ceramic_vase_01",
+   "size": [
+    0.202,
+    0.4,
+    0.202
+   ],
+   "tris": 2000,
+   "kb": 43
+  },
+  "watercan": {
+   "src": "watering_can_metal_01",
+   "size": [
+    0.191,
+    0.197,
+    0.452
+   ],
+   "tris": 2999,
+   "kb": 181
+  },
+  "winebarrel": {
+   "src": "wine_barrel_01",
+   "size": [
+    0.742,
+    0.87,
+    0.755
+   ],
+   "tris": 4000,
+   "kb": 355
+  }
+ },
+ "textures": {
+  "bark": {
+   "src": "bark_brown_02",
+   "kb": 244
+  },
+  "brick": {
+   "src": "red_brick_03",
+   "kb": 696
+  },
+  "ceiling": {
+   "src": "white_plaster_02",
+   "kb": 96
+  },
+  "deck": {
+   "src": "wood_planks_grey",
+   "kb": 332
+  },
+  "dirt": {
+   "src": "park_dirt",
+   "kb": 981
+  },
+  "floor": {
+   "src": "wood_floor",
+   "kb": 165
+  },
+  "grass": {
+   "src": "leafy_grass",
+   "kb": 1113
+  },
+  "metal": {
+   "src": "metal_plate",
+   "kb": 139
+  },
+  "oak": {
+   "src": "oak_veneer_01",
+   "kb": 343
+  },
+  "planks": {
+   "src": "brown_planks_03",
+   "kb": 417
+  },
+  "plaster": {
+   "src": "painted_plaster_wall",
+   "kb": 430
+  },
+  "roof": {
+   "src": "corrugated_iron_02",
+   "kb": 36
+  },
+  "stonewall": {
+   "src": "rock_boulder_dry",
+   "kb": 129
+  },
+  "thatch": {
+   "src": "thatch_roof_angled",
+   "kb": 211
+  },
+  "walnut": {
+   "src": "walnut_veneer",
+   "kb": 32
+  },
+  "whitewood": {
+   "src": "white_planks_clean",
+   "kb": 14
+  }
+ },
+ "hdris": {
+  "meadow": {
+   "src": "kloofendal_48d_partly_cloudy_puresky",
+   "kb": 1727
+  },
+  "store": {
+   "src": "decor_shop",
+   "kb": 1588
+  }
+ }
+}

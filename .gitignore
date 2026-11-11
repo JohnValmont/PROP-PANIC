@@ -3,3 +3,6 @@ dist
 *.log
 .DS_Store
 test/shots
+
+# asset pipeline download cache
+.asset-cache/

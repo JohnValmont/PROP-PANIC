@@ -9,7 +9,7 @@ const BUILD = `${new Date().toISOString().slice(0, 10)} · ${sha}`;
 export default defineConfig({
   define: { __BUILD__: JSON.stringify(BUILD) },
   root: 'client',
-  build: { outDir: '../dist/client', emptyOutDir: true, target: 'es2020', chunkSizeWarningLimit: 900 },
+  build: { outDir: '../dist/client', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 1200 },
   server: {
     port: 5173,
     proxy: { '/ws': { target: 'ws://localhost:8080', ws: true } },
