@@ -1,0 +1,8 @@
+# One-click deploy on Render: New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: prop-panic
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true

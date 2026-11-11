@@ -27,9 +27,9 @@ fake. It runs in any desktop browser, with no install and no downloaded art or a
 | **Ghost (prop, F) / Dash (Shift)** | Three seconds of invisibility to hunters; a short sprint. |
 | **Risky taunts (T or 1-5)** | Taunting scores more the closer a hunter is, and shortens ability cooldowns. |
 | **Chaos meter** | Missed shots, taunts and popped decoys fill it. When full: **Blackout**, **Poltergeist** (toys start hopping), **Prop Shuffle** (everyone becomes a different toy), **Moon Bounce** (low gravity) or **Achoo** (every real prop sneezes into the air). |
-| **Roll call** | Every 30 s all props squeak, positioned in 3D audio. |
+| **Roll call** | Every 22 s all props squeak, positioned in 3D audio. |
 | **PANIC TIME** | Final 30 s: props squeak every 7 s but move faster. |
-| **Restocked every round** | The store's ~400 loose toys are laid out from a new seed each round. |
+| **Restocked every round** | The store's ~250 loose toys are laid out from a new seed each round. |
 
 Roles rotate automatically and the next round starts by itself. Rounds are 25 s hiding + 3 min hunting.
 
@@ -65,9 +65,22 @@ free to choose. Both are cosmetic only and visible to everyone in the match.
 
 ## Controls
 
-`WASD` move · `Space` jump · mouse look · `Click`/`E` transform (prop) or fire (hunter) · `Q` `F` abilities ·
+Every key can be rebound under **Settings & controls** (main menu, or `Esc` in game), alongside mouse
+sensitivity, field of view, volume and graphics quality. Defaults:
+
+`WASD` move · `Space` jump · mouse look · `Click`/`E` become a toy (prop) or fire (hunter) · `Q` `F` abilities ·
 `Shift` dash · `T` / `1-5` taunt · right-click holds a prop's rotation or zooms a hunter's aim · scroll zooms ·
-`Enter` quick chat · `Tab` scores · `M` mute · `-` `=` mouse sensitivity · `Esc` menu.
+`H` controls card · `Enter` quick chat · `Tab` scores · `M` mute.
+
+New players get a "How to play" guide on first visit, an objective line at the top of the screen and
+a controls card for their current role.
+
+![Settings](docs/screenshots/settings.png)
+
+## Deploying
+
+`render.yaml` is a Render blueprint (free plan, Docker). The menu shows a build stamp in the bottom-left
+corner (date and commit), so you can check which version a server is actually running.
 
 ## How it is built
 
@@ -88,7 +101,7 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
   them), so a modified client could highlight players. Fixing that needs server-side visibility
   culling, which is not built yet.
 - **No asset pipeline.** Every model is merged procedural geometry drawn with instancing, and every
-  sound is synthesised with WebAudio. The client is about 170 KB gzipped.
+  sound is synthesised with WebAudio. The client is about 175 KB gzipped.
 - **Rendering.** High quality uses glossy PBR materials with an environment map, baked vertex ambient
   occlusion, soft shadows, bloom and filmic tone mapping. "Fast" drops to plain diffuse shading with no
   post-processing, and the game switches to it automatically if the frame rate is poor.
@@ -103,6 +116,8 @@ npm run test:soak    # bots play many fast rounds with chaos events turned up; f
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS` override them).
+
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, mechanics and protocol tests on every push.
 
 ## Tuning
 

@@ -19,6 +19,7 @@ import { Hud, type AbilityView } from './hud';
 import { Net } from './net';
 import { DUCK_TYPE, blasterGeometry, eyesGeometry, hunterGeometry, propGeometry } from './propgeo';
 import { WorldView } from './world';
+import { ACTIONS, B, keyLabel } from './keys';
 
 const STEP = 1 / 60;
 const INTERP_MS = 110;
@@ -94,6 +95,8 @@ export class Game {
   quality: 'high' | 'low' = 'high';
   fps = 60;
   renderEvery = 1;
+  helpOn = true;
+  private slowSecs = 0;
   look = 0; baseFov = 78; xp = 0;
   private composer!: EffectComposer; private bloom!: UnrealBloomPass;
   private eyeMat!: THREE.MeshBasicMaterial; private muzzle!: THREE.Mesh;
@@ -143,6 +146,8 @@ export class Game {
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
     this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
+    const hp = localStorage.getItem('pp_help');
+    this.helpOn = hp === null ? true : hp === '1';
     this.look = Math.max(0, Math.min(63, Number(localStorage.getItem('pp_look')) || Math.floor(Math.random() * 8) * 8));
     const f = Number(localStorage.getItem('pp_fov')); if (f >= 60 && f <= 100) this.baseFov = f;
     const v = Number(localStorage.getItem('pp_vol')); if (localStorage.getItem('pp_vol') !== null && v >= 0 && v <= 1) this.sfx.volume = v;
@@ -258,7 +263,7 @@ export class Game {
     document.addEventListener('keydown', (e) => {
       if (!this.inGame || (e.target as HTMLElement)?.tagName === 'INPUT') return;
       // game keys must never activate a focused HUD button (Space would re-click "Start" or "+ bot")
-      if (e.code === 'Space' || e.code === 'Enter' || e.code.startsWith('Arrow')) e.preventDefault();
+      if (e.code === 'Space' || e.code === 'Enter' || e.code.startsWith('Arrow') || e.code === B.jump) e.preventDefault();
       if (e.code === 'Tab') { e.preventDefault(); this.showScores = true; return; }
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -270,11 +275,12 @@ export class Game {
       }
       switch (e.code) {
         case 'Enter': this.chatOpen = true; this.hud.chatMenu(true); break;
-        case 'KeyE': this.tryTransform(); break;
-        case 'KeyQ': this.useAbility(this.team === 'hunter' ? 'pulse' : 'decoy'); break;
-        case 'KeyF': this.useAbility(this.team === 'hunter' ? 'shock' : 'ghost'); break;
-        case 'ShiftLeft': case 'ShiftRight': if (this.team === 'prop' && this.alive) { if (this.body.dashCd <= 0) { this.dashQueued = true; this.sfx.play('dash'); } else this.sfx.play('deny'); } break;
-        case 'KeyT': this.taunt(Math.floor(Math.random() * TAUNTS.length)); break;
+        case B.act: this.tryTransform(); break;
+        case B.help: this.helpOn = !this.helpOn; try { localStorage.setItem('pp_help', this.helpOn ? '1' : '0'); } catch { /* ignore */ } break;
+        case B.ab1: this.useAbility(this.team === 'hunter' ? 'pulse' : 'decoy'); break;
+        case B.ab2: this.useAbility(this.team === 'hunter' ? 'shock' : 'ghost'); break;
+        case B.dash: if (this.team === 'prop' && this.alive) { if (this.body.dashCd <= 0) { this.dashQueued = true; this.sfx.play('dash'); } else this.sfx.play('deny'); } break;
+        case B.taunt: this.taunt(Math.floor(Math.random() * TAUNTS.length)); break;
         case 'KeyM': { const m = this.sfx.toggleMute(); localStorage.setItem('pp_mute', m ? '1' : '0'); this.hud.popup(m ? 'Sound off' : 'Sound on'); break; }
         case 'Minus': case 'Equal': this.sens = Math.max(0.0006, Math.min(0.006, this.sens * (e.code === 'Minus' ? 0.88 : 1.14))); localStorage.setItem('pp_sens', String(this.sens)); this.hud.popup(`Mouse sensitivity ${(this.sens / 0.0022).toFixed(2)}x`); break;
         default: if (digit >= 1 && digit <= 5) this.taunt(digit - 1);
@@ -628,9 +634,9 @@ export class Game {
   // ================================================================ simulation
   private stepLocal() {
     const k = this.keys;
-    let mx = (k.has('KeyD') || k.has('ArrowRight') ? 1 : 0) - (k.has('KeyA') || k.has('ArrowLeft') ? 1 : 0);
-    let mz = (k.has('KeyW') || k.has('ArrowUp') ? 1 : 0) - (k.has('KeyS') || k.has('ArrowDown') ? 1 : 0);
-    let jump = k.has('Space'), dash = this.dashQueued;
+    let mx = (k.has(B.right) || k.has('ArrowRight') ? 1 : 0) - (k.has(B.left) || k.has('ArrowLeft') ? 1 : 0);
+    let mz = (k.has(B.fwd) || k.has('ArrowUp') ? 1 : 0) - (k.has(B.back) || k.has('ArrowDown') ? 1 : 0);
+    let jump = k.has(B.jump), dash = this.dashQueued;
     this.dashQueued = false;
     if (!this.canMove || !this.locked) { mx = 0; mz = 0; jump = false; dash = false; }
     const moving = mx !== 0 || mz !== 0;
@@ -811,7 +817,7 @@ export class Game {
     const spectating = !this.alive || this.team === 'spec' || !this.hasMe;
     if (spectating) {
       const k = this.keys;
-      const f = (k.has('KeyW') ? 1 : 0) - (k.has('KeyS') ? 1 : 0), s = (k.has('KeyD') ? 1 : 0) - (k.has('KeyA') ? 1 : 0), u = (k.has('Space') ? 1 : 0) - (k.has('ShiftLeft') ? 1 : 0);
+      const f = (k.has(B.fwd) ? 1 : 0) - (k.has(B.back) ? 1 : 0), s = (k.has(B.right) ? 1 : 0) - (k.has(B.left) ? 1 : 0), u = (k.has(B.jump) ? 1 : 0) - (k.has(B.dash) ? 1 : 0);
       const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
       const sp = 9 * dt;
       this.specPos.x += (dx * f + Math.cos(this.yaw) * s) * sp;
@@ -884,14 +890,14 @@ export class Game {
     const ab: AbilityView[] = [];
     if (playing && hunter) {
       ab.push({ key: 'Click', name: 'ZAP', icon: '✦', left: 0, total: 1 });
-      ab.push({ key: 'Q', name: 'SCANNER', icon: '◎', left: this.cd.pulse - now, total: CFG.CD_PULSE });
-      ab.push({ key: 'F', name: 'SHOCKWAVE', icon: '✺', left: this.cd.shock - now, total: CFG.CD_SHOCK });
+      ab.push({ key: keyLabel(B.ab1), name: 'SCANNER', icon: '◎', left: this.cd.pulse - now, total: CFG.CD_PULSE });
+      ab.push({ key: keyLabel(B.ab2), name: 'SHOCKWAVE', icon: '✺', left: this.cd.shock - now, total: CFG.CD_SHOCK });
     } else if (playing) {
-      ab.push({ key: 'E', name: 'BECOME', icon: '⇄', left: 0, total: 1 });
-      ab.push({ key: 'Q', name: 'DECOY', icon: '❖', left: this.cd.decoy - now, total: CFG.CD_DECOY });
-      if (!lobby) ab.push({ key: 'F', name: 'GHOST', icon: '☁', left: this.cd.ghost - now, total: CFG.CD_GHOST, active: (this.myFlags & F.GHOST) !== 0 });
-      ab.push({ key: 'Shift', name: 'DASH', icon: '»', left: this.body.dashCd * 1000, total: CFG.DASH_CD * 1000, active: this.body.dashLeft > 0 });
-      ab.push({ key: 'T', name: 'TAUNT', icon: '♪', left: this.cd.taunt - now, total: CFG.CD_TAUNT });
+      ab.push({ key: keyLabel(B.act), name: 'BECOME', icon: '⇄', left: 0, total: 1 });
+      ab.push({ key: keyLabel(B.ab1), name: 'DECOY', icon: '❖', left: this.cd.decoy - now, total: CFG.CD_DECOY });
+      if (!lobby) ab.push({ key: keyLabel(B.ab2), name: 'GHOST', icon: '☁', left: this.cd.ghost - now, total: CFG.CD_GHOST, active: (this.myFlags & F.GHOST) !== 0 });
+      ab.push({ key: keyLabel(B.dash), name: 'DASH', icon: '»', left: this.body.dashCd * 1000, total: CFG.DASH_CD * 1000, active: this.body.dashLeft > 0 });
+      ab.push({ key: keyLabel(B.taunt), name: 'TAUNT', icon: '♪', left: this.cd.taunt - now, total: CFG.CD_TAUNT });
     }
     h.setAbilities(ab);
 
@@ -902,7 +908,7 @@ export class Game {
     // transform prompt
     if (this.target >= 0 && playing && !hunter) {
       const info = this.world.decorDef(this.target);
-      if (info) h.prompt(info.d.type === this.disguise ? `You are already a <b>${info.def.name}</b>` : `<b>[E]</b> Become <b>${info.def.name}</b>`);
+      if (info) h.prompt(info.d.type === this.disguise ? `You are already a <b>${info.def.name}</b>` : `<b>[${keyLabel(B.act)}]</b> Become <b>${info.def.name}</b>`);
     } else h.prompt(null);
 
     h.freeze(pnow < this.freezeUntil && playing);
@@ -946,6 +952,20 @@ export class Game {
     else if (playing && !hunter && this.phase === 'hiding' && left < CFG.HIDE_MS - 3500) hint = 'Right-click holds your rotation · scroll zooms · small toys fit on shelves';
     h.hint(hint); h.spectate(spec);
 
+    // always-on objective line and a controls card, so a first-time player is never left guessing
+    let obj = '';
+    if (lobby) obj = 'Warm-up. The round starts soon — try becoming a toy.';
+    else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent toys. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake toys and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
+    else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at a toy and press [${keyLabel(B.act)}] to become it, then stand among similar toys.`;
+    else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
+    h.objective(obj);
+    const K = (id: string) => `<kbd>${keyLabel(B[id])}</kbd>`;
+    const rows = !playing ? null : hunter
+      ? [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Zap', '<kbd>Left click</kbd>'], ['Zoom aim', '<kbd>Right click</kbd>'], ['Scanner', K('ab1')], ['Shockwave', K('ab2')]]
+      : [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Become toy', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
+    h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
+    void ACTIONS;
+
     h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart });
     h.results(this.phase === 'end', this.results, this.myId, this.team, left);
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
@@ -966,9 +986,10 @@ export class Game {
     this.fpsAcc += dt; this.fpsN++;
     if (this.fpsAcc >= 1) {
       this.fps = this.fpsN / this.fpsAcc;
-      if (!this.fpsChecked && this.inGame && this.time > 6 && !document.hidden) {
+      if (!this.fpsChecked && this.inGame && this.time > 8 && !document.hidden) this.slowSecs = this.fps < 28 ? this.slowSecs + 1 : 0;
+      if (!this.fpsChecked && this.slowSecs >= 4) {
         this.fpsChecked = true;
-        if (this.fps < 34 && this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); document.getElementById('gfxBtn')!.textContent = 'Graphics: Fast'; }
+        if (this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); document.getElementById('gfxBtn')!.textContent = 'Graphics: Fast'; }
       }
       this.fpsAcc = 0; this.fpsN = 0;
     }

@@ -2,6 +2,8 @@
 import './style.css';
 import { Game } from './game';
 
+declare const __BUILD__: string;
+
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const game = new Game($<HTMLCanvasElement>('c'));
 (window as any).__pp = game; // handy for debugging and automated tests; the server remains authoritative
@@ -66,7 +68,7 @@ if (resuming) setBusy(true);
 
 // ---------------------------------------------------------------- pause overlay
 let pauseOpen = false;
-function showPause(v: boolean) { pauseOpen = v; pause.classList.toggle('hidden', !v); }
+function showPause(v: boolean) { pauseOpen = v; pause.classList.toggle('hidden', !v); if (v && game.inGame) { pause.classList.remove('menuMode'); $('pauseTitle').textContent = 'Paused'; } }
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === $('c');
   if (locked) showPause(false);
@@ -124,6 +126,28 @@ vol.oninput = () => { game.sfx.setVolume(Number(vol.value)); localStorage.setIte
 // ---------------------------------------------------------------- live player count + boot splash
 fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online').textContent = `● ${h.humans} playing right now`; }).catch(() => {});
 requestAnimationFrame(() => requestAnimationFrame(() => { $('boot').classList.add('done'); setTimeout(() => $('boot').remove(), 600); }));
+
+// ---------------------------------------------------------------- key bindings, settings from the menu, how-to
+import { ACTIONS, B, keyLabel, resetBinds, setBind } from './keys';
+let listening = '';
+function renderBinds() {
+  $('binds').innerHTML = ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span><button data-a="${id}" class="${listening === id ? 'listening' : ''}">${listening === id ? 'press a key…' : keyLabel(B[id])}</button></div>`).join('');
+}
+$('binds').onclick = (e) => { const a = (e.target as HTMLElement).dataset.a; if (a) { listening = a; renderBinds(); } };
+$('resetBinds').onclick = () => { resetBinds(); listening = ''; renderBinds(); };
+window.addEventListener('keydown', (e) => {
+  if (!listening) return;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if (e.code !== 'Escape') setBind(listening, e.code);
+  listening = ''; renderBinds();
+}, true);
+renderBinds();
+$('setBtn').onclick = () => { pause.classList.add('menuMode'); $('pauseTitle').textContent = 'Settings'; showPause(true); };
+$('closeSettings').onclick = () => { showPause(false); pause.classList.remove('menuMode'); $('pauseTitle').textContent = 'Paused'; };
+$('howBtn').onclick = () => $('howto').classList.remove('hidden');
+$('howClose').onclick = () => $('howto').classList.add('hidden');
+if (!localStorage.getItem('pp_seen')) { localStorage.setItem('pp_seen', '1'); $('howto').classList.remove('hidden'); }
+$('build').textContent = `build ${__BUILD__}`;
 
 // first interaction unlocks audio and starts the menu tune
 window.addEventListener('pointerdown', () => { game.sfx.unlock(); if (!game.inGame) game.sfx.music('lobby'); }, { once: true });

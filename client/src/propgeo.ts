@@ -6,6 +6,7 @@
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { PROPS, PROP_INDEX } from '../../shared/props';
 import { HATS, HUNTER_COLORS } from '../../shared/constants';
 
@@ -29,8 +30,13 @@ function fin(g: G, color: number, x: number, y: number, z: number, rx = 0, ry = 
   return out;
 }
 
-export const box = (w: number, h: number, d: number, c: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) =>
-  fin(new THREE.BoxGeometry(w, h, d), c, x, y, z, rx, ry, rz);
+/** A box. Anything chunky enough gets softly bevelled edges, which is what makes plastic and cardboard read as "made". */
+export const box = (w: number, h: number, d: number, c: number, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0) => {
+  const m = Math.min(w, h, d);
+  return fin(m >= 0.2 ? new RoundedBoxGeometry(w, h, d, 1, Math.min(0.06, m * 0.14)) : new THREE.BoxGeometry(w, h, d), c, x, y, z, rx, ry, rz);
+};
+export const cap = (r: number, len: number, c: number, x = 0, y = 0, z = 0, rx = 0, rz = 0) =>
+  fin(new THREE.CapsuleGeometry(r, len, 4, 10), c, x, y, z, rx, 0, rz);
 export const cyl = (rt: number, rb: number, h: number, c: number, x = 0, y = 0, z = 0, rx = 0, rz = 0, seg = 11) =>
   fin(new THREE.CylinderGeometry(rt, rb, h, seg), c, x, y, z, rx, 0, rz);
 export const sph = (r: number, c: number, x = 0, y = 0, z = 0, sx = 1, sy = 1, sz = 1, rx = 0, rz = 0) =>
@@ -287,16 +293,21 @@ export function hunterGeometry(look = 0): HunterParts {
     : hat === 3 ? [sph(0.215, RED, 0, 1.66, 0, 1, 0.7, 1), sph(0.215, BLUE, 0, 1.661, 0, 0.5, 0.71, 1.01), cyl(0.015, 0.015, 0.12, DGREY, 0, 1.86, 0), box(0.5, 0.02, 0.07, YEL, 0, 1.92, 0, 0, 0.5), sph(0.03, RED, 0, 1.93, 0)]
     : hat === 4 ? [cyl(0.17, 0.17, 0.3, BLK, 0, 1.9, 0), cyl(0.28, 0.28, 0.03, BLK, 0, 1.75, 0), cyl(0.175, 0.175, 0.06, RED, 0, 1.8, 0)]
     : [cyl(0.21, 0.19, 0.12, YEL, 0, 1.78, 0), ...[0, 1, 2, 3, 4, 5].map((i) => cone(0.05, 0.14, YEL, Math.cos(i * 1.047) * 0.17, 1.9, Math.sin(i * 1.047) * 0.17, 0, 0, 5)), sph(0.035, RED, 0, 1.79, 0.2), sph(0.03, BLUE, 0.17, 1.79, 0.1), sph(0.03, GRN, -0.17, 1.79, 0.1)];
+  // hats were modelled for a smaller head: lift and widen them to sit on the new one
+  for (const g of top) { g.scale(1.16, 1.1, 1.16); g.translate(0, -0.06, 0); }
+  const PINK = 0xf4a3a3;
   const body = mergeGeometries([
-    box(0.56, 0.62, 0.32, VEST, 0, 1.06, 0), box(0.58, 0.07, 0.34, YEL, 0, 0.95, 0), box(0.58, 0.07, 0.34, YEL, 0, 1.2, 0),
-    box(0.2, 0.12, 0.02, WHT, -0.13, 1.25, 0.165), box(0.5, 0.1, 0.3, NAVY, 0, 0.74, 0), box(0.14, 0.5, 0.2, VEST, -0.36, 1.1, 0),
-    sph(0.09, SKIN, -0.36, 0.82, 0), sph(0.21, SKIN, 0, 1.56, 0), sph(0.05, WHT, -0.08, 1.6, 0.17), sph(0.05, WHT, 0.08, 1.6, 0.17),
-    sph(0.026, BLK, -0.08, 1.6, 0.21), sph(0.026, BLK, 0.08, 1.6, 0.21), box(0.12, 0.03, 0.03, BLK, 0, 1.48, 0.2), ...top,
+    cap(0.27, 0.34, VEST, 0, 1.04, 0), tor(0.272, 0.028, YEL, 0, 0.93, 0), tor(0.272, 0.028, YEL, 0, 1.13, 0),
+    sph(0.27, NAVY, 0, 0.74, 0, 1, 0.62, 0.9), box(0.2, 0.12, 0.03, WHT, -0.11, 1.24, 0.25, -0.12),
+    cap(0.078, 0.3, VEST, -0.37, 1.08, 0, 0, -0.16), sph(0.09, SKIN, -0.4, 0.84, 0),
+    sph(0.255, SKIN, 0, 1.6, 0), sph(0.07, WHT, -0.095, 1.64, 0.2, 1, 1, 0.7), sph(0.07, WHT, 0.095, 1.64, 0.2, 1, 1, 0.7),
+    sph(0.034, BLK, -0.09, 1.64, 0.25), sph(0.034, BLK, 0.1, 1.64, 0.25), sph(0.05, PINK, -0.17, 1.54, 0.16, 1, 0.6, 0.6), sph(0.05, PINK, 0.17, 1.54, 0.16, 1, 0.6, 0.6),
+    box(0.1, 0.028, 0.03, 0x7a3b2e, 0, 1.5, 0.24), sph(0.06, SKIN, -0.25, 1.6, 0, 0.5, 1, 1), sph(0.06, SKIN, 0.25, 1.6, 0, 0.5, 1, 1), ...top,
   ], false)!;
   // leg geometry hangs from its hip pivot at the origin
-  const leg = mergeGeometries([box(0.2, 0.72, 0.24, NAVY, 0, -0.36, 0), box(0.24, 0.1, 0.34, BLK, 0, -0.7, 0.04)], false)!;
+  const leg = mergeGeometries([cap(0.1, 0.42, NAVY, 0, -0.34, 0), sph(0.13, BLK, 0, -0.66, 0.05, 1, 0.62, 1.5)], false)!;
   const arm = mergeGeometries([
-    box(0.14, 0.2, 0.46, VEST, 0, 0, 0.18), sph(0.09, SKIN, 0, 0, 0.43),
+    cap(0.078, 0.26, VEST, 0, 0, 0.2, H), sph(0.09, SKIN, 0, 0, 0.43),
     box(0.1, 0.16, 0.5, ORG, 0, 0.07, 0.62), box(0.08, 0.16, 0.1, BLUE, 0, -0.05, 0.5), cyl(0.07, 0.07, 0.08, YEL, 0, 0.07, 0.9, H), cyl(0.04, 0.04, 0.1, GRN, 0, 0.17, 0.6, H),
   ], false)!;
   for (const g of [body, leg, arm]) bakeAO(g, 1.9);

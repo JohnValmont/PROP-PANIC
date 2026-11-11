@@ -62,7 +62,7 @@ async function main() {
     const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--mute-audio', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows', '--disable-background-timer-throttling'] });
     browsers.push(browser);
     const ctx = await browser.newContext({ viewport: { width: 480, height: 270 } });
-    await ctx.addInitScript(() => localStorage.setItem('pp_quality', 'low'));
+    await ctx.addInitScript(() => { localStorage.setItem('pp_quality', 'low'); localStorage.setItem('pp_seen', '1'); });
     const page = await ctx.newPage();
     await ctx.addInitScript(() => {
       window.__log = [];

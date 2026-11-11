@@ -40,6 +40,8 @@
     <div id="role"><div id="roleTeam"></div><div id="roleName"></div><div id="roleBar"><i></i></div></div>
     <div id="abilities"></div>
     <div id="meter"><span>PROP-O-METER</span><div><i></i></div></div>
+    <div id="objective"></div>
+    <div id="help"></div>
     <div id="hint"></div>
     <div id="spectate"></div>
 
@@ -85,6 +87,7 @@
         <button id="createBtn" class="btn teal">Private room</button>
         <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
       </div>
+      <div class="row split"><button id="howBtn" class="btn small ghost">How to play</button><button id="setBtn" class="btn small ghost">Settings &amp; controls</button></div>
       <div id="menuError"></div>
       <div class="custom">
         <div class="tiny">YOUR HUNTER</div>
@@ -97,7 +100,7 @@
 
   <div id="pause" class="overlay hidden">
     <div class="menuCard small">
-      <h2>Paused</h2>
+      <h2 id="pauseTitle">Paused</h2>
       <button id="resumeBtn" class="btn big yellow">Click to play</button>
       <div class="row"><button id="gfxBtn" class="btn teal">Graphics: High</button><button id="muteBtn" class="btn teal">Sound: On</button></div>
       <div class="sliders">
@@ -105,11 +108,46 @@
         <label>Field of view <input id="fovRange" type="range" min="60" max="100" step="1" /></label>
         <label>Volume <input id="volRange" type="range" min="0" max="1" step="0.05" /></label>
       </div>
+      <div class="bindsHead"><span>KEY BINDINGS — click one, then press the new key</span><button id="resetBinds" class="btn tiny">Reset</button></div>
+      <div id="binds"></div>
       <button id="leaveBtn" class="btn pink">Leave game</button>
+      <button id="closeSettings" class="btn yellow">Done</button>
       <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> ghost / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation (prop) / zoom (hunter) · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
     </div>
   </div>
 
+  <div id="howto" class="overlay hidden">
+    <div class="menuCard wide">
+      <h2>How to play</h2>
+      <div class="howGrid">
+        <div class="howCol prop">
+          <h3>If you are a PROP</h3>
+          <ol>
+            <li><b>Become a toy.</b> Aim at any toy and press the Become key (E).</li>
+            <li><b>Hide in plain sight.</b> Stand among toys like you and stop moving.</li>
+            <li><b>Don't flinch.</b> Freeze when the blue scanner ring passes. Moving reveals you.</li>
+            <li><b>Got hit?</b> You get a speed burst. Run, drop a decoy (Q), turn ghost (F).</li>
+            <li><b>Feeling brave?</b> Taunt (T) near hunters for points, or jump on a hunter's head to stun them.</li>
+          </ol>
+          <p>Survive until the timer hits zero.</p>
+        </div>
+        <div class="howCol hunter">
+          <h3>If you are a HUNTER</h3>
+          <ol>
+            <li><b>Wait blindfolded</b> while the props hide.</li>
+            <li><b>Zap the fakes.</b> Left click fires. Three hits catch a prop.</li>
+            <li><b>Don't guess.</b> Every innocent toy you shoot drains Focus. At zero you become a duck.</li>
+            <li><b>Use your tools.</b> Scanner (Q) pings props that move. Shockwave (F) throws nearby fakes into the air.</li>
+            <li><b>Listen.</b> All props squeak every 22 seconds, and the meter warms up when one is close.</li>
+          </ol>
+          <p>Catch every prop before time runs out.</p>
+        </div>
+      </div>
+      <button id="howClose" class="btn big yellow">Got it</button>
+    </div>
+  </div>
+
+  <div id="build"></div>
   <div id="conn" class="overlay hidden"><div class="menuCard small"><h2 id="connTitle">Reconnecting…</h2><div id="connSub" class="dim">Hold tight, your seat is being held.</div></div></div>
 
   <script type="module" src="/src/main.ts"></script>

@@ -199,3 +199,27 @@ table.board tr.dead td { opacity: 0.55; }
 #chatMenu div b { color: var(--yellow); margin-right: 6px; }
 
 @media (max-height: 640px) { .feats, .keys { display: none; } }
+
+/* ---------- onboarding, settings, key bindings ---------- */
+#objective { position: absolute; top: 86px; left: 50%; transform: translateX(-50%); max-width: min(760px, 70vw); text-align: center; background: rgba(27, 42, 74, 0.82); border-radius: 12px; padding: 6px 16px; font-size: 16px; font-weight: 600; border-bottom: 3px solid var(--yellow); display: none; }
+#help { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); background: rgba(27, 42, 74, 0.86); border: 2px solid rgba(255, 255, 255, 0.5); border-radius: 16px; padding: 10px 14px; font-size: 14px; font-weight: 600; gap: 5px; min-width: 215px; display: none; }
+#help > div { display: flex; justify-content: space-between; gap: 14px; align-items: center; }
+#help .helpT { font-size: 11px; letter-spacing: 0.16em; color: var(--yellow); justify-content: flex-start; }
+#help .helpF { font-size: 11px; opacity: 0.75; font-weight: 400; margin-top: 3px; display: block; }
+.btn.ghost { background: rgba(255, 255, 255, 0.14); color: #fff; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.25); }
+#pause .menuCard, #howto .menuCard { max-height: 94vh; overflow-y: auto; }
+.menuCard.wide { width: min(860px, 96vw); }
+.bindsHead { display: flex; justify-content: space-between; align-items: center; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; opacity: 0.85; text-align: left; }
+#binds { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 14px; }
+.bind { display: flex; justify-content: space-between; align-items: center; font-size: 14px; font-weight: 600; text-align: left; }
+.bind button { font-family: var(--font); font-weight: 700; font-size: 14px; min-width: 74px; padding: 5px 8px; border-radius: 9px; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
+.bind button.listening { background: var(--yellow); color: var(--ink); border-color: #fff; }
+#closeSettings { display: none; }
+#pause.menuMode #resumeBtn, #pause.menuMode #leaveBtn { display: none; }
+#pause.menuMode #closeSettings { display: block; }
+.howGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; }
+.howCol { background: rgba(0, 0, 0, 0.24); border-radius: 16px; padding: 12px 16px; font-size: 15px; line-height: 1.35; }
+.howCol h3 { margin: 0 0 6px; font-size: 20px; } .howCol.prop h3 { color: var(--yellow); } .howCol.hunter h3 { color: #ff8fa3; }
+.howCol ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; } .howCol p { margin: 8px 0 0; font-weight: 700; color: #7ff5e6; }
+#build { position: fixed; left: 8px; bottom: 6px; z-index: 30; font-size: 11px; opacity: 0.5; pointer-events: none; }
+@media (max-width: 760px) { .howGrid, #binds { grid-template-columns: 1fr; } }

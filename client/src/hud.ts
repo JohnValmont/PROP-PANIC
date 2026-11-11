@@ -11,7 +11,7 @@ const TIPS = [
   'Shooting innocent toys drains your FOCUS. Hit zero and you spend 6 seconds as a rubber duck.',
   'Your Scanner (Q) only catches props that MOVE while the ring passes over them.',
   'Shockwave (F) launches real props into the air. Innocent toys never flinch.',
-  'Every 30 seconds all props are forced to squeak. Listen for where it comes from.',
+  'Every 22 seconds all props are forced to squeak. Listen for where it comes from.',
   'Decoys squeak too. Shoot one and you get flash-blinded.',
   'The PROP-O-METER warms up when any prop is within a few metres.',
   'A toy facing the wrong way on a tidy shelf is probably not a toy.',
@@ -81,6 +81,9 @@ export class Hud {
   hint(text: string | null) { const h = $('hint'); h.style.display = text ? 'block' : 'none'; if (text && h.textContent !== text) h.textContent = text; }
   spectate(text: string | null) { const h = $('spectate'); h.style.display = text ? 'block' : 'none'; if (text && h.textContent !== text) h.textContent = text; }
   meter(v: number | null) { const m = $('meter'); m.style.display = v === null ? 'none' : 'block'; if (v !== null) (m.querySelector('i') as HTMLElement).style.width = `${Math.round(v * 100)}%`; }
+  objective(text: string) { const o = $('objective'); o.style.display = text ? 'block' : 'none'; if (text && o.textContent !== text) o.textContent = text; }
+  help(html: string | null) { const o = $('help'); o.style.display = html ? 'grid' : 'none'; if (html && this.helpKey !== html) { this.helpKey = html; o.innerHTML = html; } }
+  private helpKey = '';
   freeze(on: boolean) { $('freeze').style.display = on ? 'block' : 'none'; }
   revealed(on: boolean) { $('revealed').style.display = on ? 'block' : 'none'; }
 

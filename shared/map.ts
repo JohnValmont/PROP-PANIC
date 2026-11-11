@@ -94,6 +94,7 @@ export function buildMap(seed: number): GameMap {
 
   function scatter(id: string, n: number, x0: number, z0: number, x1: number, z1: number, y = 0, margin = 0.18) {
     const def = PROPS[PROP_INDEX[id]];
+    n = Math.max(1, Math.round(n * 0.55)); // a tidy store: enough toys to hide among, few enough to search
     let placed = 0;
     for (let i = 0; i < n * 12 && placed < n; i++) {
       const x = x0 + R() * (x1 - x0);
@@ -156,7 +157,7 @@ export function buildMap(seed: number): GameMap {
       for (const side of [1, -1]) {
         const z = cz + side * 0.375;
         const faceYaw = side === 1 ? 0 : Math.PI;
-        for (const [y, pool, empty] of [[0.2, SHELF_LOW, 0.42], [0.95, SHELF_LOW, 0.45], [1.65, SHELF_TOP, 0.55]] as [number, string[], number][]) {
+        for (const [y, pool, empty] of [[0.2, SHELF_LOW, 0.66], [0.95, SHELF_LOW, 0.7], [1.65, SHELF_TOP, 0.76]] as [number, string[], number][]) {
           let run = pick(pool);
           let runLeft = 1 + Math.floor(R() * 3);
           for (let x = xa + 0.5; x <= xb - 0.45; x += 0.875) {
@@ -204,7 +205,7 @@ export function buildMap(seed: number): GameMap {
     sb(xa, 1.22, za, xb, 1.3, zb, 0xc9a66b);
     sb(xa, 2.42, za, xb, 2.5, zb, 0xc9a66b);
     for (const y of [0, 1.3, 2.5]) for (let x = xa + 0.75; x < xb - 0.6; x += 1.15) {
-      if (R() < 0.35) continue;
+      if (R() < 0.55) continue;
       const id = pick(['boxL', 'boxS', 'crate', 'boxS', 'barrel']);
       place(id, x, y, -16.42, 0);
     }

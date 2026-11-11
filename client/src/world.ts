@@ -80,6 +80,38 @@ function floorTexture(): THREE.CanvasTexture {
   return t;
 }
 
+/** Toy-shop wallpaper: candy-stripe wainscot below, a scatter of pastel shapes above. Tiles horizontally. */
+function wallTexture(): THREE.CanvasTexture {
+  const W = 1024, H = 576, c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const g = c.getContext('2d')!, R = rng(23);
+  g.fillStyle = '#fff3dc'; g.fillRect(0, 0, W, H);
+  const cols = ['#ffd1dc', '#c8f0d0', '#bfe6ff', '#ffe3a3', '#e2d3ff'];
+  for (let i = 0; i < 90; i++) {
+    const x = R() * W, y = 30 + R() * (H * 0.66), r = 9 + R() * 16;
+    g.fillStyle = cols[i % cols.length]; g.globalAlpha = 0.9;
+    for (const ox of [0, -W, W]) {
+      g.save(); g.translate(x + ox, y); g.rotate(R() * 6.28);
+      const k = i % 4;
+      if (k === 0) { g.beginPath(); g.arc(0, 0, r * 0.7, 0, 7); g.fill(); }
+      else if (k === 1) { g.beginPath(); for (let j = 0; j < 10; j++) { const a = (j * Math.PI) / 5, rr = j % 2 ? r * 0.45 : r; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.fill(); }
+      else if (k === 2) { g.beginPath(); g.moveTo(0, -r); g.lineTo(r, r * 0.8); g.lineTo(-r, r * 0.8); g.fill(); }
+      else g.fillRect(-r * 0.6, -r * 0.6, r * 1.2, r * 1.2);
+      g.restore();
+    }
+  }
+  g.globalAlpha = 1;
+  // picture rail, wainscot stripes, skirting
+  const top = H * 0.72;
+  g.fillStyle = '#2ec4b6'; g.fillRect(0, top - 26, W, 14);
+  for (let x = 0; x < W; x += 64) { g.fillStyle = (x / 64) % 2 ? '#ff8fa3' : '#ffb3c1'; g.fillRect(x, top - 12, 64, H - top + 12); }
+  g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(0, top - 12, W, 10);
+  g.fillStyle = '#7a3b52'; g.fillRect(0, H - 22, W, 22);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace; t.wrapS = THREE.RepeatWrapping; t.anisotropy = 8;
+  return t;
+}
+
 function ceilingTexture(): THREE.CanvasTexture {
   const c = document.createElement('canvas');
   c.width = 1024; c.height = 1024;
@@ -272,6 +304,12 @@ export class WorldView {
       if (b.y0 < 0.05 && b.y1 - b.y0 > 0.3) bakeAO(g, Math.min(2.4, b.y1 - b.y0), 0.3);
       parts.push(g);
     }
+    // partitions get a cap rail and skirting so they read as built walls, not coloured slabs
+    for (const b of map.statics) {
+      if (b.y1 !== 3 || Math.min(b.x1 - b.x0, b.z1 - b.z0) > 0.35) continue;
+      const cx = (b.x0 + b.x1) / 2, cz = (b.z0 + b.z1) / 2, w = b.x1 - b.x0, d = b.z1 - b.z0;
+      parts.push(box(w + 0.12, 0.1, d + 0.12, 0xffffff, cx, 3.05, cz), box(w + 0.07, 0.22, d + 0.07, 0x5c4a72, cx, 0.11, cz), box(w + 0.04, 0.06, d + 0.04, 0xffffff, cx, 1.15, cz));
+    }
     // elevated train track around the main aisles, hung from the ceiling
     const RAIL = 0x5c677d, TIE = 0xc9a66b;
     for (const [x0, z0, x1, z1] of [[-TX, -TZ0, TX, -TZ0], [-TX, TZ1, TX, TZ1], [-TX, -TZ0, -TX, TZ1], [TX, -TZ0, TX, TZ1]]) {
@@ -296,6 +334,14 @@ export class WorldView {
     }
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     this.root.add(floor);
+    // wallpaper on the four outer walls
+    const wtex = wallTexture();
+    for (const [x, z, ry, len] of [[0, -16.985, 0, 48], [0, 16.985, Math.PI, 48], [-23.985, 0, Math.PI / 2, 34], [23.985, 0, -Math.PI / 2, 34]] as number[][]) {
+      const t = wtex.clone(); t.needsUpdate = true; t.repeat.set(len / 8, 1);
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(len, BOUNDS.wallH), new THREE.MeshLambertMaterial({ map: t }));
+      wall.position.set(x, BOUNDS.wallH / 2, z); wall.rotation.y = ry; wall.receiveShadow = true;
+      this.root.add(wall);
+    }
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(49, 35), new THREE.MeshBasicMaterial({ map: ceilingTexture() }));
     ceil.rotation.x = Math.PI / 2; ceil.position.y = BOUNDS.wallH;
     this.root.add(ceil);
