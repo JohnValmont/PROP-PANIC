@@ -223,3 +223,21 @@ table.board tr.dead td { opacity: 0.55; }
 .howCol ol { margin: 0; padding-left: 20px; display: grid; gap: 5px; } .howCol p { margin: 8px 0 0; font-weight: 700; color: #7ff5e6; }
 #build { position: fixed; left: 8px; bottom: 6px; z-index: 30; font-size: 11px; opacity: 0.5; pointer-events: none; }
 @media (max-width: 760px) { .howGrid, #binds { grid-template-columns: 1fr; } }
+
+/* ---------- final polish ---------- */
+#mapName { font-size: 11px; font-weight: 600; letter-spacing: 0.08em; opacity: 0.75; margin-top: 2px; white-space: nowrap; }
+#phaseBox.panic #mapName { opacity: 0.95; }
+/* prop health reads as three hits */
+#role.prop #roleBar { position: relative; }
+#role.prop #roleBar::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 32.3%, rgba(27, 42, 74, 0.95) 32.3%, rgba(27, 42, 74, 0.95) 34.3%, transparent 34.3%, transparent 65.6%, rgba(27, 42, 74, 0.95) 65.6%, rgba(27, 42, 74, 0.95) 67.6%, transparent 67.6%); }
+#role.prop #roleBar i { background: linear-gradient(90deg, #ef476f, #ff8fa3); }
+.sliders input[type='checkbox'] { width: 22px; height: 22px; justify-self: start; }
+#mapBtn { width: 100%; }
+.ab { transition: transform 0.08s, border-color 0.15s; }
+.ab.ready { animation: abReady 0.35s ease-out; }
+@keyframes abReady { 0% { transform: scale(1.14); } 100% { transform: scale(1); } }
+.ab.active { transform: translateY(-4px); }
+.feedItem { backdrop-filter: blur(3px); }
+#phaseBox, #role, .ab, #meter, .chip, #chaosWrap { backdrop-filter: blur(4px); }
+.btn { letter-spacing: 0.01em; }
+.btn:focus-visible, .hat:focus-visible, .bind button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }

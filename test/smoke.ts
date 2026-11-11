@@ -88,8 +88,9 @@ async function main() {
     console.log('lobby');
     b.send({ t: 'start' });
     b.send({ t: 'bots', n: 5 });
+    b.send({ t: 'map', m: 2 });
     await sleep(300);
-    ok(a.phase.phase === 'lobby' && a.roster.length === 2, 'non-host cannot start or add bots');
+    ok(a.phase.phase === 'lobby' && a.roster.length === 2 && a.msgs.filter((m) => m.t === 'lobby').every((m) => m.map === 0), 'non-host cannot start, add bots or change the map');
     a.send({ t: 'bots', n: 2 });
     await a.wait((m) => m.t === 'roster' && m.p.length === 4, 3000, 'bots');
     ok(a.roster.filter((r: any) => r.bot).length === 2, 'host added 2 labelled bots');
@@ -105,7 +106,7 @@ async function main() {
     await sleep(200);
     const hunters = a.roster.filter((r: any) => r.team === 'hunter');
     ok(hunters.length === 1 && a.roster.filter((r: any) => r.team === 'prop').length === 3, 'server assigned 1 hunter / 3 props');
-    ok(buildMap(a.phase.seed).decor.length > 100, 'round seed reproduces the map client-side');
+    ok(buildMap(a.phase.seed, a.phase.map).decor.length > 100, 'round seed reproduces the map client-side');
     ok(a.roster.every((r: any) => r.quack === false), 'nobody starts the round quacked, whatever their last disguise was');
 
     // Make sure a human is the hunter for the shooting test; otherwise just use whoever is.
@@ -139,7 +140,7 @@ async function main() {
     }
 
     console.log('transform');
-    const map = buildMap(a.phase.seed);
+    const map = buildMap(a.phase.seed, a.phase.map);
     const me = humanProp.snap.me;
     const near = map.decor.filter((d) => Math.hypot(d.x - me[0], d.z - me[2]) < 4 && d.type !== humanProp.me().disguise).sort((u, v) => PROPS[u.type].h - PROPS[v.type].h)[0];
     humanProp.send({ t: 'tf', d: near.id });
@@ -189,6 +190,7 @@ async function main() {
     a.msgs.length = 0;
     const next = await a.wait((m) => m.t === 'phase' && m.phase === 'hiding', 6000, 'next round');
     ok(next.round === 2 && next.seed !== end.seed, 'next round starts automatically with a fresh layout');
+    ok(a.phase.map === 1 && buildMap(next.seed, 1).name === 'Sunny Meadow' && buildMap(next.seed, 1).decor.length > 100, 'maps alternate: round 2 is played on Sunny Meadow');
     await sleep(200);
     const h2 = a.roster.filter((r: any) => r.team === 'hunter');
     ok(h2.length === 1 && h2[0].id !== hunters[0].id, `hunter role rotates (${hunters[0].name} → ${h2[0].name})`);

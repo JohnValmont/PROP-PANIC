@@ -9,7 +9,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { CFG, F, QUICK_CHAT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
-import { buildMap, BOUNDS, type GameMap } from '../../shared/map';
+import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, propBody } from '../../shared/props';
 import type { Results, RosterEntry } from '../../shared/protocol';
@@ -39,7 +39,7 @@ interface Pending { seq: number; cmd: Cmd; }
 export class Game {
   renderer: THREE.WebGLRenderer;
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(78, 1, 0.08, 120);
+  camera = new THREE.PerspectiveCamera(78, 1, 0.1, 700);
   world: WorldView;
   fx: Fx;
   sfx = new Sfx();
@@ -52,7 +52,7 @@ export class Game {
   phase: Phase = 'lobby'; phaseEnds = 0; round = 0; seed = -1; panic = false;
   results: Results | undefined;
   roster = new Map<number, RosterEntry>();
-  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0 };
+  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0, map: 0 };
   chaos = 0;
   onLeave: (reason?: string) => void = () => {};
 
@@ -95,6 +95,8 @@ export class Game {
   quality: 'high' | 'low' = 'high';
   fps = 60;
   renderEvery = 1;
+  mapId = -1; nextMap = 0; invertY = false;
+  private stepCount = 0;
   helpOn = true;
   private slowSecs = 0;
   look = 0; baseFov = 78; xp = 0;
@@ -146,6 +148,8 @@ export class Game {
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
     this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
+    this.invertY = localStorage.getItem('pp_invy') === '1';
+    const mv = localStorage.getItem('pp_mus'); if (mv !== null && Number(mv) >= 0 && Number(mv) <= 1) this.sfx.musicVol = Number(mv);
     const hp = localStorage.getItem('pp_help');
     this.helpOn = hp === null ? true : hp === '1';
     this.look = Math.max(0, Math.min(63, Number(localStorage.getItem('pp_look')) || Math.floor(Math.random() * 8) * 8));
@@ -184,10 +188,13 @@ export class Game {
     (this.hud.root.style as any).zoom = String(scale);
   }
 
-  private loadMap(seed: number) {
-    if (seed === this.seed) return;
-    this.seed = seed;
-    this.map = buildMap(seed);
+  private loadMap(seed: number, id = 0) {
+    if (seed === this.seed && id === this.mapId) return;
+    this.seed = seed; this.mapId = id;
+    this.map = buildMap(seed, id);
+    this.sfx.ambience(id === 1 ? 'meadow' : 'store');
+    const tag = document.getElementById('mapName');
+    if (tag) tag.textContent = MAP_NAMES[id] ?? '';
     this.phys = new World(this.map);
     this.world.load(this.map);
     this.pending.length = 0;
@@ -247,7 +254,7 @@ export class Game {
       if (this.skipMouse > 0) { this.skipMouse--; return; }
       const mx = Math.max(-300, Math.min(300, e.movementX)), my = Math.max(-300, Math.min(300, e.movementY));
       this.yaw -= mx * this.sens * this.zoomK;
-      this.pitch -= my * this.sens * this.zoomK;
+      this.pitch -= my * this.sens * this.zoomK * (this.invertY ? -1 : 1);
       const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
       this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
     });
@@ -320,7 +327,7 @@ export class Game {
       case 's': this.onSnap(m); break;
       case 'ev': this.onEvent(m); break;
       case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock }; break;
-      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now() }; break;
+      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0 }; break;
       case 'decoys': {
         for (const d of this.decoys.values()) this.scene.remove(d.mesh);
         this.decoys.clear();
@@ -333,7 +340,8 @@ export class Game {
   private onPhase(m: any) {
     const prevPhase = this.phase;
     this.phase = m.phase; this.phaseEnds = m.ends; this.round = m.round; this.results = m.results;
-    this.loadMap(m.seed);
+    this.loadMap(m.seed, m.map | 0);
+    this.nextMap = m.next | 0;
     this.lastTickSec = -1;
     if (m.phase !== 'hunt') { this.panic = false; }
     if (m.phase === 'hiding' || m.phase === 'lobby') { this.world.darkTarget = 0; this.world.stopPoltergeist(); this.freezeUntil = 0; this.revealedUntil = 0; }
@@ -341,16 +349,17 @@ export class Game {
       // new round: forget where everyone was, so nobody is drawn at a stale lobby position
       for (const e of this.ents.values()) { e.buf.length = 0; e.lastSeen = -1e9; }
       this.sfx.play('hide'); this.sfx.music('sneak');
+      this.hud.feed(['Now playing on ', { b: MAP_NAMES[this.mapId] ?? 'the map' }], 'good');
       // team is confirmed by the roster that follows; banner is shown from there
       this.bannerPending = 'hiding';
     } else if (m.phase === 'hunt') {
-      this.sfx.music('none'); this.sfx.play('go');
+      this.sfx.music('hunt'); this.sfx.play('go');
       if (prevPhase === 'hiding') {
         if (this.team === 'hunter') this.hud.banner('GO HUNT!', 'Zap the fakes. Innocent toys cost you FOCUS.', 'pink');
         else if (this.alive) this.hud.banner('HUNTERS RELEASED!', 'Hold your nerve. Taunt (T) near them for big points.', '');
       }
     } else if (m.phase === 'end') {
-      this.sfx.music('none');
+      this.sfx.music('lobby');
       this.world.darkTarget = 0; this.world.stopPoltergeist();
       const res: Results = m.results;
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
@@ -603,7 +612,7 @@ export class Game {
       }
       case 'chaos': {
         this.sfx.play('chaos');
-        if (m.kind === 'blackout') { this.world.darkTarget = 1; this.sfx.play('blackout'); this.hud.banner('BLACKOUT!', this.team === 'hunter' ? 'Flashlights only. They can see you coming.' : 'Lights out. Move while they are blind!', 'purple'); }
+        if (m.kind === 'blackout') { this.world.darkTarget = 1; this.sfx.play('blackout'); this.hud.banner(this.mapId === 1 ? 'ECLIPSE!' : 'BLACKOUT!', this.team === 'hunter' ? 'Flashlights only. They can see you coming.' : 'Darkness falls. Move while they are blind!', 'purple'); }
         else if (m.kind === 'poltergeist') { this.world.poltergeist(m.seed, m.ms); this.hud.banner('POLTERGEIST!', 'The toys are alive. Good luck telling who is who.', 'purple'); }
         else if (m.kind === 'shuffle') this.hud.banner('PROP SHUFFLE!', 'Every prop just became a different toy.', 'purple');
         else if (m.kind === 'moon') this.hud.banner('MOON BOUNCE!', 'Low gravity. Jump onto anything.', 'purple');
@@ -655,7 +664,11 @@ export class Game {
     const cmd: Cmd = { dt: STEP, mx, mz, yaw: this.yaw, jump, dash };
     const b = this.body;
     this.prev.set(b.x, b.y, b.z);
+    const wasGround = b.ground, vy0 = b.vy;
     this.phys.step(b, cmd, this.speed, this.jumpV, this.team === 'prop');
+    // small movement sounds make the character feel connected to the floor
+    if (!wasGround && b.ground && vy0 < -6) this.sfx.play('land', undefined, Math.min(1, -vy0 / 12));
+    else if (wasGround && !b.ground && b.vy > 3) this.sfx.play('jump', undefined, 0.45);
     this.pending.push({ seq: ++this.seq, cmd });
     if (this.pending.length > 180) this.pending.shift();
     this.outbox.push([this.seq, STEP, mx, mz, this.yaw, this.pitch, (jump ? 1 : 0) | (dash ? 2 : 0), this.facing]);
@@ -825,7 +838,7 @@ export class Game {
       this.specPos.z += (dz * f - Math.sin(this.yaw) * s) * sp;
       this.specPos.x = Math.max(BOUNDS.x0 + 0.5, Math.min(BOUNDS.x1 - 0.5, this.specPos.x));
       this.specPos.z = Math.max(BOUNDS.z0 + 0.5, Math.min(BOUNDS.z1 - 0.5, this.specPos.z));
-      this.specPos.y = Math.max(0.5, Math.min(4.2, this.specPos.y));
+      this.specPos.y = Math.max(0.5, Math.min(this.mapId === 1 ? 10 : 4.2, this.specPos.y));
       cam.position.copy(this.specPos);
       this.viewmodel.visible = false;
       return;
@@ -837,6 +850,8 @@ export class Game {
     const sp = Math.hypot(this.body.vx, this.body.vz);
     if (firstPerson) {
       this.bob += dt * sp * 1.9;
+      const steps = Math.floor(this.bob / Math.PI);
+      if (steps !== this.stepCount) { this.stepCount = steps; if (this.body.ground && sp > 2) this.sfx.play('stepSoft', undefined, 0.5); }
       const bobY = this.body.ground ? Math.sin(this.bob) * 0.035 * Math.min(1, sp / 5) : 0;
       cam.position.set(this.rpos.x, this.camY + CFG.HUNTER_EYE + bobY, this.rpos.z);
       this.viewmodel.visible = true;
@@ -966,8 +981,8 @@ export class Game {
     h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
     void ACTIONS;
 
-    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart });
-    h.results(this.phase === 'end', this.results, this.myId, this.team, left);
+    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map });
+    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '');
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
     void dt;
   }

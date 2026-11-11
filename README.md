@@ -11,6 +11,18 @@ fake. It runs in any desktop browser, with no install and no downloaded art or a
 | --- | --- |
 | ![Menu](docs/screenshots/menu.png) | ![A taunting prop gives itself away](docs/screenshots/panic.png) |
 
+## Maps
+
+| Tumbleton's Toy Emporium | Sunny Meadow |
+| --- | --- |
+| Indoors, dense and vertical: shelves you can climb into, a block castle, ball pit, arcade and stock room. | Outdoors and open: long sight lines, a barn with a hay loft, pond, campsite, market, hay maze and play fort. |
+| ![Toy store](docs/screenshots/hunter.png) | ![Sunny Meadow](docs/screenshots/meadow.png) |
+
+Maps alternate every round (the host of a private room can lock one). Each has its own disguises, 49 in total, and
+its loose props are re-laid out from a new seed every round. Blackout becomes an eclipse outdoors:
+
+![Eclipse on Sunny Meadow](docs/screenshots/meadow-eclipse.png)
+
 ## What makes it different from plain Prop Hunt
 
 | Mechanic | What it does |
@@ -29,7 +41,7 @@ fake. It runs in any desktop browser, with no install and no downloaded art or a
 | **Chaos meter** | Missed shots, taunts and popped decoys fill it. When full: **Blackout**, **Poltergeist** (toys start hopping), **Prop Shuffle** (everyone becomes a different toy), **Moon Bounce** (low gravity) or **Achoo** (every real prop sneezes into the air). |
 | **Roll call** | Every 22 s all props squeak, positioned in 3D audio. |
 | **PANIC TIME** | Final 30 s: props squeak every 7 s but move faster. |
-| **Restocked every round** | The store's ~250 loose toys are laid out from a new seed each round. |
+| **Restocked every round** | Each map's ~240 loose props are laid out from a new seed each round. |
 
 Roles rotate automatically and the next round starts by itself. Rounds are 25 s hiding + 3 min hunting.
 
@@ -66,7 +78,7 @@ free to choose. Both are cosmetic only and visible to everyone in the match.
 ## Controls
 
 Every key can be rebound under **Settings & controls** (main menu, or `Esc` in game), alongside mouse
-sensitivity, field of view, volume and graphics quality. Defaults:
+sensitivity, invert-Y, field of view, sound and music volume, and graphics quality. Defaults:
 
 `WASD` move · `Space` jump · mouse look · `Click`/`E` become a toy (prop) or fire (hunter) · `Q` `F` abilities ·
 `Shift` dash · `T` / `1-5` taunt · right-click holds a prop's rotation or zooms a hunter's aim · scroll zooms ·
@@ -101,7 +113,7 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
   them), so a modified client could highlight players. Fixing that needs server-side visibility
   culling, which is not built yet.
 - **No asset pipeline.** Every model is merged procedural geometry drawn with instancing, and every
-  sound is synthesised with WebAudio. The client is about 175 KB gzipped.
+  sound and all music is synthesised with WebAudio. The client is about 175 KB gzipped.
 - **Rendering.** High quality uses glossy PBR materials with an environment map, baked vertex ambient
   occlusion, soft shadows, bloom and filmic tone mapping. "Fast" drops to plain diffuse shading with no
   post-processing, and the game switches to it automatically if the frame rate is poor.
@@ -111,6 +123,7 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
 ```bash
 npm test             # protocol: rooms, roles, movement authority, speed-hack clamp, shooting, reconnect
 npm run build && npm run test:e2e   # two real browsers play a full round against each other
+npm run test:maps        # both maps: deterministic, free spawns, bot-navigable, sane prop counts
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```

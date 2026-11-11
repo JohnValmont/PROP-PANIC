@@ -31,16 +31,27 @@ export class Sfx {
     this.master = ctx.createGain();
     this.master.gain.value = this.muted ? 0 : this.volume;
     this.master.connect(comp); comp.connect(ctx.destination);
+    // a short synthetic room reverb glues the dry synth voices together
+    const len = Math.floor(ctx.sampleRate * 1.3), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+    for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.8); }
+    const verb = ctx.createConvolver();
+    verb.buffer = ir;
+    const wet = ctx.createGain();
+    wet.gain.value = 0.15;
+    this.master.connect(verb); verb.connect(wet); wet.connect(comp);
     this.musicGain = ctx.createGain();
-    this.musicGain.gain.value = 0.5;
+    this.musicGain.gain.value = this.musicVol;
     this.musicGain.connect(this.master);
-    this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
+    this.noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 3, ctx.sampleRate);
     const d = this.noiseBuf.getChannelData(0);
     for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
     if (this.musicMode !== 'none') { const m = this.musicMode; this.musicMode = 'none'; this.music(m); }
+    if (this.ambMode) { const a = this.ambMode; this.ambMode = ''; this.ambience(a); }
   }
 
   volume = 0.8;
+  musicVol = 0.5;
+  setMusicVolume(v: number) { this.musicVol = v; if (this.ctx) this.musicGain.gain.setTargetAtTime(v, this.ctx.currentTime, 0.03); }
   setVolume(v: number) { this.volume = v; if (this.ctx && !this.muted) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
 
   toggleMute(): boolean {
@@ -116,6 +127,10 @@ export class Sfx {
       case 'bonkHead': T({ type: 'sine', f0: 140, f1: 520, dur: 0.32, gain: 0.5, vib: 50, vibHz: 26 }); N({ dur: 0.07, freq: 700, gain: 0.4 }); T({ type: 'triangle', f0: 1568, dur: 0.1, gain: 0.2, at: 0.12 }); T({ type: 'triangle', f0: 2093, dur: 0.14, gain: 0.2, at: 0.22 }); break;
       case 'sneeze': N({ dur: 0.18, freq: 900, f1: 3800, kind: 'bandpass', gain: 0.15 }); N({ dur: 0.22, freq: 4200, f1: 600, kind: 'bandpass', gain: 0.5, at: 0.2 }); T({ type: 'sawtooth', f0: 700, f1: 260, dur: 0.2, gain: 0.25, at: 0.2 }); break;
       case 'levelup': [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => T({ type: 'triangle', f0: f, dur: 0.2, gain: 0.22, at: i * 0.08 })); break;
+      case 'jump': N({ dur: 0.12, freq: 500, f1: 2200, kind: 'bandpass', gain: 0.12 }); T({ type: 'sine', f0: 260, f1: 520, dur: 0.1, gain: 0.08 }); break;
+      case 'land': T({ type: 'sine', f0: 120, f1: 50, dur: 0.12, gain: 0.4 }); N({ dur: 0.07, freq: 380, gain: 0.3 }); break;
+      case 'stepSoft': N({ dur: 0.05, freq: 520, gain: 0.16 }); T({ type: 'sine', f0: 95, f1: 60, dur: 0.05, gain: 0.12 }); break;
+      case 'hover': T({ type: 'sine', f0: 1250, dur: 0.03, gain: 0.04 }); break;
       case 'thud': N({ dur: 0.08, freq: 500, gain: 0.2 }); break;
       case 'kill': N({ dur: 0.25, freq: 3000, f1: 400, gain: 0.3 }); [523, 659, 784, 1047].forEach((f, i) => T({ type: 'triangle', f0: f, dur: 0.16, gain: 0.25, at: i * 0.07 })); break;
       case 'pop': T({ type: 'sine', f0: 500, f1: 1400, dur: 0.07, gain: 0.35 }); N({ dur: 0.12, freq: 2500, kind: 'bandpass', gain: 0.3 }); break;
@@ -152,43 +167,100 @@ export class Sfx {
     }
   }
 
-  // ---------------------------------------------------------------- tiny step sequencer for mood music
+  // ---------------------------------------------------------------- music: a step sequencer with drums, bass, chords and a lead
   music(mode: string) {
     if (mode === this.musicMode) return;
     this.musicMode = mode;
     if (this.musicTimer !== null) { clearInterval(this.musicTimer); this.musicTimer = null; }
-    if (!this.ctx || mode === 'none') return;
+    if (!this.ctx || mode === 'none' || !SONGS[mode]) return;
     this.step = 0;
-    this.nextNote = this.ctx.currentTime + 0.08;
-    this.musicTimer = window.setInterval(() => this.schedule(), 60);
+    this.nextNote = this.ctx.currentTime + 0.1;
+    this.musicTimer = window.setInterval(() => this.schedule(), 50);
   }
 
   private schedule() {
-    const ctx = this.ctx;
-    if (!ctx || ctx.state !== 'running') return;
-    const mode = this.musicMode;
-    const stepLen = mode === 'panic' ? 0.095 : mode === 'sneak' ? 0.16 : 0.2;
-    while (this.nextNote < ctx.currentTime + 0.2) {
-      const at = this.nextNote - ctx.currentTime, s = this.step++;
-      const d = this.musicGain;
-      const hz = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
-      if (mode === 'sneak') {
-        const bass = [45, 0, 48, 0, 52, 0, 51, 0, 45, 0, 48, 0, 53, 52, 48, 0][s % 16];
-        if (bass) this.tone({ type: 'triangle', f0: hz(bass), dur: 0.14, gain: 0.3, at }, d);
-        if (s % 4 === 2) this.noise({ dur: 0.03, freq: 6000, kind: 'highpass', gain: 0.05, at }, d);
-        if (s % 32 === 28) this.tone({ type: 'sine', f0: hz(76), f1: hz(72), dur: 0.3, gain: 0.08, at }, d);
-      } else if (mode === 'panic') {
-        const k = Math.floor(s / 32) % 2;
-        const arp = [57, 60, 64, 69, 64, 60, 57, 60, 58, 61, 65, 70, 65, 61, 58, 61][s % 16] + (k ? 2 : 0);
-        this.tone({ type: 'square', f0: hz(arp + 12), dur: 0.08, gain: 0.07, at }, d);
-        if (s % 4 === 0) { this.tone({ type: 'sine', f0: 120, f1: 45, dur: 0.12, gain: 0.5, at }, d); this.tone({ type: 'sawtooth', f0: hz(k ? 35 : 33), dur: 0.3, gain: 0.14, at }, d); }
-        if (s % 4 === 2) this.noise({ dur: 0.05, freq: 5000, kind: 'highpass', gain: 0.08, at }, d);
-      } else if (mode === 'lobby') {
-        const mel = [72, 76, 79, 83, 79, 76, 74, 77, 81, 84, 81, 77, 71, 74, 79, 83][s % 16];
-        if (s % 2 === 0) this.tone({ type: 'sine', f0: hz(mel), dur: 0.5, gain: 0.07, at }, d);
-        if (s % 8 === 0) this.tone({ type: 'triangle', f0: hz([48, 50, 43, 45][Math.floor(s / 8) % 4]), dur: 1.2, gain: 0.12, at }, d);
-      }
+    const ctx = this.ctx, S = SONGS[this.musicMode];
+    if (!ctx || ctx.state !== 'running' || !S) return;
+    const d = this.musicGain, stepLen = 60 / S.bpm / 4;
+    const hz = (n: number) => 440 * Math.pow(2, (n - 69) / 12);
+    while (this.nextNote < ctx.currentTime + 0.25) {
+      const at = Math.max(0, this.nextNote - ctx.currentTime), s = this.step++, i = s % 16;
+      const ch = S.chords[Math.floor(s / 16) % S.chords.length];
+      if (S.kick[i] === 'x') this.tone({ type: 'sine', f0: 135, f1: 42, dur: 0.17, gain: 0.5 * S.vol, at }, d);
+      if (S.snare[i] === 'x') { this.noise({ dur: 0.12, freq: 1900, kind: 'bandpass', q: 0.6, gain: 0.2 * S.vol, at }, d); this.tone({ type: 'triangle', f0: 190, f1: 120, dur: 0.07, gain: 0.1 * S.vol, at }, d); }
+      if (S.hat[i] === 'x') this.noise({ dur: 0.03, freq: 7500, kind: 'highpass', gain: 0.06 * S.vol, at }, d);
+      const b = S.bass[i];
+      if (b !== '.') this.tone({ type: S.bassWave, f0: hz(ch[0] - 24 + (b === '5' ? 7 : b === '8' ? 12 : b === '3' ? ch[1] - ch[0] : 0)), dur: stepLen * S.bassLen, gain: 0.24 * S.vol, at }, d);
+      if (S.stab[i] === 'x') for (const n of ch) this.tone({ type: S.stabWave, f0: hz(n), dur: S.stabLen, gain: 0.05 * S.vol, at, attack: S.stabAttack }, d);
+      const l = S.lead[s % S.lead.length];
+      if (l !== '.') { const k = Number(l); this.tone({ type: S.leadWave, f0: hz(ch[k % 3] + 12 * Math.floor(k / 3) + 12), dur: S.leadLen, gain: S.leadGain * S.vol, at }, d); }
       this.nextNote += stepLen;
     }
   }
+
+  // ---------------------------------------------------------------- ambience: a quiet bed per map (room tone indoors, wind and birdsong outdoors)
+  private ambMode = '';
+  private ambSrc: AudioBufferSourceNode | null = null;
+  private ambTimer: number | null = null;
+
+  ambience(kind: string) {
+    if (kind === this.ambMode) return;
+    this.ambMode = kind;
+    if (this.ambSrc) { try { this.ambSrc.stop(); } catch { /* already stopped */ } this.ambSrc = null; }
+    if (this.ambTimer !== null) { clearInterval(this.ambTimer); this.ambTimer = null; }
+    const ctx = this.ctx;
+    if (!ctx || !kind) return;
+    const src = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+    src.buffer = this.noiseBuf; src.loop = true;
+    f.type = 'lowpass'; f.frequency.value = kind === 'meadow' ? 650 : 220;
+    g.gain.value = kind === 'meadow' ? 0.03 : 0.018;
+    src.connect(f); f.connect(g); g.connect(this.master);
+    src.start();
+    this.ambSrc = src;
+    if (kind === 'meadow') this.ambTimer = window.setInterval(() => {
+      if (ctx.state !== 'running' || Math.random() > 0.45) return;
+      const base = 2300 + Math.random() * 2000, n = 2 + Math.floor(Math.random() * 4), gap = 0.07 + Math.random() * 0.06;
+      for (let i = 0; i < n; i++) this.tone({ type: 'sine', f0: base, f1: base * 1.28, f2: base * 0.92, dur: 0.06, gain: 0.022, at: i * gap }, this.master);
+    }, 1100);
+  }
 }
+
+interface Song {
+  bpm: number; vol: number; chords: number[][];
+  kick: string; snare: string; hat: string; bass: string; stab: string; lead: string;
+  bassWave: OscillatorType; bassLen: number; stabWave: OscillatorType; stabLen: number; stabAttack: number;
+  leadWave: OscillatorType; leadLen: number; leadGain: number;
+}
+
+// Patterns are 16 steps per bar. Bass: x root, 5 fifth, 8 octave, 3 third. Lead digits pick chord tones (3+ = an octave up).
+const C = [60, 64, 67], Am = [57, 60, 64], F = [53, 57, 60], G = [55, 59, 62], Dm = [50, 53, 57], E = [52, 56, 59], Bb = [58, 62, 65];
+const SONGS: Record<string, Song> = {
+  // menu, lobby and results: bright and bouncy
+  lobby: {
+    bpm: 112, vol: 1, chords: [C, Am, F, G],
+    kick: 'x.....x.x.......', snare: '....x.......x...', hat: '..x...x...x...x.', bass: 'x..x..5...x.8.5.', stab: '..x...x...x..x..',
+    lead: '0.2.3.2.4.3.2.1.0.2.3.4.5.4.3.2.3.4.5.4.3.2.1.0.2.1.0.1.2.3.4...',
+    bassWave: 'triangle', bassLen: 1.6, stabWave: 'triangle', stabLen: 0.16, stabAttack: 0.005, leadWave: 'sine', leadLen: 0.22, leadGain: 0.1,
+  },
+  // hiding phase: tiptoeing pizzicato
+  sneak: {
+    bpm: 98, vol: 0.9, chords: [Am, Am, Dm, E],
+    kick: '................', snare: '....x.......x...', hat: 'x...x...x...x...', bass: 'x.....x.5...x.3.', stab: '........x.......',
+    lead: '0...2...1...3.2.....0...2.1.0...',
+    bassWave: 'triangle', bassLen: 0.9, stabWave: 'sine', stabLen: 0.3, stabAttack: 0.01, leadWave: 'triangle', leadLen: 0.12, leadGain: 0.11,
+  },
+  // the hunt: a sparse, quiet pulse so squeaks and footsteps stay audible
+  hunt: {
+    bpm: 84, vol: 0.42, chords: [Am, F, Dm, E],
+    kick: 'x.......x.......', snare: '................', hat: '....x.......x...', bass: 'x.......5.......', stab: 'x...............',
+    lead: '............3...................',
+    bassWave: 'sine', bassLen: 5, stabWave: 'sine', stabLen: 2.6, stabAttack: 0.5, leadWave: 'sine', leadLen: 0.5, leadGain: 0.08,
+  },
+  // final 30 seconds
+  panic: {
+    bpm: 168, vol: 0.9, chords: [Am, Am, Bb, G],
+    kick: 'x...x...x...x...', snare: '....x.......x.x.', hat: 'x.x.x.x.x.x.x.x.', bass: 'x.x.8.x.x.x.8.5.', stab: 'x.......x.......',
+    lead: '0234023402345432',
+    bassWave: 'sawtooth', bassLen: 1.1, stabWave: 'sawtooth', stabLen: 0.14, stabAttack: 0.005, leadWave: 'square', leadLen: 0.07, leadGain: 0.045,
+  },
+};

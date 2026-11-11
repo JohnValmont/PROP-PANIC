@@ -82,6 +82,9 @@ export class Room {
   private panic = false;
   private firstDeath = 0;
   private lastEventKind = '';
+  mapId = 0;
+  /** 0 = alternate maps each round, otherwise map id + 1. */
+  mapPref = 0;
   private lastProp = false;
   private roundProps = 0;
   now = now();
@@ -115,7 +118,7 @@ export class Room {
     p.look = look;
     this.players.set(p.id, p);
     if (p.human && ![...this.players.values()].some((q) => q.host)) p.host = true;
-    p.disguise = pickOf(STARTER_PROPS);
+    p.disguise = pickOf(this.map.starters);
 
     const left = this.phaseEnds - this.now;
     if (this.phase === 'lobby' || this.phase === 'end') this.spawnProp(p);
@@ -136,7 +139,7 @@ export class Room {
 
   /** Full state for a client that just (re)connected. */
   private sendState(p: Player) {
-    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed });
+    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap() });
     this.send(p, { t: 'roster', p: this.roster() });
     this.send(p, { t: 'decoys', d: this.decoys.map((d) => ({ id: d.id, type: d.type, x: d.x, y: d.y, z: d.z, yaw: d.yaw, owner: d.owner })) });
     if (this.event && this.event.until > this.now) this.send(p, { t: 'ev', k: 'chaos', kind: this.event.kind, ms: this.event.until - this.now, seed: this.round });
@@ -194,7 +197,7 @@ export class Room {
 
   private sendLobby() {
     const n = this.players.size;
-    this.broadcast({ t: 'lobby', bots: [...this.players.values()].filter((q) => q.bot).length, countdown: this.countdownAt ? Math.max(0, this.countdownAt - this.now) : 0, canStart: n >= 2 });
+    this.broadcast({ t: 'lobby', bots: [...this.players.values()].filter((q) => q.bot).length, countdown: this.countdownAt ? Math.max(0, this.countdownAt - this.now) : 0, canStart: n >= 2, map: this.mapPref });
   }
 
   // ================================================================ spawning & forms
@@ -266,13 +269,15 @@ export class Room {
   private setPhase(phase: Phase, ms: number, results?: Results) {
     this.phase = phase;
     this.phaseEnds = ms ? this.now + ms : 0;
-    this.broadcast({ t: 'phase', phase, ends: this.phaseEnds, round: this.round, seed: this.seed, results });
+    this.broadcast({ t: 'phase', phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap(), results });
     this.rosterDirty = true;
   }
 
-  private loadMap(seed: number) {
-    this.seed = seed;
-    this.map = buildMap(seed);
+  private nextMap(): number { return this.mapPref ? this.mapPref - 1 : this.round % 2; }
+
+  private loadMap(seed: number, id = 0) {
+    this.seed = seed; this.mapId = id;
+    this.map = buildMap(seed, id);
     this.world = new World(this.map);
     this.navGrid = null;
   }
@@ -281,8 +286,9 @@ export class Room {
     this.balanceBots();
     const all = [...this.players.values()].filter((p) => p.bot || p.connected);
     if (all.length < 2) { this.toLobby(); return; }
+    const mapId = this.nextMap();
     this.round++;
-    this.loadMap(1000 + Math.floor(Math.random() * 1e9));
+    this.loadMap(1000 + Math.floor(Math.random() * 1e9), mapId);
     this.chaos = 0; this.event = null; this.decoys = []; this.pulses = []; this.panic = false; this.firstDeath = 0; this.lastProp = false; this.roundProps = 0;
     this.world.gravScale = 1; this.countdownAt = 0;
 
@@ -293,7 +299,7 @@ export class Room {
     // props first so hunters never share a spawn with them
     for (const p of all) {
       p.playing = true;
-      if (!hunters.has(p)) { p.disguise = pickOf(STARTER_PROPS); this.spawnProp(p); }
+      if (!hunters.has(p)) { p.disguise = pickOf(this.map.starters); this.spawnProp(p); }
     }
     for (const p of hunters) { p.hunterTurns++; this.spawnHunter(p); }
     this.setPhase('hiding', CFG.HIDE_MS);
@@ -359,6 +365,7 @@ export class Room {
       case 'taunt': this.taunt(p, fin(m.i) ? m.i | 0 : 0); break;
       case 'chat': if (fin(m.i) && m.i >= 0 && m.i < QUICK_CHAT.length && t > p.nextChatAt) { p.nextChatAt = t + 1500; this.broadcast({ t: 'ev', k: 'chat', who: p.id, i: m.i | 0 }); } break;
       case 'start': if (p.host && this.phase === 'lobby' && this.players.size >= 2) this.startRound(); break;
+      case 'map': if (p.host && !this.isPublic && fin(m.m)) { this.mapPref = Math.max(0, Math.min(2, m.m | 0)); this.sendLobby(); } break;
       case 'bots': if (p.host && !this.isPublic && fin(m.n)) { this.botsWanted = Math.max(0, Math.min(8, m.n | 0)); this.balanceBots(); this.sendLobby(); } break;
       case 'ping': if (fin(m.c)) this.send(p, { t: 'pong', c: m.c, now: now() }); break;
     }
@@ -600,7 +607,7 @@ export class Room {
     }
     else {
       ms = 3000;
-      const pool = PROPS.map((_, i) => i).filter((i) => PROPS[i].h <= 1.4);
+      const pool = [...new Set(this.map.decor.map((d) => d.type))].filter((i) => PROPS[i].h <= 1.4);
       for (const p of this.players.values()) {
         if (p.team !== 'prop' || !p.alive) continue;
         for (let i = 0; i < 8; i++) {

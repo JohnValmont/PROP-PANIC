@@ -5,7 +5,7 @@
  * from a seed, so each round the store has been "restocked" differently. Server and client both call
  * buildMap(seed) and get byte-identical results.
  */
-import { PROPS, PROP_INDEX, footprint } from './props';
+import { MEADOW_STARTERS, PROPS, PROP_INDEX, STARTER_PROPS, footprint } from './props';
 import { rng } from './rng';
 
 export interface Box {
@@ -26,7 +26,17 @@ export interface Decor {
 
 export interface Zone { name: string; x0: number; z0: number; x1: number; z1: number; color: string; }
 
+/** Client-only set dressing with a shape boxes can't describe (trees, pond, roofs...). */
+export interface Feature { kind: string; x: number; z: number; s: number; yaw: number; }
+
+export const MAP_NAMES = ["Tumbleton's Toy Emporium", 'Sunny Meadow'];
+
 export interface GameMap {
+  id: number;
+  name: string;
+  /** Disguises handed out at spawn on this map. */
+  starters: number[];
+  features: Feature[];
   seed: number;
   statics: Box[];
   /** Drawn only, never collided with. */
@@ -55,29 +65,21 @@ const SHELF_COLORS = [0xffd166, 0x4ecdc4, 0xff8fab, 0xf78c2b, 0x9b5de5, 0x06d6a0
 const SHELF_LOW = ['duck', 'ball', 'blockA', 'blockB', 'car', 'drum', 'boxS', 'rings', 'train', 'ufo', 'gift', 'basket'];
 const SHELF_TOP = ['teddy', 'robot', 'dino', 'duck', 'ball', 'blockA', 'gift', 'drum', 'rings', 'boxS'];
 
-export function buildMap(seed: number): GameMap {
+export function buildMap(seed: number, id = 0): GameMap {
+  return id === 1 ? buildMeadow(seed) : buildStore(seed);
+}
+
+/** Shared placement helpers. `keep` lists floor rectangles loose props must never block. */
+function builder(seed: number, keep: number[][], density: number) {
   const R = rng(seed);
   const statics: Box[] = [];
   const visuals: Box[] = [];
   const decor: Decor[] = [];
   const dboxes: number[][] = [];
-  // Floor areas loose toys must not block: spawn lanes and doorways.
-  const keep: number[][] = [
-    [-0.9, -10, 0.9, 6.2], // central cross aisle (prop spawns)
-    [-4.2, 13.2, 4.2, 16.8], // entrance (hunter spawns)
-    [-11.6, -8.3, -9.4, -4.7], [-11.6, 1.7, -9.4, 5.3], [-11.6, 10.7, -9.4, 14.3], // west doorways
-    [9.4, -9.3, 11.6, -5.7], [9.4, 0.7, 11.6, 4.3], [9.4, 9.7, 11.6, 13.3], // east doorways
-    [-8.3, -11.6, -5.7, -9.4], [5.7, -11.6, 8.3, -9.4], // stock room doorways
-    [-19.3, -3.1, -15.7, -0.9], [15.7, -2.1, 19.3, 0.1], // wing doorways
-    [12.5, 7.2, 14.6, 9.8], // ball pit entry
-    [14.8, -15.8, 17.2, -13.2], // castle stairs approach
-  ];
-
   const sb = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number, hidden = false) =>
     statics.push({ x0, y0, z0, x1, y1, z1, c, hidden: hidden || undefined });
   const vb = (x0: number, y0: number, z0: number, x1: number, y1: number, z1: number, c: number) =>
     visuals.push({ x0, y0, z0, x1, y1, z1, c });
-
   const hit = (a: number[], b: number[]) => a[0] < b[3] && a[3] > b[0] && a[1] < b[4] && a[4] > b[1] && a[2] < b[5] && a[5] > b[2];
 
   function place(id: string, x: number, y: number, z: number, yaw: number, margin = 0): boolean {
@@ -94,7 +96,7 @@ export function buildMap(seed: number): GameMap {
 
   function scatter(id: string, n: number, x0: number, z0: number, x1: number, z1: number, y = 0, margin = 0.18) {
     const def = PROPS[PROP_INDEX[id]];
-    n = Math.max(1, Math.round(n * 0.55)); // a tidy store: enough toys to hide among, few enough to search
+    n = Math.max(1, Math.round(n * density));
     let placed = 0;
     for (let i = 0; i < n * 12 && placed < n; i++) {
       const x = x0 + R() * (x1 - x0);
@@ -111,6 +113,165 @@ export function buildMap(seed: number): GameMap {
   }
 
   const pick = <T>(arr: T[]): T => arr[Math.floor(R() * arr.length)];
+  return { R, statics, visuals, decor, sb, vb, place, scatter, pick };
+}
+
+const SPAWN_HUNTERS: [number, number][] = [[-3, 15], [-1, 15], [1, 15], [3, 15], [-2, 14], [2, 14]];
+function spawnLane(): [number, number][] {
+  const out: [number, number][] = [];
+  for (let z = -9.2; z <= 5.8; z += 1.25) out.push([-0.35, z], [0.35, z + 0.6]);
+  return out;
+}
+
+/**
+ * Sunny Meadow — the open-air map. A fenced fairground with a barn, a bandstand, a campsite, a pond,
+ * market stalls, a pumpkin patch, a hay-bale maze and a play fort. Long sight lines, little cover:
+ * it plays faster and riskier than the store.
+ */
+function buildMeadow(seed: number): GameMap {
+  const { R, statics, visuals, decor, sb, vb, place, scatter, pick } = builder(seed, [
+    [-0.9, -10, 0.9, 6.2], [-4.2, 13.2, 4.2, 16.8], // spawn lane, gate
+    [-20, -8.8, -15, -6.2], [-13.4, -13.4, -11.4, -11.1], // barn doors
+    [-3, -10.8, 3, -8.8], [4.6, 0.4, 6.6, 2.6], [-13.8, 0.6, -10.8, 3], // bandstand steps, fort stairs, dock
+    [-22, -2, -13, 5], // pond
+  ], 1);
+  const features: Feature[] = [];
+  const feat = (kind: string, x: number, z: number, s = 1, yaw = 0) => features.push({ kind, x, z, s, yaw });
+  const WOOD = 0xc49a6c, WOOD2 = 0x8a6748, BARN = 0xc8553d, WHITE = 0xfff8ec;
+
+  // shell: invisible walls tall enough that nothing escapes, with a picket fence drawn along them
+  sb(-24.5, -1, -17.5, 24.5, 0, 17.5, 0x7cc36a, true);
+  sb(-24.5, 12, -17.5, 24.5, 13, 17.5, 0, true);
+  sb(-24.5, 0, -17.5, 24.5, 12, -17, 0, true); sb(-24.5, 0, 17, 24.5, 12, 17.5, 0, true);
+  sb(-24.5, 0, -17, -24, 12, 17, 0, true); sb(24, 0, -17, 24.5, 12, 17, 0, true);
+  for (let x = -24; x <= 24.01; x += 1.6) {
+    vb(x - 0.07, 0, -17.08, x + 0.07, 1.15, -16.94, WHITE);
+    if (Math.abs(x) > 2.9) vb(x - 0.07, 0, 16.94, x + 0.07, 1.15, 17.08, WHITE);
+  }
+  for (let z = -17; z <= 17.01; z += 1.7) { vb(-24.08, 0, z - 0.07, -23.94, 1.15, z + 0.07, WHITE); vb(23.94, 0, z - 0.07, 24.08, 1.15, z + 0.07, WHITE); }
+  for (const y of [0.42, 0.86]) {
+    vb(-24, y, -17.04, 24, y + 0.11, -16.98, WHITE); vb(-24, y, 16.98, -2.9, y + 0.11, 17.04, WHITE); vb(2.9, y, 16.98, 24, y + 0.11, 17.04, WHITE);
+    vb(-24.04, y, -17, -23.98, y + 0.11, 17, WHITE); vb(23.98, y, -17, 24.04, y + 0.11, 17, WHITE);
+  }
+  // entrance gate
+  sb(-2.9, 0, 16.75, -2.5, 3.1, 17.15, WOOD2); sb(2.5, 0, 16.75, 2.9, 3.1, 17.15, WOOD2); sb(-3.2, 3.1, 16.75, 3.2, 3.5, 17.15, WOOD2);
+  feat('gatesign', 0, 16.7);
+
+  // ---------------------------------------------------------------- barn (north-west) with a hay loft
+  sb(-22, 0, -15.5, -13, 3.2, -15.2, BARN); sb(-22, 0, -15.2, -21.7, 3.2, -8, BARN);
+  sb(-13.3, 0, -15.2, -13, 3.2, -13, BARN); sb(-13.3, 0, -11.5, -13, 3.2, -8, BARN); sb(-13.3, 2.2, -13, -13, 3.2, -11.5, BARN);
+  sb(-22, 0, -8.3, -19.5, 3.2, -8, BARN); sb(-15.5, 0, -8.3, -13, 3.2, -8, BARN); sb(-19.5, 2.6, -8.3, -15.5, 3.2, -8, BARN);
+  sb(-22.3, 3.2, -15.8, -12.7, 3.45, -7.7, 0x6d4c41);
+  for (const x of [-19.65, -15.5]) vb(x, 0, -8.34, x + 0.15, 2.6, -7.96, WHITE);
+  vb(-19.65, 2.6, -8.34, -15.35, 2.75, -7.96, WHITE); vb(-22.02, 3.05, -8.34, -12.98, 3.2, -7.96, WHITE);
+  feat('barnroof', -17.5, -11.75);
+  sb(-21.7, 1.45, -15.2, -18.2, 1.6, -11.2, WOOD); sb(-18.45, 0, -11.45, -18.2, 1.45, -11.2, WOOD2);
+  place('hay', -16.3, 0, -14.5, 0); place('hay', -17.55, 0, -14.5, 0); place('hay', -17.55, 0.75, -14.5, 0);
+  scatter('hay', 2, -21.4, -14.9, -18.6, -11.6, 1.6, 0.05); scatter('crate', 1, -21.4, -14.9, -18.6, -11.6, 1.6, 0.05); scatter('lantern', 1, -21.4, -14.9, -18.6, -11.6, 1.6, 0.05);
+  scatter('hay', 4, -21.3, -14.9, -13.7, -8.7); scatter('crate', 3, -21.3, -14.9, -13.7, -8.7); scatter('barrel', 3, -21.3, -14.9, -13.7, -8.7);
+  scatter('wheelbarrow', 1, -21.3, -11, -13.7, -8.7); scatter('scarecrow', 1, -21.3, -11, -13.7, -8.7); scatter('watercan', 2, -21.3, -14.9, -13.7, -8.7);
+
+  // ---------------------------------------------------------------- bandstand (north)
+  const STAGE = 0xf2e9dc;
+  sb(-2.6, 0, -14.6, 2.6, 0.5, -10.6, STAGE); sb(-1.4, 0, -10.6, 1.4, 0.25, -10.1, STAGE);
+  for (const [x, z] of [[-2.6, -14.6], [2.4, -14.6], [-2.6, -10.8], [2.4, -10.8]]) sb(x, 0.5, z, x + 0.2, 2.9, z + 0.2, WHITE);
+  sb(-3, 2.9, -15, 3, 3.08, -10.2, 0x4ecdc4);
+  vb(-2.6, 1.25, -14.58, 2.6, 1.33, -14.5, WHITE); vb(-2.58, 1.25, -14.6, -2.5, 1.33, -10.8, WHITE); vb(2.5, 1.25, -14.6, 2.58, 1.33, -10.8, WHITE);
+  feat('bandroof', 0, -12.6);
+  scatter('drum', 2, -2.2, -14.2, 2.2, -11.2, 0.5, 0.1); scatter('stool', 2, -2.2, -14.2, 2.2, -11.2, 0.5, 0.1); scatter('lantern', 1, -2.2, -14.2, 2.2, -11.2, 0.5, 0.1);
+
+  // ---------------------------------------------------------------- campsite (north-east)
+  feat('campfire', 17, -10.5); sb(16.55, 0, -10.95, 17.45, 0.28, -10.05, 0x8d99ae, true);
+  for (const [x, z, yaw] of [[13.6, -13.6, HALF_PI], [20.6, -14, 0], [21.2, -7.4, HALF_PI], [13.4, -7.2, 0]]) if (R() < 0.88) place('tent', x, 0, z, yaw);
+  place('log', 17, 0, -8.5, HALF_PI); place('log', 17, 0, -12.5, HALF_PI); place('log', 15, 0, -10.5, 0); place('log', 19, 0, -10.5, 0);
+  scatter('lantern', 4, 11.5, -16.3, 23.3, -5.5); scatter('cooler', 3, 11.5, -16.3, 23.3, -5.5); scatter('stump', 3, 11.5, -16.3, 23.3, -5.5);
+  scatter('hamper', 2, 11.5, -16.3, 23.3, -5.5); scatter('tent', 1, 11.5, -16.3, 23.3, -5.5, 0, 0.5);
+
+  // ---------------------------------------------------------------- picnic lawn (south-west)
+  for (const [cx, cz] of [[-18, 9], [-12.5, 12.6], [-19.5, 14.2], [-7.5, 8.2]]) {
+    sb(cx - 0.9, 0.72, cz - 0.4, cx + 0.9, 0.8, cz + 0.4, WOOD);
+    sb(cx - 0.9, 0.38, cz - 0.86, cx + 0.9, 0.45, cz - 0.6, WOOD); sb(cx - 0.9, 0.38, cz + 0.6, cx + 0.9, 0.45, cz + 0.86, WOOD);
+    sb(cx - 0.72, 0, cz - 0.8, cx - 0.62, 0.72, cz + 0.8, WOOD2); sb(cx + 0.62, 0, cz - 0.8, cx + 0.72, 0.72, cz + 0.8, WOOD2);
+    for (const off of [-0.45, 0.45]) if (R() < 0.7) place(pick(['hamper', 'cooler', 'lantern', 'pumpkin', 'watercan']), cx + off, 0.8, cz, pick([0, HALF_PI]));
+  }
+  for (const [x, z, c] of [[-14.5, 8, 0xef476f], [-21.5, 11.2, 0x118ab2], [-9.5, 14.5, 0xffd166]]) {
+    vb(x - 1.1, 0.004, z - 0.9, x + 1.1, 0.02, z + 0.9, c); vb(x - 0.75, 0.006, z - 0.55, x + 0.75, 0.024, z + 0.55, WHITE);
+    place(pick(['hamper', 'cooler']), x + 0.3, 0, z - 0.2, 0);
+  }
+  scatter('ball', 4, -23.3, 6, -5, 16.3); scatter('hamper', 3, -23.3, 6, -5, 16.3); scatter('cooler', 2, -23.3, 6, -5, 16.3);
+  scatter('bench', 2, -23.3, 6, -5, 16.3); scatter('bin', 2, -23.3, 6, -5, 16.3); scatter('plant', 3, -23.3, 6, -5, 16.3); scatter('gnome', 2, -23.3, 6, -5, 16.3);
+
+  // ---------------------------------------------------------------- market stalls (south-east)
+  [10.2, 15.2, 20.2].forEach((x, i) => {
+    const z = 13.6, col = [0xef476f, 0x2ec4b6, 0xffd166][i];
+    sb(x - 1.2, 0, z - 0.4, x + 1.2, 0.9, z + 0.4, WOOD);
+    for (const [px, pz] of [[x - 1.36, z - 0.96], [x + 1.24, z - 0.96], [x - 1.36, z + 0.84], [x + 1.24, z + 0.84]]) sb(px, 0, pz, px + 0.12, 2.3, pz + 0.12, WOOD2);
+    sb(x - 1.5, 2.3, z - 1.1, x + 1.5, 2.42, z + 1.1, col);
+    for (let k = -1.2; k < 1.2; k += 0.6) vb(x + k, 2.05, z - 1.12, x + k + 0.3, 2.3, z - 1.09, WHITE);
+    for (let k = -1.5; k < 1.5; k += 0.6) vb(x + k, 2.42, z - 1.1, x + k + 0.3, 2.44, z + 1.1, WHITE);
+    for (const off of [-0.75, 0, 0.75]) if (R() < 0.72) place(pick(['pumpkin', 'hamper', 'gnome', 'lantern', 'mushroom', 'watercan']), x + off, 0.9, z, Math.PI);
+  });
+  scatter('crate', 4, 7.5, 9.4, 23.3, 16.4); scatter('barrel', 3, 7.5, 9.4, 23.3, 16.4); scatter('signpost', 1, 7.5, 9.4, 23.3, 12);
+
+  // ---------------------------------------------------------------- pumpkin patch (east)
+  sb(12.8, 0, -3.9, 22.8, 0.5, -3.76, WOOD); sb(12.8, 0, 4.76, 22.8, 0.5, 4.9, WOOD); sb(22.66, 0, -3.9, 22.8, 0.5, 4.9, WOOD);
+  sb(12.8, 0, -3.9, 12.94, 0.5, -0.6, WOOD); sb(12.8, 0, 1.6, 12.94, 0.5, 4.9, WOOD);
+  place('scarecrow', 17.8, 0, 0.4, Math.PI);
+  for (const z of [-2.7, -1.1, 2.0, 3.6]) for (let x = 14; x <= 21.8; x += 1.2) if (R() < 0.5) place('pumpkin', x + (R() - 0.5) * 0.4, 0, z + (R() - 0.5) * 0.4, R() * 6.28);
+  scatter('wheelbarrow', 1, 13.4, -3.3, 22.2, 4.3); scatter('watercan', 2, 13.4, -3.3, 22.2, 4.3); scatter('gnome', 2, 13.4, -3.3, 22.2, 4.3);
+
+  // ---------------------------------------------------------------- pond (west) with a dock; the ducks are real toys
+  feat('pond', -17.5, 1.5);
+  sb(-13.6, 0.18, 0.9, -11.2, 0.3, 2.6, WOOD);
+  for (let i = 0; i < 5; i++) { const a = R() * 6.28, r = Math.sqrt(R()) * 0.72; place('duck', -17.5 + Math.cos(a) * 4 * r, 0, 1.5 + Math.sin(a) * 3 * r, R() * 6.28); }
+  for (let i = 0; i < 9; i++) if (R() < 0.6) { const a = (i / 9) * 6.28 + R() * 0.3; place('rock', -17.5 + Math.cos(a) * 4.9, 0, 1.5 + Math.sin(a) * 3.8, R() * 6.28); }
+
+  // ---------------------------------------------------------------- hay-bale maze (centre-west)
+  for (const z of [-6, -4, -2, 0]) for (let x = -11.6; x <= -3.8; x += 1.16) {
+    if (R() < 0.42) continue;
+    if (place('hay', x, 0, z, 0) && R() < 0.22) place('hay', x, 0.75, z, 0);
+  }
+
+  // ---------------------------------------------------------------- play fort (centre-east): two decks and a crawl space
+  sb(6.5, 1.05, 0, 9.5, 1.2, 3, WOOD);
+  for (const [x, z] of [[6.5, 0], [9.3, 0], [6.5, 2.8], [9.3, 2.8]]) sb(x, 0, z, x + 0.2, 1.05, z + 0.2, WOOD2);
+  for (let i = 0; i < 4; i++) sb(5.3 + i * 0.3, 0, 1, 5.6 + i * 0.3, 0.3 * (i + 1), 2, WOOD2);
+  sb(8.2, 2.1, -1.7, 9.9, 2.25, 0, WOOD);
+  for (const [x, z] of [[8.2, -1.7], [9.7, -1.7], [8.2, -0.2], [9.7, -0.2]]) sb(x, 0, z, x + 0.2, 2.1, z + 0.2, WOOD2);
+  sb(8.5, 1.2, 0.05, 9.3, 1.7, 0.7, BARN);
+  vb(6.5, 1.9, 2.92, 9.5, 1.98, 3, WOOD2); vb(9.42, 1.9, 0, 9.5, 1.98, 3, WOOD2); vb(6.5, 1.2, 2.92, 6.58, 1.98, 3, WOOD2); vb(9.42, 1.2, 2.92, 9.5, 1.98, 3, WOOD2);
+  feat('flag', 9.8, -1.6);
+  scatter('crate', 1, 6.9, 0.4, 9.1, 2.6, 0, 0.05); scatter('ball', 1, 6.9, 0.4, 9.1, 2.6, 0, 0.05); scatter('barrel', 1, 4.5, -2.5, 11, 5);
+
+  // ---------------------------------------------------------------- trees, lamp posts, and loose clutter everywhere
+  for (const [x, z] of [[-9, 9.6], [-3.6, 11.4], [6, 8.2], [3.6, -5.6], [-6.6, -11.6], [9.4, -14.2], [22.4, 7.6], [-22.6, -4.2], [-10.2, 4.6], [11.4, -5.4], [-23, 16], [22.8, -16], [4.4, 14.6], [-12.4, -6.8]]) {
+    feat('tree', x, z, 0.85 + R() * 0.45, R() * 6.28);
+    sb(x - 0.26, 0, z - 0.26, x + 0.26, 3, z + 0.26, 0, true);
+    scatter('mushroom', 1, x - 1.8, z - 1.8, x + 1.8, z + 1.8, 0, 0.1);
+    if (R() < 0.6) scatter('bush', 1, x - 2, z - 2, x + 2, z + 2, 0, 0.1);
+  }
+  for (const z of [10.5, 2.5, -5.5]) for (const x of [-2, 2]) { feat('lamp', x, z); sb(x - 0.09, 0, z - 0.09, x + 0.09, 3, z + 0.09, 0, true); }
+  feat('windmill', -34, -24, 1, 0.5);
+  const A = [-23.3, -16.3, 23.3, 16.3] as const;
+  scatter('bush', 12, ...A); scatter('rock', 10, ...A); scatter('stump', 6, ...A); scatter('log', 5, ...A); scatter('mushroom', 6, ...A);
+  scatter('gnome', 4, ...A); scatter('signpost', 4, ...A); scatter('bench', 4, ...A); scatter('barrel', 3, ...A); scatter('lantern', 3, ...A);
+  scatter('plant', 3, ...A); scatter('pumpkin', 4, ...A); scatter('crate', 3, ...A); scatter('watercan', 2, ...A); scatter('wheelbarrow', 1, ...A);
+  scatter('scarecrow', 1, ...A); scatter('stool', 2, ...A); scatter('ball', 2, ...A);
+
+  return { id: 1, name: MAP_NAMES[1], starters: MEADOW_STARTERS, features, seed, statics, visuals, decor, hunterSpawns: SPAWN_HUNTERS, propSpawns: spawnLane() };
+}
+
+function buildStore(seed: number): GameMap {
+  const { R, statics, visuals, decor, sb, vb, place, scatter, pick } = builder(seed, [
+    [-0.9, -10, 0.9, 6.2], // central cross aisle (prop spawns)
+    [-4.2, 13.2, 4.2, 16.8], // entrance (hunter spawns)
+    [-11.6, -8.3, -9.4, -4.7], [-11.6, 1.7, -9.4, 5.3], [-11.6, 10.7, -9.4, 14.3], // west doorways
+    [9.4, -9.3, 11.6, -5.7], [9.4, 0.7, 11.6, 4.3], [9.4, 9.7, 11.6, 13.3], // east doorways
+    [-8.3, -11.6, -5.7, -9.4], [5.7, -11.6, 8.3, -9.4], // stock room doorways
+    [-19.3, -3.1, -15.7, -0.9], [15.7, -2.1, 19.3, 0.1], // wing doorways
+    [12.5, 7.2, 14.6, 9.8], // ball pit entry
+    [14.8, -15.8, 17.2, -13.2], // castle stairs approach
+  ], 0.55);
 
   // ---------------------------------------------------------------- shell
   sb(-24.5, -1, -17.5, 24.5, 0, 17.5, 0xf4ead5, true); // floor
@@ -286,11 +447,7 @@ export function buildMap(seed: number): GameMap {
   scatter('stool', 2, 11.2, 13.4, 18, 16.4); scatter('gift', 2, 20.2, 14.2, 23.3, 16.2, 1.5, 0.05);
   scatter('car', 1, 11.4, 0, 23, 3.4); scatter('lamp', 1, 11.2, -0.4, 23.5, 16.5);
 
-  const hunterSpawns: [number, number][] = [[-3, 15], [-1, 15], [1, 15], [3, 15], [-2, 14], [2, 14]];
-  const propSpawns: [number, number][] = [];
-  for (let z = -9.2; z <= 5.8; z += 1.25) propSpawns.push([-0.35, z], [0.35, z + 0.6]);
-
-  return { seed, statics, visuals, decor, hunterSpawns, propSpawns };
+  return { id: 0, name: MAP_NAMES[0], starters: STARTER_PROPS, features: [], seed, statics, visuals, decor, hunterSpawns: SPAWN_HUNTERS, propSpawns: spawnLane() };
 }
 
 function round3(v: number): number { return Math.round(v * 1000) / 1000; }

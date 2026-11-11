@@ -122,6 +122,18 @@ sens.value = String(game.sens / 0.0022); fov.value = String(game.baseFov); vol.v
 sens.oninput = () => { game.sens = Number(sens.value) * 0.0022; localStorage.setItem('pp_sens', String(game.sens)); };
 fov.oninput = () => { game.baseFov = Number(fov.value); localStorage.setItem('pp_fov', fov.value); };
 vol.oninput = () => { game.sfx.setVolume(Number(vol.value)); localStorage.setItem('pp_vol', vol.value); };
+const mus = $<HTMLInputElement>('musRange'), invY = $<HTMLInputElement>('invY');
+mus.value = String(game.sfx.musicVol); invY.checked = game.invertY;
+mus.oninput = () => { game.sfx.setMusicVolume(Number(mus.value)); localStorage.setItem('pp_mus', mus.value); };
+invY.onchange = () => { game.invertY = invY.checked; localStorage.setItem('pp_invy', invY.checked ? '1' : '0'); };
+$('mapBtn').onclick = () => game.net.send({ t: 'map', m: (game.lobbyInfo.map + 1) % 3 });
+// soft tick when the pointer moves onto anything clickable
+let lastHover: Element | null = null;
+document.addEventListener('mouseover', (e) => {
+  const el = (e.target as HTMLElement).closest?.('.btn, .hat, .sw, .bind button') ?? null;
+  if (el && el !== lastHover && !(el as HTMLButtonElement).disabled) game.sfx.play('hover');
+  lastHover = el;
+});
 
 // ---------------------------------------------------------------- live player count + boot splash
 fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online').textContent = `● ${h.humans} playing right now`; }).catch(() => {});

@@ -138,11 +138,15 @@ export class Hud {
     return (r.team === 'hunter' ? '<span class="tag h">HUNTER</span>' : r.team === 'prop' ? (alive ? '<span class="tag p">PROP</span>' : '<span class="tag b">CAUGHT</span>') : '<span class="tag s">WATCHING</span>') + (r.bot ? '<span class="tag b">BOT</span>' : '');
   }
 
-  lobby(show: boolean, o?: { code: string; pub: boolean; roster: RosterEntry[]; me: number; host: boolean; bots: number; countdown: number; canStart: boolean }) {
+  lobby(show: boolean, o?: { code: string; pub: boolean; roster: RosterEntry[]; me: number; host: boolean; bots: number; countdown: number; canStart: boolean; map: number }) {
     const el = $('lobby');
     el.style.display = show ? 'flex' : 'none';
     if (!show || !o) return;
     $('lobbyCode').textContent = o.code;
+    const mb = $('mapBtn');
+    mb.style.display = !o.pub && o.host ? 'block' : 'none';
+    const mt = `Map: ${['Alternate', 'Toy Emporium', 'Sunny Meadow'][o.map] ?? 'Alternate'}`;
+    if (mb.textContent !== mt) mb.textContent = mt;
     const html = o.roster.map((r) => `<div class="pl${r.id === o.me ? ' me' : ''}"><span>${esc(r.name)}${r.bot ? ' <span class="tag b">BOT</span>' : ''}${r.host ? ' <span class="tag s">HOST</span>' : ''}</span><small>${r.score || ''}</small></div>`).join('');
     const lp = $('lobbyPlayers');
     if (lp.innerHTML !== html) lp.innerHTML = html;
@@ -165,7 +169,7 @@ export class Hud {
     el.innerHTML = `<h2>Scoreboard</h2><table class="board"><tr><th>PLAYER</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>`;
   }
 
-  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0) {
+  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '') {
     const el = $('results');
     el.style.display = show ? 'flex' : 'none';
     if (!show || !res) return;
@@ -180,7 +184,7 @@ export class Hud {
       el.innerHTML = `<h2 class="${res.winner}">${title}</h2><div class="resSub">${sub}</div>${awards ? `<div class="awards">${awards}</div>` : ''}<table class="board"><tr><th>PLAYER</th><th style="text-align:right">ROUND</th><th style="text-align:right">TOTAL</th></tr>${rows}</table><div class="nextIn" id="nextIn"></div>`;
     }
     const n = document.getElementById('nextIn');
-    if (n) n.textContent = `Next round in ${Math.max(0, Math.ceil(msLeft / 1000))}… roles rotate!`;
+    if (n) n.textContent = `Next round in ${Math.max(0, Math.ceil(msLeft / 1000))}…${nextMap ? ` on ${nextMap}.` : ''} Roles rotate!`;
   }
 
   chatMenu(show: boolean) {
