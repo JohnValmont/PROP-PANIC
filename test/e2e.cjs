@@ -171,8 +171,7 @@ async function main() {
     await sleep(300);
     p1 = await state(P);
     // hunter: find the prop on screen, aim with the camera, hold the trigger
-    await H.waitForFunction((pid) => { const e = window.__pp.ents.get(pid); return e && e.group.visible; }, p1.id, { timeout: 8000 }).catch(() => {});
-    const seen = await H.evaluate((pid) => { const e = window.__pp.ents.get(pid); return e && e.group.visible ? e.kind : null; }, p1.id);
+    const seen = await H.waitForFunction((pid) => { const e = window.__pp.ents.get(pid); return e && e.group.visible ? e.kind : false; }, p1.id, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
     ok(seen && seen.startsWith('prop:'), `hunter client now renders the prop in its disguise (${seen})`);
     await shot(H, '05-hunter-view.png');
     await H.mouse.down();

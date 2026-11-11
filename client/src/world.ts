@@ -86,7 +86,7 @@ function ceilingTexture(): THREE.CanvasTexture {
   return t;
 }
 
-function signMesh(text: string, bg: string): THREE.Mesh {
+function signMesh(text: string, bg: string): THREE.Group {
   const c = document.createElement('canvas');
   c.width = 512; c.height = 128;
   const g = c.getContext('2d')!;
@@ -96,7 +96,14 @@ function signMesh(text: string, bg: string): THREE.Mesh {
   g.fillText(text, 256, 68);
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
-  return new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), new THREE.MeshBasicMaterial({ map: t, transparent: true, side: THREE.DoubleSide }));
+  // two single-sided faces back to back, so the text reads correctly from either side
+  const mat = new THREE.MeshBasicMaterial({ map: t, transparent: true });
+  const sign = new THREE.Group();
+  const front = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), mat);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.8), mat);
+  back.rotation.y = Math.PI;
+  sign.add(front, back);
+  return sign;
 }
 
 interface DecorRef { mesh: THREE.InstancedMesh; index: number; d: Decor; }

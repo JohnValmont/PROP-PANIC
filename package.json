@@ -12,7 +12,8 @@
     "start": "node dist/server.cjs",
     "typecheck": "tsc --noEmit",
     "test": "tsx test/smoke.ts",
-    "test:e2e": "node test/e2e.cjs"
+    "test:e2e": "node test/e2e.cjs",
+    "test:soak": "tsx test/soak.ts"
   },
   "dependencies": {
     "three": "^0.170.0",

@@ -49,6 +49,8 @@ function findPublic(): Room {
   return r;
 }
 
+if (process.env.PP_CHAOS) CFG.CHAOS_PASSIVE = Number(process.env.PP_CHAOS); // test-only: fill the chaos meter fast
+
 // ---------------------------------------------------------------- http
 const MIME: Record<string, string> = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8',

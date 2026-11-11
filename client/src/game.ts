@@ -90,6 +90,7 @@ export class Game {
   quality: 'high' | 'low' = 'high';
   fps = 60;
   renderEvery = 1;
+  private hitch = 0;
   private frameN = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
@@ -603,7 +604,9 @@ export class Game {
         if (e.arm) e.arm.rotation.x = -this.pitch;
       } else {
         this.sampleEnt(e, rt, dt);
-        e.group.visible = now - e.lastSeen < 450 && e.buf.length > 0;
+        // "not heard about recently" hides a player (ghosted, blindfold) — but never on the frame right after
+        // a hitch, when the network messages that would refresh them are still waiting to be processed
+        e.group.visible = (now - e.lastSeen < 450 || (this.hitch > 0 && e.group.visible)) && e.buf.length > 0;
         if (!e.group.visible) continue;
       }
       const r = this.roster.get(e.id);
@@ -824,9 +827,11 @@ export class Game {
   private frame() {
     requestAnimationFrame(() => this.frame());
     const t = performance.now();
-    const dt = Math.min(0.1, (t - this.last) / 1000);
+    const raw = (t - this.last) / 1000;
+    const dt = Math.min(0.1, raw);
     this.last = t;
     this.time += dt;
+    this.hitch = raw > 0.2 ? 2 : Math.max(0, this.hitch - 1);
 
     // adaptive quality: if a machine can't hold a playable frame rate, drop shadows once
     this.fpsAcc += dt; this.fpsN++;

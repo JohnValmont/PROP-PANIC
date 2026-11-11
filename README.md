@@ -5,6 +5,12 @@
 Props disguise themselves as toys and hide in plain sight. Hunters have a few minutes to zap every
 fake. It runs in any desktop browser, with no install and no downloaded art or audio.
 
+![Hunter view](docs/screenshots/hunter.png)
+
+| | |
+| --- | --- |
+| ![Menu](docs/screenshots/menu.png) | ![Panic time as a prop](docs/screenshots/panic.png) |
+
 ## What makes it different from plain Prop Hunt
 
 | Mechanic | What it does |
@@ -80,6 +86,7 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
 ```bash
 npm test             # protocol: rooms, roles, movement authority, speed-hack clamp, shooting, reconnect
 npm run build && npm run test:e2e   # two real browsers play a full round against each other
+npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS` override them).
