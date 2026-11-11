@@ -1,5 +1,5 @@
 {
- "v": "31fa3308",
+ "v": "e85c3e8f",
  "models": {
   "alarmclock": {
    "src": "alarm_clock_01",
@@ -9,7 +9,9 @@
     0.067
    ],
    "tris": 3399,
-   "kb": 126
+   "kb": 126,
+   "lite": 643,
+   "liteKb": 47
   },
   "armchair": {
    "src": "ArmChair_01",
@@ -19,7 +21,9 @@
     0.766
    ],
    "tris": 5626,
-   "kb": 502
+   "kb": 502,
+   "lite": 1000,
+   "liteKb": 52
   },
   "barrel": {
    "src": "Barrel_01",
@@ -29,7 +33,9 @@
     0.563
    ],
    "tris": 2682,
-   "kb": 417
+   "kb": 417,
+   "lite": 553,
+   "liteKb": 50
   },
   "basket": {
    "src": "wicker_basket_01",
@@ -39,7 +45,9 @@
     0.294
    ],
    "tris": 3142,
-   "kb": 175
+   "kb": 175,
+   "lite": 712,
+   "liteKb": 54
   },
   "bench": {
    "src": "painted_wooden_bench",
@@ -49,7 +57,9 @@
     0.496
    ],
    "tris": 630,
-   "kb": 80
+   "kb": 80,
+   "lite": 282,
+   "liteKb": 29
   },
   "boombox": {
    "src": "boombox",
@@ -59,7 +69,9 @@
     0.186
    ],
    "tris": 3570,
-   "kb": 235
+   "kb": 235,
+   "lite": 1257,
+   "liteKb": 88
   },
   "boots": {
    "src": "rubber_boots",
@@ -69,7 +81,9 @@
     0.266
    ],
    "tris": 3000,
-   "kb": 99
+   "kb": 99,
+   "lite": 600,
+   "liteKb": 36
   },
   "box": {
    "src": "cardboard_box_01",
@@ -79,7 +93,9 @@
     0.516
    ],
    "tris": 2500,
-   "kb": 114
+   "kb": 114,
+   "lite": 498,
+   "liteKb": 36
   },
   "brassvase": {
    "src": "brass_vase_01",
@@ -89,7 +105,9 @@
     0.227
    ],
    "tris": 2500,
-   "kb": 72
+   "kb": 72,
+   "lite": 500,
+   "liteKb": 23
   },
   "bucket": {
    "src": "wooden_bucket_01",
@@ -99,7 +117,9 @@
     0.342
    ],
    "tris": 2500,
-   "kb": 143
+   "kb": 143,
+   "lite": 639,
+   "liteKb": 52
   },
   "bust": {
    "src": "marble_bust_01",
@@ -109,7 +129,9 @@
     0.3
    ],
    "tris": 5000,
-   "kb": 339
+   "kb": 339,
+   "lite": 1000,
+   "liteKb": 49
   },
   "cabinet": {
    "src": "painted_wooden_cabinet",
@@ -119,7 +141,9 @@
     0.617
    ],
    "tris": 2227,
-   "kb": 278
+   "kb": 278,
+   "lite": 419,
+   "liteKb": 44
   },
   "cat": {
    "src": "concrete_cat_statue",
@@ -129,7 +153,9 @@
     0.25
    ],
    "tris": 3000,
-   "kb": 227
+   "kb": 227,
+   "lite": 600,
+   "liteKb": 62
   },
   "cement": {
    "src": "cement_bag",
@@ -139,7 +165,9 @@
     0.7
    ],
    "tris": 844,
-   "kb": 59
+   "kb": 59,
+   "lite": 268,
+   "liteKb": 23
   },
   "chair": {
    "src": "painted_wooden_chair_01",
@@ -149,7 +177,9 @@
     0.54
    ],
    "tris": 724,
-   "kb": 93
+   "kb": 93,
+   "lite": 370,
+   "liteKb": 40
   },
   "chalkboard": {
    "src": "standing_chalkboard_01",
@@ -159,7 +189,9 @@
     0.759
    ],
    "tris": 1756,
-   "kb": 109
+   "kb": 109,
+   "lite": 768,
+   "liteKb": 43
   },
   "chest": {
    "src": "treasure_chest",
@@ -169,7 +201,9 @@
     0.522
    ],
    "tris": 6921,
-   "kb": 685
+   "kb": 685,
+   "lite": 2797,
+   "liteKb": 96
   },
   "claypot": {
    "src": "planter_pot_clay",
@@ -179,7 +213,9 @@
     0.263
    ],
    "tris": 1800,
-   "kb": 88
+   "kb": 88,
+   "lite": 360,
+   "liteKb": 27
   },
   "clock": {
    "src": "vintage_grandfather_clock_01",
@@ -189,7 +225,9 @@
     0.427
    ],
    "tris": 5004,
-   "kb": 404
+   "kb": 404,
+   "lite": 1890,
+   "liteKb": 85
   },
   "compost": {
    "src": "compost_bag_02",
@@ -199,7 +237,9 @@
     0.471
    ],
    "tris": 3000,
-   "kb": 146
+   "kb": 146,
+   "lite": 599,
+   "liteKb": 46
   },
   "cooler": {
    "src": "plastic_container",
@@ -209,7 +249,9 @@
     0.626
    ],
    "tris": 2999,
-   "kb": 97
+   "kb": 97,
+   "lite": 700,
+   "liteKb": 39
   },
   "crate": {
    "src": "wooden_crate_02",
@@ -219,7 +261,9 @@
     1.166
    ],
    "tris": 3499,
-   "kb": 377
+   "kb": 377,
+   "lite": 906,
+   "liteKb": 52
   },
   "croissant": {
    "src": "croissant",
@@ -229,7 +273,9 @@
     0.076
    ],
    "tris": 1990,
-   "kb": 147
+   "kb": 147,
+   "lite": 360,
+   "liteKb": 45
   },
   "duck": {
    "src": "rubber_duck_toy",
@@ -239,7 +285,9 @@
     0.3
    ],
    "tris": 3500,
-   "kb": 64
+   "kb": 64,
+   "lite": 700,
+   "liteKb": 23
   },
   "extinguisher": {
    "src": "korean_fire_extinguisher_01",
@@ -249,7 +297,9 @@
     0.367
    ],
    "tris": 3234,
-   "kb": 250
+   "kb": 250,
+   "lite": 675,
+   "liteKb": 80
   },
   "fern": {
    "src": "fern_02",
@@ -259,7 +309,9 @@
     1.724
    ],
    "tris": 4999,
-   "kb": 112
+   "kb": 112,
+   "lite": 1000,
+   "liteKb": 38
   },
   "firepit": {
    "src": "stone_fire_pit",
@@ -269,7 +321,9 @@
     1.433
    ],
    "tris": 3000,
-   "kb": 571
+   "kb": 571,
+   "lite": 599,
+   "liteKb": 55
   },
   "football": {
    "src": "dirty_football",
@@ -279,7 +333,9 @@
     0.22
    ],
    "tris": 15422,
-   "kb": 288
+   "kb": 288,
+   "lite": 15422,
+   "liteKb": 259
   },
   "frame1": {
    "src": "fancy_picture_frame_01",
@@ -289,7 +345,9 @@
     0.02
    ],
    "tris": 800,
-   "kb": 123
+   "kb": 123,
+   "lite": 181,
+   "liteKb": 40
   },
   "frame2": {
    "src": "hanging_picture_frame_01",
@@ -299,7 +357,9 @@
     0.016
    ],
    "tris": 1501,
-   "kb": 57
+   "kb": 57,
+   "lite": 311,
+   "liteKb": 23
   },
   "frame3": {
    "src": "hanging_picture_frame_02",
@@ -309,7 +369,9 @@
     0.033
    ],
    "tris": 1501,
-   "kb": 96
+   "kb": 96,
+   "lite": 303,
+   "liteKb": 37
   },
   "gnome": {
    "src": "garden_gnome",
@@ -319,7 +381,9 @@
     0.209
    ],
    "tris": 3999,
-   "kb": 158
+   "kb": 158,
+   "lite": 800,
+   "liteKb": 60
   },
   "hamper": {
    "src": "wicker_basket_02",
@@ -329,7 +393,9 @@
     0.254
    ],
    "tris": 3500,
-   "kb": 220
+   "kb": 220,
+   "lite": 698,
+   "liteKb": 65
   },
   "handtruck": {
    "src": "hand_truck",
@@ -339,7 +405,9 @@
     0.692
    ],
    "tris": 5790,
-   "kb": 264
+   "kb": 264,
+   "lite": 5260,
+   "liteKb": 152
   },
   "horse": {
    "src": "horse_statue_01",
@@ -349,7 +417,9 @@
     0.108
    ],
    "tris": 4623,
-   "kb": 141
+   "kb": 141,
+   "lite": 956,
+   "liteKb": 49
   },
   "hydrant": {
    "src": "fire_hydrant",
@@ -359,7 +429,9 @@
     0.317
    ],
    "tris": 3972,
-   "kb": 224
+   "kb": 224,
+   "lite": 1108,
+   "liteKb": 82
   },
   "jerrycan": {
    "src": "metal_jerrycan",
@@ -369,7 +441,9 @@
     0.172
    ],
    "tris": 2499,
-   "kb": 167
+   "kb": 167,
+   "lite": 499,
+   "liteKb": 51
   },
   "ladder": {
    "src": "wooden_ladder",
@@ -379,7 +453,9 @@
     0.5
    ],
    "tris": 2500,
-   "kb": 158
+   "kb": 158,
+   "lite": 1444,
+   "liteKb": 60
   },
   "lantern": {
    "src": "wooden_lantern_01",
@@ -389,7 +465,9 @@
     0.234
    ],
    "tris": 3030,
-   "kb": 197
+   "kb": 197,
+   "lite": 781,
+   "liteKb": 69
   },
   "lifebuoy": {
    "src": "lifebuoy",
@@ -399,7 +477,9 @@
     0.841
    ],
    "tris": 3000,
-   "kb": 172
+   "kb": 172,
+   "lite": 600,
+   "liteKb": 50
   },
   "log": {
    "src": "dead_tree_trunk",
@@ -409,7 +489,9 @@
     0.276
    ],
    "tris": 3000,
-   "kb": 576
+   "kb": 576,
+   "lite": 694,
+   "liteKb": 52
   },
   "megaphone": {
    "src": "Megaphone_01",
@@ -419,7 +501,9 @@
     0.227
    ],
    "tris": 2990,
-   "kb": 103
+   "kb": 103,
+   "lite": 706,
+   "liteKb": 41
   },
   "mirror": {
    "src": "ornate_mirror_01",
@@ -429,7 +513,9 @@
     0.026
    ],
    "tris": 3000,
-   "kb": 92
+   "kb": 92,
+   "lite": 673,
+   "liteKb": 32
   },
   "monobloc": {
    "src": "plastic_monobloc_chair_01",
@@ -439,7 +525,9 @@
     0.628
    ],
    "tris": 3356,
-   "kb": 156
+   "kb": 156,
+   "lite": 730,
+   "liteKb": 59
   },
   "nightstand": {
    "src": "ClassicNightstand_01",
@@ -449,7 +537,9 @@
     0.424
    ],
    "tris": 2002,
-   "kb": 84
+   "kb": 84,
+   "lite": 396,
+   "liteKb": 30
   },
   "oildrum": {
    "src": "Barrel_02",
@@ -459,7 +549,9 @@
     0.485
    ],
    "tris": 2688,
-   "kb": 197
+   "kb": 197,
+   "lite": 540,
+   "liteKb": 34
   },
   "oillamp": {
    "src": "vintage_oil_lamp",
@@ -469,7 +561,9 @@
     0.22
    ],
    "tris": 3003,
-   "kb": 138
+   "kb": 138,
+   "lite": 605,
+   "liteKb": 54
   },
   "ottoman": {
    "src": "Ottoman_01",
@@ -479,7 +573,9 @@
     0.621
    ],
    "tris": 3000,
-   "kb": 113
+   "kb": 113,
+   "lite": 600,
+   "liteKb": 34
   },
   "picnictable": {
    "src": "wooden_picnic_table",
@@ -489,7 +585,9 @@
     3.022
    ],
    "tris": 3997,
-   "kb": 597
+   "kb": 597,
+   "lite": 1035,
+   "liteKb": 64
   },
   "pillows": {
    "src": "throw_pillows_01",
@@ -499,7 +597,9 @@
     0.45
    ],
    "tris": 3000,
-   "kb": 222
+   "kb": 222,
+   "lite": 600,
+   "liteKb": 64
   },
   "plant": {
    "src": "potted_plant_02",
@@ -509,7 +609,9 @@
     0.656
    ],
    "tris": 8948,
-   "kb": 585
+   "kb": 585,
+   "lite": 2119,
+   "liteKb": 94
   },
   "planter": {
    "src": "planter_box_01",
@@ -519,7 +621,9 @@
     0.414
    ],
    "tris": 4000,
-   "kb": 162
+   "kb": 162,
+   "lite": 1016,
+   "liteKb": 56
   },
   "plasticcrate": {
    "src": "plastic_crate_02",
@@ -529,7 +633,9 @@
     0.406
    ],
    "tris": 3500,
-   "kb": 134
+   "kb": 134,
+   "lite": 1032,
+   "liteKb": 48
   },
   "pot": {
    "src": "brass_pot_01",
@@ -539,7 +645,9 @@
     0.301
    ],
    "tris": 2000,
-   "kb": 77
+   "kb": 77,
+   "lite": 490,
+   "liteKb": 27
   },
   "propane": {
    "src": "propane_tank",
@@ -549,7 +657,9 @@
     0.337
    ],
    "tris": 2499,
-   "kb": 120
+   "kb": 120,
+   "lite": 653,
+   "liteKb": 42
   },
   "register": {
    "src": "CashRegister_01",
@@ -559,7 +669,9 @@
     0.624
    ],
    "tris": 4502,
-   "kb": 388
+   "kb": 388,
+   "lite": 1608,
+   "liteKb": 81
   },
   "rock": {
    "src": "namaqualand_boulder_06",
@@ -569,7 +681,9 @@
     1.211
    ],
    "tris": 3000,
-   "kb": 714
+   "kb": 714,
+   "lite": 598,
+   "liteKb": 58
   },
   "schoolchair": {
    "src": "SchoolChair_01",
@@ -579,7 +693,9 @@
     0.675
    ],
    "tris": 3000,
-   "kb": 92
+   "kb": 92,
+   "lite": 600,
+   "liteKb": 32
   },
   "sidetable": {
    "src": "side_table_01",
@@ -589,7 +705,9 @@
     0.45
    ],
    "tris": 2756,
-   "kb": 101
+   "kb": 101,
+   "lite": 682,
+   "liteKb": 39
   },
   "sign": {
    "src": "WetFloorSign_01",
@@ -599,7 +717,9 @@
     0.359
    ],
    "tris": 228,
-   "kb": 53
+   "kb": 53,
+   "lite": 180,
+   "liteKb": 25
   },
   "stone": {
    "src": "namaqualand_boulder_05",
@@ -609,7 +729,9 @@
     0.746
    ],
    "tris": 2200,
-   "kb": 214
+   "kb": 214,
+   "lite": 440,
+   "liteKb": 57
   },
   "stool": {
    "src": "painted_wooden_stool",
@@ -619,7 +741,9 @@
     0.406
    ],
    "tris": 676,
-   "kb": 106
+   "kb": 106,
+   "lite": 300,
+   "liteKb": 41
   },
   "streetlamp": {
    "src": "street_lamp_01",
@@ -629,7 +753,9 @@
     0.386
    ],
    "tris": 3998,
-   "kb": 103
+   "kb": 103,
+   "lite": 815,
+   "liteKb": 37
   },
   "stump": {
    "src": "tree_stump_01",
@@ -639,7 +765,9 @@
     1.589
    ],
    "tris": 2997,
-   "kb": 802
+   "kb": 802,
+   "lite": 600,
+   "liteKb": 74
   },
   "tallplant": {
    "src": "potted_plant_01",
@@ -649,7 +777,9 @@
     0.634
    ],
    "tris": 10974,
-   "kb": 779
+   "kb": 779,
+   "lite": 7096,
+   "liteKb": 173
   },
   "toolchest": {
    "src": "metal_tool_chest",
@@ -659,7 +789,9 @@
     0.407
    ],
    "tris": 3999,
-   "kb": 152
+   "kb": 152,
+   "lite": 2254,
+   "liteKb": 72
   },
   "trashbag": {
    "src": "trashbag",
@@ -669,7 +801,9 @@
     0.463
    ],
    "tris": 2500,
-   "kb": 129
+   "kb": 129,
+   "lite": 500,
+   "liteKb": 48
   },
   "tub": {
    "src": "wooden_bucket_02",
@@ -679,7 +813,9 @@
     0.614
    ],
    "tris": 3000,
-   "kb": 171
+   "kb": 171,
+   "lite": 747,
+   "liteKb": 60
   },
   "tv": {
    "src": "Television_01",
@@ -689,7 +825,9 @@
     0.471
    ],
    "tris": 1918,
-   "kb": 104
+   "kb": 104,
+   "lite": 464,
+   "liteKb": 37
   },
   "tyre": {
    "src": "old_tyre",
@@ -699,7 +837,9 @@
     0.6
    ],
    "tris": 2500,
-   "kb": 145
+   "kb": 145,
+   "lite": 558,
+   "liteKb": 40
   },
   "urn": {
    "src": "ceramic_vase_03",
@@ -709,7 +849,9 @@
     0.112
    ],
    "tris": 2000,
-   "kb": 101
+   "kb": 101,
+   "lite": 778,
+   "liteKb": 33
   },
   "vase": {
    "src": "ceramic_vase_01",
@@ -719,7 +861,9 @@
     0.202
    ],
    "tris": 2000,
-   "kb": 43
+   "kb": 43,
+   "lite": 914,
+   "liteKb": 20
   },
   "wallclock": {
    "src": "wall_clock",
@@ -729,7 +873,9 @@
     0.047
    ],
    "tris": 1998,
-   "kb": 95
+   "kb": 95,
+   "lite": 501,
+   "liteKb": 37
   },
   "watercan": {
    "src": "watering_can_metal_01",
@@ -739,7 +885,9 @@
     0.452
    ],
    "tris": 2999,
-   "kb": 181
+   "kb": 181,
+   "lite": 732,
+   "liteKb": 60
   },
   "winebarrel": {
    "src": "wine_barrel_01",
@@ -749,7 +897,9 @@
     0.755
    ],
    "tris": 4000,
-   "kb": 355
+   "kb": 355,
+   "lite": 1930,
+   "liteKb": 72
   }
  },
  "textures": {

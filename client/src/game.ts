@@ -114,7 +114,7 @@ export class Game {
   private frameN = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !assets.lite, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.shadowMap.autoUpdate = false; // refreshed by hand in frame()
@@ -189,14 +189,18 @@ export class Game {
       const gl = this.renderer.getContext(), ext = gl.getExtension('WEBGL_debug_renderer_info');
       const name = String(ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : '').toLowerCase();
       if (/swiftshader|llvmpipe|software/.test(name)) return 'low';
-      if (/intel|mali|adreno|powervr|apple gpu|uhd|iris/.test(name) || /Mobi|Android/i.test(navigator.userAgent)) return 'high';
+      // older integrated chips cannot afford the full pipeline: start them on fast, they can always turn it up
+      if (/iris\(r\) xe|iris xe|apple|radeon|geforce|nvidia|arc\(/.test(name)) return /radeon\(tm\) graphics|vega|iris/.test(name) ? 'high' : 'ultra';
+      if (/intel|hd graphics|uhd|mali|adreno|powervr/.test(name) || /Mobi|Android/i.test(navigator.userAgent)) return 'low';
     } catch { /* ignore */ }
     return 'ultra';
   }
 
   setQuality(q: Quality) {
-    this.quality = q;
     try { localStorage.setItem('pp_quality', q); } catch { /* ignore */ }
+    // fast graphics uses different models and materials, chosen at load: switching to or from it reloads (the seat is kept)
+    if ((q === 'low') !== assets.lite) { location.reload(); return; }
+    this.quality = q;
     this.world.setQuality(q === 'ultra' ? 2 : q === 'high' ? 1 : 0);
     this.gtao.enabled = q === 'ultra';
     this.resize();
@@ -204,7 +208,7 @@ export class Game {
 
   private resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    this.renderer.setPixelRatio(this.quality === 'ultra' ? Math.min(window.devicePixelRatio, 2) : this.quality === 'high' ? Math.min(window.devicePixelRatio, 1.5) : 1);
+    this.renderer.setPixelRatio(this.quality === 'ultra' ? Math.min(window.devicePixelRatio, 2) : this.quality === 'high' ? Math.min(window.devicePixelRatio, 1.5) : 0.85);
     this.renderer.setSize(w, h, false);
     this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(w, h);
@@ -566,6 +570,13 @@ export class Game {
         this.fx.floater(m.x, m.y + 0.9, m.z, '♪', '#ffd166', 0.5);
         const e = this.ents.get(m.who);
         if (e) e.hopT = 0.45;
+        // hunters get an arrow towards the sound: stereo alone cannot tell front from behind
+        if (!mine && this.team === 'hunter' && this.alive) {
+          const el = document.createElement('div'); el.className = 'dir';
+          el.append(document.createElement('i'), Object.assign(document.createElement('b'), { textContent: 'TAUNT' }));
+          document.getElementById('dirs')!.append(el);
+          this.pings.push({ x: m.x, z: m.z, until: this.time + 2.6, el });
+        }
         break;
       }
       case 'roll': {
@@ -824,6 +835,18 @@ export class Game {
     }
     return best;
   }
+  private pings: { x: number; z: number; until: number; el: HTMLElement }[] = [];
+  private updatePings() {
+    for (let i = this.pings.length - 1; i >= 0; i--) {
+      const p = this.pings[i], left = p.until - this.time;
+      if (left <= 0 || this.team !== 'hunter') { p.el.remove(); this.pings.splice(i, 1); continue; }
+      const dx = p.x - this.camera.position.x, dz = p.z - this.camera.position.z;
+      const ang = Math.atan2(dx * Math.cos(this.yaw) - dz * Math.sin(this.yaw), -dx * Math.sin(this.yaw) - dz * Math.cos(this.yaw));
+      p.el.style.transform = `rotate(${ang.toFixed(3)}rad)`;
+      p.el.style.opacity = String(Math.min(1, left / 0.6));
+      (p.el.lastChild as HTMLElement).textContent = `${Math.round(Math.hypot(dx, dz))} m`;
+    }
+  }
   private camDistNow = 3.4;
   private myFlags = 0;
   private skipMouse = 0;
@@ -989,7 +1012,7 @@ export class Game {
     // always-on objective line and a controls card, so a first-time player is never left guessing
     let obj = '';
     if (lobby) obj = 'Warm-up. The round starts soon — try becoming an object.';
-    else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake toys and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
+    else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake objects and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
     else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at an object and press [${keyLabel(B.act)}] to become it, then stand among similar ones.`;
     else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
     h.objective(obj);
@@ -1020,7 +1043,7 @@ export class Game {
     this.fpsAcc += dt; this.fpsN++;
     if (this.fpsAcc >= 1) {
       this.fps = this.fpsN / this.fpsAcc;
-      if (!this.fpsChecked && this.inGame && this.time > 8 && !document.hidden) this.slowSecs = this.fps < 28 ? this.slowSecs + 1 : 0;
+      if (!this.fpsChecked && this.inGame && this.time > 8 && !document.hidden) this.slowSecs = this.fps < 34 ? this.slowSecs + 1 : 0;
       if (!this.fpsChecked && this.slowSecs >= 4) {
         // step down one notch at a time; from ultra there is still somewhere left to go
         this.slowSecs = 0;
@@ -1054,6 +1077,7 @@ export class Game {
         this.highlight.scale.set(info.def.w + 0.06, info.def.h + 0.06, info.def.d + 0.06);
       }
       this.updateHud(dt);
+      this.updatePings();
       // in a blackout hunters only get a flashlight; props keep a little night vision
       const hunterView = this.team === 'hunter' && this.alive;
       // (values are linear light: 0.012 reads as near-black on screen, 0.12 as moonlit)

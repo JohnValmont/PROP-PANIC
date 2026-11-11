@@ -242,3 +242,9 @@ table.board tr.dead td { opacity: 0.55; }
 .btn { letter-spacing: 0.01em; }
 .btn:focus-visible, .hat:focus-visible, .bind button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
 #hud:not(.hidden) ~ #build { display: none; } /* the version stamp belongs to the menu, not on top of the HUD */
+
+/* where a taunt came from: an arrow on a ring around the crosshair, for hunters */
+#dirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+#dirs .dir { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+#dirs .dir i { position: absolute; left: -17px; top: -26vh; width: 0; height: 0; border-left: 17px solid transparent; border-right: 17px solid transparent; border-bottom: 30px solid #ffd166; filter: drop-shadow(0 0 6px rgba(0, 0, 0, 0.7)); }
+#dirs .dir b { position: absolute; left: -40px; width: 80px; top: calc(-26vh + 32px); text-align: center; font-size: 15px; color: #ffe9a8; text-shadow: 0 2px 4px #000; }

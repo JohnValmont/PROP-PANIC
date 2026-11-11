@@ -342,7 +342,7 @@ export class WorldView {
     const lit = 1 - this.dark * (1 - this.darkFloor);
     const L = LOOK[this.mapId] ?? LOOK[0];
     const indoor = this.mapId !== 1;
-    this.hemi.intensity = L.hemi * lit;
+    this.hemi.intensity = (assets.lite ? L.hemi + 0.95 : L.hemi) * lit; // fast graphics has no image-based light to fill the shadows
     this.sun.intensity = L.sun * (1 - this.dark * 0.985);
     this.scene.environmentIntensity = L.envI * lit;
     this.scene.backgroundIntensity = L.bgI * (1 - this.dark * 0.93);
@@ -352,6 +352,7 @@ export class WorldView {
     this.panelMat.color.setRGB(p, p * 0.96, p * 0.86);
     this.bulbMat.color.setRGB(p * 1.5, p * 1.1, p * 0.55);
     for (const l of this.warm) l.intensity = indoor ? 22 * (1 - this.dark) : 0;
+    if (assets.lite) for (const l of [...this.warm, ...this.lampLights]) l.visible = false; // every extra light is paid for on every pixel
     // outdoors: lamp posts and the campfire come into their own when the sun goes
     const glow = 0.9 + this.dark * 4;
     this.lampMat.color.setRGB(glow, glow * 0.86, glow * 0.6);
@@ -362,7 +363,7 @@ export class WorldView {
       const f = 1 + Math.sin(this.time * 17) * 0.12 + Math.sin(this.time * 29) * 0.08;
       this.fire.scale.set(f, 0.85 + f * 0.25, f); this.fire.rotation.y += dt * 1.3;
       this.fireMat.color.setRGB(2.6 * f, 1.25 * f, 0.35);
-      if (this.fireLight) this.fireLight.intensity = indoor ? 0 : (7 + this.dark * 24) * f;
+      if (this.fireLight) { this.fireLight.intensity = indoor ? 0 : (7 + this.dark * 24) * f; this.fireLight.visible = !assets.lite; }
     }
     if (this.water?.normalMap) { this.water.normalMap.offset.set(this.time * 0.012, this.time * 0.017); }
     if (this.flag) this.flag.rotation.y = Math.sin(this.time * 2.4) * 0.25;
@@ -424,6 +425,7 @@ export class WorldView {
     this.add([plane(-10.35, -17, 10.35, -10.65, 0.002, surfaceInfo('concrete').tile), plane(10.65, -17, 24, -1.15, 0.002, surfaceInfo('concrete').tile, 0xe9e4da)], conc, false);
     // ceiling with exposed beams, recessed light panels and rows of pendant lamps
     const ceil = assets.surface('plaster').clone(); ceil.color.setRGB(1.5, 1.47, 1.4);
+    if (assets.lite) ceil.emissive.setRGB(0.42, 0.41, 0.39); // faces away from every light: without image-based lighting it would go black
     this.add([plane(-24.5, -17.5, 24.5, 17.5, 4.5, surfaceInfo('plaster').tile, 0xffffff, false)], ceil, false);
     const beams: THREE.BufferGeometry[] = [], panels: THREE.BufferGeometry[] = [], cords: THREE.BufferGeometry[] = [], shades: THREE.BufferGeometry[] = [], bulbs: THREE.BufferGeometry[] = [];
     for (let x = -21; x <= 21.01; x += 6) beams.push(boxGeo({ x0: x - 0.14, y0: 4.18, z0: -17, x1: x + 0.14, y1: 4.5, z1: 17, c: 0xffffff, m: 'walnut' }));
@@ -612,7 +614,7 @@ export class WorldView {
     };
     const near = map.features.filter((f) => f.kind === 'tree');
     const far: Feature[] = [];
-    for (let i = 0; i < 130; i++) {
+    for (let i = 0; i < (assets.lite ? 45 : 130); i++) {
       const a = R() * Math.PI * 2, d = 30 + R() * 85, x = Math.cos(a) * d, z = Math.sin(a) * d * 0.85;
       if (Math.abs(x) < 27 && Math.abs(z) < 20) continue;
       if (Math.abs(x) < 4 && z > 17) continue; // keep the lane out of the gate clear
@@ -658,7 +660,7 @@ export class WorldView {
         return false;
       };
       const cells = new Map<number, number[][]>();
-      for (let i = 0; i < 21000; i++) {
+      for (let i = 0; i < (assets.lite ? 0 : 21000); i++) {
         const x = -27 + R() * 54, z = -20 + R() * 40;
         if (blocked(x, z)) continue;
         const key = Math.floor((x + 27) / 9) + 16 * Math.floor((z + 20) / 8);

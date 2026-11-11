@@ -46,6 +46,8 @@ const placeholderMat = new THREE.MeshStandardMaterial({ color: 0xb9a98e, roughne
 class AssetStore {
   manifest: Manifest | null = null;
   maxAniso = 4;
+  /** Fast graphics: low-detail models, colour textures only, simple shading. Fixed for the life of the page. */
+  lite = false;
   /** Fraction of requested downloads that have finished (for the loading bar). */
   progress = 1;
   private requested = 0; private finished = 0;
@@ -110,7 +112,7 @@ class AssetStore {
     this.waiting.set(id, [cb]);
     if (!this.manifest?.models[id]) return; // unknown or manifest missing: keep the placeholder
     this.enqueue(async () => {
-      const gltf = await this.gltf.loadAsync(this.url(`models/${id}.glb`));
+      const gltf = await this.gltf.loadAsync(this.url(`${this.lite ? 'lite' : 'models'}/${id}.glb`));
       const parts = this.normalise(gltf.scene, size);
       this.models.set(id, parts);
       for (const f of this.waiting.get(id) ?? []) f(parts);
@@ -167,7 +169,8 @@ class AssetStore {
       for (const t of [mat.map, mat.normalMap, mat.roughnessMap, mat.aoMap]) if (t) t.anisotropy = this.maxAniso;
       if (mat.transparent && !mat.alphaTest) { mat.transparent = false; mat.alphaTest = 0.5; } // leaves: cut-out, not blended
       if (mat.alphaTest) mat.side = THREE.DoubleSide;
-      parts.push({ geo, mat });
+      // fast graphics: one colour texture and per-vertex lighting instead of the full physically based shader
+      parts.push({ geo, mat: this.lite ? new THREE.MeshLambertMaterial({ map: mat.map, color: mat.color, alphaTest: mat.alphaTest, side: mat.side }) : mat });
     });
     const s = box.getSize(new THREE.Vector3());
     const k = typeof size === 'number' ? [size / s.y, size / s.y, size / s.y] : [size[0] / s.x, size[1] / s.y, size[2] / s.z];
@@ -203,6 +206,12 @@ class AssetStore {
     let m = this.matCache.get(name);
     if (m) return m;
     const info = surfaceInfo(name);
+    if (this.lite) {
+      const lm = new THREE.MeshLambertMaterial({ map: this.texture(name, 'd'), vertexColors: true }) as unknown as THREE.MeshStandardMaterial;
+      if (info.gain) lm.color.setRGB(info.gain[0], info.gain[1], info.gain[2]);
+      this.matCache.set(name, lm);
+      return lm;
+    }
     const arm = this.texture(name, 'a');
     m = new THREE.MeshStandardMaterial({
       map: this.texture(name, 'd'), normalMap: this.texture(name, 'n'),
@@ -216,7 +225,7 @@ class AssetStore {
 
   hdr(id: string): Promise<THREE.DataTexture> {
     return new Promise((resolve, reject) => {
-      if (!this.manifest?.hdris[id]) { reject(new Error('no hdr')); return; }
+      if (!this.manifest?.hdris[id] || this.lite) { reject(new Error('no hdr')); return; }
       this.enqueue(async () => {
         try { const t = await new RGBELoader().loadAsync(this.url(`hdr/${id}.hdr`)); t.mapping = THREE.EquirectangularReflectionMapping; resolve(t); }
         catch (e) { reject(e); }

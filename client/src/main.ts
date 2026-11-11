@@ -6,6 +6,7 @@ import { assets } from './assets';
 declare const __BUILD__: string;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+try { assets.lite = localStorage.getItem('pp_quality') === 'low'; } catch { /* default */ }
 await assets.init(); // the asset manifest: which models, textures and skies exist
 const game = new Game($<HTMLCanvasElement>('c'));
 // the web font loads without blocking first paint: switch it on once it has arrived

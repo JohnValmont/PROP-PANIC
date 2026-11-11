@@ -73,8 +73,10 @@ function triCount(doc) {
 }
 
 async function buildModel([id, src, tris, tex, flat], manifest) {
-  const out = path.join(OUT, 'models', id + '.glb');
-  if (existsSync(out) && manifest.models[id] && !force.has(id) && !forceAll) return;
+  const out = path.join(OUT, 'models', id + '.glb'), lite = path.join(OUT, 'lite', id + '.glb');
+  const redo = force.has(id) || forceAll;
+  const needMain = redo || !(existsSync(out) && manifest.models[id]), needLite = redo || !existsSync(lite);
+  if (!needMain && !needLite) return;
   const files = await getJson(`${API}/files/${src}`);
   const g = files.gltf['1k'].gltf;
   const dir = path.join(CACHE, 'models', src);
@@ -83,41 +85,48 @@ async function buildModel([id, src, tris, tex, flat], manifest) {
 
   await MeshoptDecoder.ready; await MeshoptEncoder.ready; await MeshoptSimplifier.ready;
   const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder, 'meshopt.encoder': MeshoptEncoder });
-  let doc; let after = 0; const before = triCount(await io.read(main));
-  // tighten the error bound until the triangle budget is met
-  for (const error of [0.004, 0.012, 0.03, 0.08, 0.25]) {
-    doc = await io.read(main);
-    doc.setLogger(new Logger(Logger.Verbosity.ERROR));
-    await doc.transform(dedup(), flatten(), join(), weld());
-    if (before > tris * 1.15) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: tris / before, error, lockBorder: false }));
-    after = triCount(doc);
-    if (after <= tris * 1.3) break;
-  }
-  if (flat) {
-    const sc = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
-    const pivot = doc.createNode('pivot').setRotation([-Math.SQRT1_2, 0, 0, Math.SQRT1_2]);
-    for (const child of sc.listChildren()) { sc.removeChild(child); pivot.addChild(child); }
-    sc.addChild(pivot);
-  }
-  await doc.transform(
-    center({ pivot: 'below' }),
-    flatten(),
-    prune(),
-    textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [tex, tex], quality: 84 }),
-    meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
-  );
-  const scene = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
-  const b = getBounds(scene);
-  await fs.mkdir(path.dirname(out), { recursive: true });
-  const glb = await io.writeBinary(doc);
-  await fs.writeFile(out, glb);
-  manifest.models[id] = {
-    src,
-    size: [0, 1, 2].map((i) => +(b.max[i] - b.min[i]).toFixed(3)),
-    tris: after,
-    kb: Math.round(glb.byteLength / 1024),
+  const before = triCount(await io.read(main));
+  const make = async (budget, texSize) => {
+    let doc; let after = 0;
+    // tighten the error bound until the triangle budget is met
+    for (const error of [0.004, 0.012, 0.03, 0.08, 0.25]) {
+      doc = await io.read(main);
+      doc.setLogger(new Logger(Logger.Verbosity.ERROR));
+      await doc.transform(dedup(), flatten(), join(), weld());
+      if (before > budget * 1.15) await doc.transform(simplify({ simplifier: MeshoptSimplifier, ratio: budget / before, error, lockBorder: false }));
+      after = triCount(doc);
+      if (after <= budget * 1.3) break;
+    }
+    if (flat) {
+      const sc = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
+      const pivot = doc.createNode('pivot').setRotation([-Math.SQRT1_2, 0, 0, Math.SQRT1_2]);
+      for (const child of sc.listChildren()) { sc.removeChild(child); pivot.addChild(child); }
+      sc.addChild(pivot);
+    }
+    await doc.transform(
+      center({ pivot: 'below' }),
+      flatten(),
+      prune(),
+      textureCompress({ encoder: sharp, targetFormat: 'webp', resize: [texSize, texSize], quality: 84 }),
+      meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+    );
+    const scene = doc.getRoot().getDefaultScene() || doc.getRoot().listScenes()[0];
+    return { glb: await io.writeBinary(doc), after, b: getBounds(scene) };
   };
-  console.log(`model ${id.padEnd(14)} ${String(before).padStart(8)} -> ${String(after).padStart(6)} tris  ${manifest.models[id].kb} KB  ${manifest.models[id].size.join(' x ')}`);
+  if (needMain) {
+    const { glb, after, b } = await make(tris, tex);
+    await fs.mkdir(path.dirname(out), { recursive: true });
+    await fs.writeFile(out, glb);
+    manifest.models[id] = { src, size: [0, 1, 2].map((i) => +(b.max[i] - b.min[i]).toFixed(3)), tris: after, kb: Math.round(glb.byteLength / 1024) };
+  }
+  if (needLite) {
+    // the low-detail twin used by Fast graphics: a fifth of the triangles, small colour texture only matters
+    const { glb, after } = await make(Math.max(180, Math.round(tris * 0.2)), 256);
+    await fs.mkdir(path.dirname(lite), { recursive: true });
+    await fs.writeFile(lite, glb);
+    manifest.models[id].lite = after; manifest.models[id].liteKb = Math.round(glb.byteLength / 1024);
+  }
+  console.log(`model ${id.padEnd(14)} ${String(before).padStart(8)} -> ${manifest.models[id].tris} / ${manifest.models[id].lite} tris  ${manifest.models[id].kb} / ${manifest.models[id].liteKb} KB`);
 }
 
 const MAPS = { d: ['Diffuse', 'diff', 'Base Color'], n: ['nor_gl'], a: ['arm'] };

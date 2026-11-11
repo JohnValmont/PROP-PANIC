@@ -74,7 +74,7 @@ export class Sfx {
     const ctx = this.ctx!;
     if (!pos) return dest ?? this.master;
     const p = ctx.createPanner();
-    p.panningModel = 'equalpower'; p.distanceModel = 'inverse';
+    p.panningModel = 'HRTF'; p.distanceModel = 'inverse';
     p.refDistance = 3.5; p.maxDistance = 70; p.rolloffFactor = 1.5;
     p.positionX.value = pos[0]; p.positionY.value = pos[1]; p.positionZ.value = pos[2];
     p.connect(this.master);

@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.1.0
+- **Fast graphics rebuilt for low-end laptops.** It now loads separate low-detail models (about a third of the
+  triangles, 4 MB instead of 17 MB), colour textures only, simple per-vertex shading, no extra lights, no grass,
+  no anti-aliasing and a slightly reduced resolution. Older integrated graphics start on Fast automatically, and
+  the automatic step-down triggers sooner. Switching to or from Fast reloads the page (your seat is kept).
+- **Taunt direction for hunters.** A taunt now shows an arrow around the crosshair pointing at its source, with
+  the distance, for about two and a half seconds; positional audio uses head-related panning for clearer
+  front/back cues.
+
 ## 2.0.0
 - **Scanned assets.** The 49 procedural toys are replaced by 66 photo-scanned, physically based disguises plus set
   dressing, all CC0 from Poly Haven, optimised by a new asset pipeline (`tools/assets.mjs`). See `CREDITS.md`.
