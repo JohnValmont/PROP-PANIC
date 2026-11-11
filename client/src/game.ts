@@ -860,6 +860,7 @@ export class Game {
       (p.el.lastChild as HTMLElement).textContent = `${Math.round(Math.hypot(dx, dz))} m`;
     }
   }
+  private lastSend = 0;
   private camDistNow = 3.4;
   private myFlags = 0;
   private skipMouse = 0;
@@ -1072,7 +1073,8 @@ export class Game {
       let n = 0;
       while (this.acc >= STEP && n < 6) { this.stepLocal(); this.acc -= STEP; n++; }
       if (this.acc > STEP) this.acc = 0;
-      if (this.outbox.length) { this.net.send({ t: 'in', c: this.outbox }); this.outbox = []; }
+      // batch inputs to about 60 messages a second: a 240 Hz display must not trip the server's flood guard
+      if (this.outbox.length && (t - this.lastSend >= 15 || this.outbox.length >= 8)) { this.net.send({ t: 'in', c: this.outbox }); this.outbox = []; this.lastSend = t; }
       const a = this.acc / STEP, b = this.body;
       this.smooth.multiplyScalar(Math.exp(-dt * 14));
       this.rpos.set(this.prev.x + (b.x - this.prev.x) * a + this.smooth.x, this.prev.y + (b.y - this.prev.y) * a + this.smooth.y, this.prev.z + (b.z - this.prev.z) * a + this.smooth.z);

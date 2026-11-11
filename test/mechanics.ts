@@ -46,6 +46,24 @@ async function main() {
   room.tick();
   ok(sent.some((m) => m.k === 'last' && m.who === p.id) && p.cd.ghost <= room.now, 'last prop standing is announced and gets abilities recharged');
 
+  // reconnecting must not leave a player frozen: the client restarts its input numbering
+  {
+    const r2 = new Room('RECO', false);
+    const w2 = { readyState: 1, send() {}, close() {} } as any;
+    const q = r2.addPlayer('Q', w2, false, 0);
+    r2.onMessage(q, { t: 'in', c: [[900, 0.02, 0, 1, 0, 0, 0, 0]] });
+    ok(q.ack === 900, 'inputs are acknowledged in order');
+    r2.reattach(q.token, w2);
+    await sleep(60);
+    const z0 = q.body.z;
+    r2.onMessage(q, { t: 'in', c: [[1, 0.03, 0, 1, 0, 0, 0, 0], [2, 0.03, 0, 1, 0, 0, 0, 0]] });
+    ok(q.ack === 2 && q.body.z !== z0, 'after a reconnect the first inputs move the player again (not ignored as old)');
+    // wedged inside a wall: the server frees the player by itself
+    q.body.x = -24.3; q.body.z = 0; q.body.y = 0;
+    for (let i = 0; i < 20; i++) r2.tick();
+    ok((r2 as any).world.fits(q.body.x, q.body.y + 0.02, q.body.z, q.body.hw - 0.02, q.body.h - 0.04), 'a player stuck inside a wall is moved to free space');
+  }
+
   console.log(failures ? `\n${failures} FAILED` : '\nAll mechanics checks passed.');
   process.exit(failures ? 1 : 0);
 }

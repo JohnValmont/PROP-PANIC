@@ -31,7 +31,7 @@ const LIMITS = {
   newPerMin: num('PP_NEW_PER_MIN', 120), // socket opens per address per minute
   badJoinsPerMin: 12, // wrong room codes per address per minute (stops code guessing)
   rooms: num('PP_MAX_ROOMS', 400),
-  msgsPerSec: 300, bytesPerSec: 64 * 1024, payload: 4 * 1024,
+  msgsPerSec: 400, bytesPerSec: 64 * 1024, payload: 4 * 1024,
 };
 
 // Short rounds for automated tests: PP_FAST=1

@@ -56,6 +56,7 @@ export class Player {
   bot: Bot | null = null;
   hist: number[][] = [];
   msgN = 0; msgT = 0;
+  stuckN = 0;
   /** Round-trip time in ms, measured by the socket heartbeat. */
   rtt = 0;
   lastInputAt = now();
@@ -97,6 +98,7 @@ export class Room {
   private firstDeath = 0;
   private lastEventKind = '';
   mapId = 0;
+  private unstickN = 0;
   /** 0 = alternate maps each round, otherwise map id + 1. */
   mapPref = 0;
   private lastProp = false;
@@ -180,6 +182,7 @@ export class Room {
       if (p.human && sameToken(p.token, token)) {
         if (p.ws && p.ws !== ws) { try { p.ws.close(); } catch { /* ignore */ } }
         p.ws = ws; p.connected = true; p.dcAt = 0; p.bank = 0.3; p.bankT = now();
+        p.ack = 0; // a reconnecting client numbers its inputs from 1 again: keeping the old count would ignore them all
         this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now });
         this.sendState(p);
         this.rosterDirty = true;
@@ -398,7 +401,7 @@ export class Room {
     // flood guard
     const t = now();
     if (t - p.msgT > 1000) { p.msgT = t; p.msgN = 0; }
-    if (++p.msgN > 240) { try { p.ws?.close(4008, 'rate'); } catch { /* ignore */ } return; }
+    if (++p.msgN > 400) { try { p.ws?.close(4008, 'rate'); } catch { /* ignore */ } return; }
     if (!m || typeof m.t !== 'string') return;
     if (m.t !== 'in' && m.t !== 'ping') p.lastInputAt = t;
     switch (m.t) {
@@ -677,6 +680,13 @@ export class Room {
     this.lastTick = t;
 
     // seats are held through a refresh or a network blip; much longer mid-round than in the lobby
+    // safety net: nobody stays wedged inside a wall or an object (a disguise that grew, a shuffled layout)
+    if (++this.unstickN % 8 === 0) for (const p of this.players.values()) {
+      if (!p.alive || p.team === 'spec') continue;
+      const b = p.body;
+      if (this.world.fits(b.x, b.y + 0.02, b.z, b.hw - 0.02, b.h - 0.04)) { p.stuckN = 0; continue; }
+      if (++p.stuckN >= 2) { this.resize(p, b.hw, b.h, true); b.vx = b.vy = b.vz = 0; p.stuckN = 0; }
+    }
     const grace = this.phase === 'lobby' ? 15_000 : DC_GRACE_MS;
     for (const p of [...this.players.values()]) if (p.human && !p.connected && t - p.dcAt > grace) this.removePlayer(p);
     // public rooms: a seat that has sent no input at all for four minutes (longer than a whole round) is given back

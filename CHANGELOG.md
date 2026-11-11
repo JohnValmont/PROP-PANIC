@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.2
+- Fixed players freezing in place after any reconnect or page reload: the server kept the old input count and ignored
+  the client's new inputs until it caught up (minutes, in a long session).
+- Inputs are batched to about 60 messages a second, so very high refresh-rate displays no longer trip the flood guard
+  (which disconnected them and then triggered the freeze above).
+- The server now frees any player wedged inside a wall or object within half a second.
+
 ## 2.2.1
 - Touch: the game goes full screen and landscape on the first button tap (where the browser allows it); the fire
   button doubles as a look pad so hunters can track a target while zapping; new ZOOM (hunter) / LOCK (prop) toggle.
