@@ -18,10 +18,10 @@ export class Net {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   }
 
-  connect(name: string, mode: 'quick' | 'create' | 'join', code?: string) {
+  connect(name: string, mode: 'quick' | 'create' | 'join', code?: string, look = 0) {
     this.close();
     this.name = name; this.wantClose = false; this.welcomed = false; this.tries = 0; this.token = ''; this.code = ''; this.lastErr = '';
-    this.open({ t: 'hello', name, mode, code });
+    this.open({ t: 'hello', name, mode, code, look });
   }
 
   /** Try to reclaim the seat saved by a previous page load. Returns false if there is none. */

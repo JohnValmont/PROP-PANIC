@@ -85,7 +85,7 @@ async function main() {
     const A = await open('A');
     await A.goto(URL);
     await A.waitForFunction(() => window.__pp && window.__pp.renderer.info.render.calls > 10, null, { timeout: 20000 });
-    ok(await A.isVisible('#menu') && (await A.textContent('.logo')).includes('PROP'), 'menu renders over a live 3D scene');
+    ok(await A.isVisible('#menu') && (await A.textContent('.logo')).includes('PANIC'), 'menu renders over a live 3D scene');
     const lite = (page) => page.evaluate(() => { window.__pp.renderEvery = 20; }); // no GPU here: draw 1 frame in 20, simulate all of them
     await A.fill('#nameInput', 'Alice');
     await shot(A, '01-menu.png');

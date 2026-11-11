@@ -55,6 +55,8 @@ export class Fx {
   private shellGeo = new THREE.CylinderGeometry(1, 1, 1, 56, 1, true);
   private floorGeo = new THREE.RingGeometry(0.93, 1, 56);
   private sphereGeo = new THREE.SphereGeometry(1, 24, 14);
+  private light = new THREE.PointLight(0xffe08a, 0, 9, 1.6);
+  private lightT = 0; private lightPower = 0;
 
   constructor(private scene: THREE.Scene) {
     this.parts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.1, 0.1, 0.1), new THREE.MeshBasicMaterial(), CAP);
@@ -63,6 +65,13 @@ export class Fx {
     dummy.scale.set(0, 0, 0); dummy.updateMatrix();
     for (let i = 0; i < CAP; i++) { this.parts.setMatrixAt(i, dummy.matrix); this.parts.setColorAt(i, col.set(0xffffff)); }
     scene.add(this.parts);
+    this.light.castShadow = false;
+    scene.add(this.light);
+  }
+
+  /** One pooled point light for muzzle flashes and pops (adding lights at runtime would recompile shaders). */
+  flash(x: number, y: number, z: number, color = 0xffe08a, power = 30) {
+    this.light.position.set(x, y, z); this.light.color.set(color); this.lightPower = power; this.lightT = 0.14;
   }
 
   burst(x: number, y: number, z: number, n: number, colors: number[], speed = 4, up = 3, size = 1, life = 0.9, gravity = 12) {
@@ -81,6 +90,7 @@ export class Fx {
 
   tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff27a) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+    mat.color.multiplyScalar(2.6); // brighter than white so the bloom pass makes it glow
     const m = new THREE.Mesh(this.tracerGeo, mat);
     const len = from.distanceTo(to);
     m.position.copy(from).lerp(to, 0.5);
@@ -113,6 +123,7 @@ export class Fx {
   }
 
   update(dt: number) {
+    if (this.lightT > 0) { this.lightT -= dt; this.light.intensity = Math.max(0, this.lightPower * (this.lightT / 0.14)); }
     if (this.active) {
       let alive = 0;
       for (let i = 0; i < CAP; i++) {

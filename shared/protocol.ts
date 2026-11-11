@@ -23,6 +23,8 @@ export type ClientMsg =
 export interface RosterEntry {
   id: number; name: string; team: Team; alive: boolean; bot: boolean; host: boolean;
   score: number; disguise: number; conn: boolean;
+  /** Hunter cosmetics: colour * 8 + hat. */
+  look: number;
   /** Hunter currently serving time as a rubber duck. */
   quack: boolean;
 }

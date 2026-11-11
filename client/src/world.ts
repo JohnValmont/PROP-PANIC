@@ -1,12 +1,28 @@
 /** Renders the toy store: merged static architecture, instanced toys, painted floor, lights and set dressing. */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { PROP_INDEX } from '../../shared/props';
 import { BOUNDS, ZONES, type Decor, type GameMap } from '../../shared/map';
 import { PROPS } from '../../shared/props';
 import { rng } from '../../shared/rng';
-import { box, propGeometry, sph, cyl, tor } from './propgeo';
+import { bakeAO, box, propGeometry, sph, cyl, tor } from './propgeo';
 
 const dummy = new THREE.Object3D();
+
+// overhead train loop (a rounded rectangle above the main aisles)
+const TX = 9.7, TZ0 = 9.6, TZ1 = 7.6;
+function trainPos(dist: number): [number, number, number] {
+  const w = TX * 2, h = TZ0 + TZ1, per = 2 * (w + h);
+  let d = ((dist % per) + per) % per;
+  if (d < w) return [-TX + d, -TZ0, Math.PI / 2];
+  d -= w;
+  if (d < h) return [TX, -TZ0 + d, 0];
+  d -= h;
+  if (d < w) return [TX - d, TZ1, -Math.PI / 2];
+  d -= w;
+  return [-TX, TZ1 - d, Math.PI];
+}
 
 function floorTexture(): THREE.CanvasTexture {
   const W = 2048, H = Math.round((2048 * 35) / 49);
@@ -110,7 +126,13 @@ interface DecorRef { mesh: THREE.InstancedMesh; index: number; d: Decor; }
 
 export class WorldView {
   root = new THREE.Group();
-  material = new THREE.MeshLambertMaterial({ vertexColors: true });
+  /** High quality: glossy toy plastic lit by an environment map. Low: plain diffuse, far cheaper. */
+  private matHi = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.46, metalness: 0.02 });
+  private matLo = new THREE.MeshLambertMaterial({ vertexColors: true });
+  material: THREE.Material = this.matHi;
+  private floorHi!: THREE.MeshStandardMaterial; private floorLo!: THREE.MeshLambertMaterial; private floor!: THREE.Mesh;
+  private hi = true;
+  private train: THREE.Mesh[] = [];
   hemi = new THREE.HemisphereLight(0xffffff, 0xcdb9a0, 1.25);
   sun = new THREE.DirectionalLight(0xfff4e0, 1.55);
   /** 0 = lights on, 1 = full blackout (smoothed). */
@@ -148,7 +170,22 @@ export class WorldView {
     this.root.add(this.decorGroup);
   }
 
-  setShadows(on: boolean) { this.sun.castShadow = on; }
+  /** Build the reflection environment once (needs the renderer). */
+  initEnv(renderer: THREE.WebGLRenderer) {
+    const pmrem = new THREE.PMREMGenerator(renderer);
+    this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    this.scene.fog = new THREE.Fog(0x2a2f6a, 34, 95);
+  }
+
+  setQuality(hi: boolean) {
+    this.hi = hi;
+    this.sun.castShadow = hi;
+    const from = hi ? this.matLo : this.matHi;
+    this.material = hi ? this.matHi : this.matLo;
+    this.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.isMesh && m.material === from) m.material = this.material; });
+    if (this.floor) this.floor.material = hi ? this.floorHi : this.floorLo;
+  }
 
   load(map: GameMap) {
     if (!this.builtStatics) { this.buildStatics(map); this.builtStatics = true; }
@@ -207,10 +244,20 @@ export class WorldView {
     // lights
     this.dark += (this.darkTarget - this.dark) * Math.min(1, dt * 5);
     const lit = 1 - this.dark * (1 - this.darkFloor);
-    this.hemi.intensity = 1.25 * lit;
+    this.hemi.intensity = (this.hi ? 0.8 : 1.45) * lit;
     this.sun.intensity = 1.55 * (1 - this.dark * 0.985);
-    this.panelMat.color.setRGB(1 * (1 - this.dark * 0.94), 0.96 * (1 - this.dark * 0.94), 0.84 * (1 - this.dark * 0.9));
+    this.scene.environmentIntensity = 0.2 * lit;
+    // light panels are brighter than white so they bloom; they die in a blackout
+    const p = 2.3 * (1 - this.dark * 0.97);
+    this.panelMat.color.setRGB(p, p * 0.95, p * 0.8);
     this.bgColor.setRGB(0.086 * lit, 0.13 * lit, 0.24 * lit);
+    if (this.scene.fog) (this.scene.fog as THREE.Fog).color.setRGB(0.1 * lit, 0.12 * lit, 0.3 * lit);
+    // the overhead toy train does laps of the main aisles
+    for (let i = 0; i < this.train.length; i++) {
+      const [x, z, yaw] = trainPos(this.time * 2.6 - i * 1.25);
+      this.train[i].position.set(x, 3.02 + Math.sin(this.time * 9 + i) * 0.012, z);
+      this.train[i].rotation.y = yaw;
+    }
     this.neon[0].intensity = 22 + Math.sin(this.time * 3) * 5;
     this.neon[1].intensity = 22 + Math.cos(this.time * 2.3) * 5;
     for (const s of this.spinners) s.rotation.y += dt * 0.25;
@@ -220,13 +267,33 @@ export class WorldView {
     const parts: THREE.BufferGeometry[] = [];
     for (const b of [...map.statics, ...map.visuals]) {
       if (b.hidden) continue;
-      parts.push(box(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.c, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2));
+      const g = box(b.x1 - b.x0, b.y1 - b.y0, b.z1 - b.z0, b.c, (b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2, (b.z0 + b.z1) / 2);
+      // ground everything that stands on the floor with a soft dark gradient
+      if (b.y0 < 0.05 && b.y1 - b.y0 > 0.3) bakeAO(g, Math.min(2.4, b.y1 - b.y0), 0.3);
+      parts.push(g);
+    }
+    // elevated train track around the main aisles, hung from the ceiling
+    const RAIL = 0x5c677d, TIE = 0xc9a66b;
+    for (const [x0, z0, x1, z1] of [[-TX, -TZ0, TX, -TZ0], [-TX, TZ1, TX, TZ1], [-TX, -TZ0, -TX, TZ1], [TX, -TZ0, TX, TZ1]]) {
+      const alongX = z0 === z1, len = alongX ? x1 - x0 : z1 - z0, cx = (x0 + x1) / 2, cz = (z0 + z1) / 2;
+      parts.push(box(alongX ? len + 0.7 : 0.7, 0.07, alongX ? 0.7 : len + 0.7, TIE, cx, 2.95, cz));
+      for (const o of [-0.22, 0.22]) parts.push(box(alongX ? len + 0.6 : 0.06, 0.05, alongX ? 0.06 : len + 0.6, RAIL, cx + (alongX ? 0 : o), 3.0, cz + (alongX ? o : 0)));
+      for (let k = 0.5; k < len; k += 4) parts.push(cyl(0.025, 0.025, 1.5, 0xffffff, alongX ? x0 + k : cx, 3.72, alongX ? cz : z0 + k, 0, 0, 5));
     }
     const statics = new THREE.Mesh(mergeGeometries(parts, false)!, this.material);
     statics.castShadow = true; statics.receiveShadow = true;
     this.root.add(statics);
 
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(49, 35), new THREE.MeshLambertMaterial({ map: floorTexture() }));
+    const ftex = floorTexture();
+    this.floorHi = new THREE.MeshStandardMaterial({ map: ftex, roughness: 0.34, metalness: 0.0 });
+    this.floorLo = new THREE.MeshLambertMaterial({ map: ftex });
+    const floor = this.floor = new THREE.Mesh(new THREE.PlaneGeometry(49, 35), this.hi ? this.floorHi : this.floorLo);
+    for (let i = 0; i < 4; i++) {
+      const car = new THREE.Mesh(propGeometry(PROP_INDEX[i === 0 ? 'train' : i === 3 ? 'gift' : 'crate']), this.material);
+      if (i > 0) car.scale.set(0.5, 0.5, 0.9);
+      car.castShadow = true;
+      this.train.push(car); this.root.add(car);
+    }
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true;
     this.root.add(floor);
     const ceil = new THREE.Mesh(new THREE.PlaneGeometry(49, 35), new THREE.MeshBasicMaterial({ map: ceilingTexture() }));
@@ -271,7 +338,7 @@ export class WorldView {
       m.position.set(x, y, z);
       this.spinners.push(m); this.root.add(m);
     };
-    planet(0, 3.7, 9, 0.5, 0xffd166, 0xf78c2b); planet(-6, 3.8, -5, 0.35, 0xef476f); planet(6.5, 3.75, 0, 0.42, 0x48cae4, 0xffffff);
+    planet(4.2, 3.8, 12.2, 0.5, 0xffd166, 0xf78c2b); planet(-6, 3.8, -5, 0.35, 0xef476f); planet(6.5, 3.75, 0, 0.42, 0x48cae4, 0xffffff);
     planet(17.5, 3.8, -6, 0.5, 0x9b5de5, 0xffd166); planet(-17.5, 3.8, -10, 0.45, 0xff9ecd); planet(18, 3.9, 8.5, 0.38, 0x06d6a0);
 
     // hanging zone signs

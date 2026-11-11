@@ -4,7 +4,11 @@
  * The server stays the authority on everything that matters.
  */
 import * as THREE from 'three';
-import { CFG, F, QUICK_CHAT, TAUNTS, type Phase, type Team } from '../../shared/constants';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { CFG, F, QUICK_CHAT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
 import { buildMap, BOUNDS, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, propBody } from '../../shared/props';
@@ -13,7 +17,7 @@ import { Sfx } from './audio';
 import { Fx, textSprite } from './fx';
 import { Hud, type AbilityView } from './hud';
 import { Net } from './net';
-import { DUCK_TYPE, blasterGeometry, hunterGeometry, propGeometry } from './propgeo';
+import { DUCK_TYPE, blasterGeometry, eyesGeometry, hunterGeometry, propGeometry } from './propgeo';
 import { WorldView } from './world';
 
 const STEP = 1 / 60;
@@ -24,6 +28,7 @@ const lerpAngle = (a: number, b: number, k: number) => { let d = (b - a) % (Math
 interface Sample { t: number; x: number; y: number; z: number; f: number; p: number; }
 interface Ent {
   id: number; group: THREE.Group; model: THREE.Object3D | null; arm: THREE.Object3D | null; kind: string;
+  legL: THREE.Object3D | null; legR: THREE.Object3D | null; eyes: THREE.Mesh | null; stars: THREE.Sprite | null; eyeK: number;
   buf: Sample[]; flags: number; lastSeen: number; label: THREE.Sprite | null; labelKey: string; marker: THREE.Sprite | null;
   hitT: number; hopT: number; x: number; y: number; z: number; f: number; speed: number; stepT: number; h: number;
 }
@@ -57,7 +62,6 @@ export class Game {
   private decoys = new Map<number, DecoyView>();
   private offset = 0; private haveOffset = false;
   private ghostMat: THREE.MeshLambertMaterial;
-  private hunterGeo = hunterGeometry();
 
   // local player
   team: Team = 'prop'; alive = false; disguise = 0;
@@ -90,6 +94,10 @@ export class Game {
   quality: 'high' | 'low' = 'high';
   fps = 60;
   renderEvery = 1;
+  look = 0; baseFov = 78; xp = 0;
+  private composer!: EffectComposer; private bloom!: UnrealBloomPass;
+  private eyeMat!: THREE.MeshBasicMaterial; private muzzle!: THREE.Mesh;
+  private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0; private xpRound = -1;
   private hitch = 0;
   private frameN = 0;
 
@@ -97,8 +105,21 @@ export class Game {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.12;
     this.world = new WorldView(this.scene);
     this.fx = new Fx(this.scene);
+    this.world.initEnv(this.renderer);
+    // post-processing (high quality only): HDR render -> bloom -> filmic tone mapping
+    const rt = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType, samples: 4 });
+    this.composer = new EffectComposer(this.renderer, rt);
+    this.composer.addPass(new RenderPass(this.scene, this.camera));
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.38, 0.5, 1.2);
+    this.composer.addPass(this.bloom);
+    this.composer.addPass(new OutputPass());
+    this.eyeMat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    this.muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.2, 1.2), transparent: true, opacity: 0.9 }));
+    this.muzzle.position.set(0, 0, -0.46); this.muzzle.visible = false;
     this.ghostMat = new THREE.MeshLambertMaterial({ vertexColors: true, transparent: true, opacity: 0.38, depthWrite: false });
     this.scene.add(this.camera);
     this.camera.rotation.order = 'YXZ';
@@ -107,6 +128,7 @@ export class Game {
     this.viewmodel.position.set(0.27, -0.25, -0.5);
     this.viewmodel.visible = false;
     this.camera.add(this.viewmodel);
+    this.viewmodel.add(this.muzzle);
     this.flashlight = new THREE.SpotLight(0xfff2cc, 0, 32, 0.52, 0.5, 1.2);
     this.flashlight.position.set(0.1, -0.05, -1); // just past the blaster so it doesn't blow out the viewmodel
     this.flashlight.target.position.set(0.1, -0.05, -2);
@@ -120,8 +142,15 @@ export class Game {
     const s = Number(localStorage.getItem('pp_sens'));
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
+    this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
+    this.look = Math.max(0, Math.min(63, Number(localStorage.getItem('pp_look')) || Math.floor(Math.random() * 8) * 8));
+    const f = Number(localStorage.getItem('pp_fov')); if (f >= 60 && f <= 100) this.baseFov = f;
+    const v = Number(localStorage.getItem('pp_vol')); if (localStorage.getItem('pp_vol') !== null && v >= 0 && v <= 1) this.sfx.volume = v;
 
     this.loadMap(1);
+    this.preview.position.set(0.95, 0, 13.2);
+    this.scene.add(this.preview);
+    this.setLook(this.look);
     this.bindInput();
     this.net.onMsg = (m) => this.onMsg(m);
     window.addEventListener('resize', () => this.resize());
@@ -133,7 +162,7 @@ export class Game {
   setQuality(q: 'high' | 'low') {
     this.quality = q;
     localStorage.setItem('pp_quality', q);
-    this.world.setShadows(q === 'high');
+    this.world.setQuality(q === 'high');
     this.resize();
   }
 
@@ -141,6 +170,8 @@ export class Game {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(this.quality === 'high' ? Math.min(window.devicePixelRatio, 2) : 1);
     this.renderer.setSize(w, h, false);
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
+    this.composer.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // keep the HUD readable (and non-overlapping) from small windows up to 4K
@@ -163,7 +194,7 @@ export class Game {
 
   join(name: string, mode: 'quick' | 'create' | 'join', code?: string) {
     this.sfx.unlock();
-    this.net.connect(name, mode, code);
+    this.net.connect(name, mode, code, this.look);
   }
 
   leave() {
@@ -182,6 +213,22 @@ export class Game {
     this.loadMap(1);
   }
 
+  onMenu: () => void = () => {};
+  private preview = new THREE.Group();
+
+  /** Change hunter colour/hat; updates the menu preview and is sent with the next join. */
+  setLook(look: number) {
+    this.look = look & 63;
+    try { localStorage.setItem('pp_look', String(this.look)); } catch { /* ignore */ }
+    this.preview.clear();
+    const geo = hunterGeometry(this.look), mat = this.world.material, g = new THREE.Group();
+    const body = new THREE.Mesh(geo.body, mat), arm = new THREE.Mesh(geo.arm, mat), l1 = new THREE.Mesh(geo.leg, mat), l2 = new THREE.Mesh(geo.leg, mat);
+    arm.position.set(0.36, 1.28, 0); l1.position.set(-0.13, 0.74, 0); l2.position.set(0.13, 0.74, 0);
+    for (const m of [body, arm, l1, l2]) m.castShadow = true;
+    g.add(body, arm, l1, l2);
+    this.preview.add(g);
+  }
+
   requestLock() { if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
 
   // ================================================================ input
@@ -194,8 +241,8 @@ export class Game {
       // browsers sometimes report one huge bogus delta right after the pointer locks: drop it
       if (this.skipMouse > 0) { this.skipMouse--; return; }
       const mx = Math.max(-300, Math.min(300, e.movementX)), my = Math.max(-300, Math.min(300, e.movementY));
-      this.yaw -= mx * this.sens;
-      this.pitch -= my * this.sens;
+      this.yaw -= mx * this.sens * this.zoomK;
+      this.pitch -= my * this.sens * this.zoomK;
       const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
       this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
     });
@@ -302,6 +349,15 @@ export class Game {
       const res: Results = m.results;
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
+      const mine = res.board.find((r) => r.id === this.myId);
+      if (mine && this.xpRound !== m.round) {
+        this.xpRound = m.round;
+        const gain = Math.max(10, mine.round), before = xpLevel(this.xp);
+        this.xp += gain;
+        try { localStorage.setItem('pp_xp', String(this.xp)); } catch { /* ignore */ }
+        this.hud.popup(`+${gain} XP`);
+        if (xpLevel(this.xp) > before) { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${xpLevel(this.xp)}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }
+      }
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
     } else {
@@ -323,11 +379,11 @@ export class Game {
         this.quackedMe = r.team === 'hunter' && r.quack;
         if (teamChanged) { this.pitch = r.team === 'hunter' ? 0 : -0.22; this.mouseL = false; }
       }
-      const wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter') : 'prop:' + r.disguise;
+      const wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter:' + (r.look | 0)) : 'prop:' + r.disguise;
       let e = this.ents.get(r.id);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
-        e = { id: r.id, group: new THREE.Group(), model: null, arm: null, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
+        e = { id: r.id, group: new THREE.Group(), model: null, arm: null, legL: null, legR: null, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
         e.group.visible = false;
         this.scene.add(e.group);
         this.ents.set(r.id, e);
@@ -348,21 +404,33 @@ export class Game {
 
   private buildModel(e: Ent, kind: string) {
     if (e.model) e.group.remove(e.model);
-    e.kind = kind; e.arm = null;
-    if (kind === 'hunter') {
+    if (e.eyes) { e.group.remove(e.eyes); e.eyes = null; }
+    e.kind = kind; e.arm = e.legL = e.legR = null;
+    const mat = this.world.material;
+    if (kind.startsWith('hunter')) {
+      const geo = hunterGeometry(Number(kind.slice(7)) || 0);
       const g = new THREE.Group();
-      const body = new THREE.Mesh(this.hunterGeo.body, this.world.material);
-      const arm = new THREE.Mesh(this.hunterGeo.arm, this.world.material);
-      arm.position.set(0.36, 1.28, 0);
-      body.castShadow = arm.castShadow = true;
-      g.add(body, arm);
-      e.model = g; e.arm = arm; e.h = CFG.HUNTER_H;
+      const body = new THREE.Mesh(geo.body, mat), arm = new THREE.Mesh(geo.arm, mat);
+      const legL = new THREE.Mesh(geo.leg, mat), legR = new THREE.Mesh(geo.leg, mat);
+      arm.position.set(0.36, 1.28, 0); legL.position.set(-0.13, 0.74, 0); legR.position.set(0.13, 0.74, 0);
+      for (const m of [body, arm, legL, legR]) m.castShadow = true;
+      g.add(body, arm, legL, legR);
+      e.model = g; e.arm = arm; e.legL = legL; e.legR = legR; e.h = CFG.HUNTER_H;
     } else {
       const type = kind === 'duck' ? DUCK_TYPE : Number(kind.slice(5));
-      const m = new THREE.Mesh(propGeometry(type), this.world.material);
+      const def = PROPS[type];
+      const m = new THREE.Mesh(propGeometry(type), mat);
       m.castShadow = true;
       if (kind === 'duck') m.scale.setScalar(1.5);
-      e.model = m; e.h = PROPS[type].h * (kind === 'duck' ? 1.5 : 1);
+      e.model = m; e.h = def.h * (kind === 'duck' ? 1.5 : 1);
+      if (kind !== 'duck') {
+        // googly eyes: hidden until this prop gives itself away (taunt, panic, sneeze, scanner)
+        const k = Math.max(0.55, Math.min(1.6, Math.min(def.w, def.h) / 0.6));
+        e.eyes = new THREE.Mesh(eyesGeometry(), this.eyeMat);
+        e.eyes.position.set(0, def.h + 0.07 * k, def.d * 0.22); // perched on top so they read from any angle
+        e.eyes.userData.k = k; e.eyes.scale.setScalar(0.001); e.eyes.visible = false;
+        e.group.add(e.eyes);
+      }
     }
     e.group.add(e.model);
     e.labelKey = '';
@@ -390,7 +458,7 @@ export class Game {
     this.hasMe = true;
     b.x = a[0]; b.y = a[1]; b.z = a[2]; b.vx = a[3]; b.vy = a[4]; b.vz = a[5]; b.ground = a[6] === 1; b.dashLeft = a[7]; b.dashCd = a[8];
     this.speed = a[9]; this.jumpV = a[10]; this.hp = a[11]; this.focus = a[12]; b.hw = a[13]; b.h = a[14];
-    this.phys.gravScale = a[15]; this.canMove = a[16] === 1; this.myFlags = a[17] | 0;
+    this.phys.gravScale = a[15]; this.canMove = a[16] === 1; this.myFlags = a[17] | 0; b.air = a[18] ?? 0;
     while (this.pending.length && this.pending[0].seq <= m.ack) this.pending.shift();
     this.prev.set(b.x, b.y, b.z);
     const canDash = this.team === 'prop';
@@ -428,6 +496,7 @@ export class Game {
             : new THREE.Vector3(src[0], src[1] + 1.3, src[2]);
           this.fx.tracer(from, to, 0xfff27a);
           if (!mine) this.sfx.play('shoot', [src[0], src[1] + 1.4, src[2]]);
+          this.fx.flash(from.x, from.y, from.z, 0xffe08a, mine ? 14 : 22);
         }
         if (m.hit === 1) { this.fx.burst(m.x, m.y, m.z, 5, [0xdddddd, 0xfff27a], 1.5, 1.5, 0.6, 0.4); this.sfx.play('thud', [m.x, m.y, m.z], 0.6); }
         else if (m.hit === 2) {
@@ -450,6 +519,8 @@ export class Game {
         this.sfx.play('kill', m.who === me || m.by === me ? undefined : [m.x, m.y, m.z]);
         const r = this.roster.get(m.who);
         this.hud.feed([{ b: this.nameOf(m.by) }, ' caught ', { b: this.nameOf(m.who) }, r ? ` (the ${PROPS[r.disguise].name})` : ''], 'kill');
+        this.fx.flash(m.x, m.y + 0.6, m.z, 0xff8fa3, 40);
+        if (m.by === me) this.fovPunch = 9;
         if (m.who === me) { this.hud.banner('CAUGHT!', 'You are a ghost now. Fly around and watch the chaos.', 'pink', 3200); this.specPos.set(m.x, m.y + 2.5, m.z); this.shake = 0.5; }
         else if (m.by === me) this.hud.banner('GOT ONE!', `${this.nameOf(m.who)} was the ${r ? PROPS[r.disguise].name : 'prop'}`, '', 1800);
         break;
@@ -506,12 +577,31 @@ export class Game {
         break;
       }
       case 'blind': this.hud.blind(m.ms); this.shake = 0.4; break;
+      case 'bonk': {
+        this.fx.burst(m.x, m.y, m.z, 18, [0xffe14d, 0xffffff], 3, 3, 0.9, 0.7);
+        this.fx.floater(m.x, m.y + 0.5, m.z, 'BONK!', '#ffe14d', 0.7, false, 1.4);
+        this.sfx.play('bonkHead', m.on === me || m.who === me ? undefined : [m.x, m.y, m.z], 1.3);
+        this.hud.feed([{ b: this.nameOf(m.who) }, ' bonked ', { b: this.nameOf(m.on) }, ' on the head'], 'good');
+        if (m.on === me) { this.hud.banner('BONKED!', 'Seeing stars. Your blaster is jammed for a moment.', 'purple', 1700); this.shake = 0.7; }
+        break;
+      }
+      case 'last': {
+        this.sfx.play('alarm');
+        if (m.who === me) this.hud.banner('LAST PROP STANDING', 'Ghost and Decoy recharged. Make it count!', 'teal', 3000);
+        else this.hud.banner('ONE LEFT!', `${this.nameOf(m.who)} is the last prop. Roll calls come faster now.`, 'pink', 2600);
+        break;
+      }
+      case 'sneeze': {
+        for (const p of m.pts as number[][]) { this.sfx.play('sneeze', p[0] === me ? undefined : [p[1], p[2] + 0.3, p[3]], 1.4); this.fx.burst(p[1], p[2] + 0.5, p[3], 10, [0xffffff, 0xcdeffd], 2.5, 2, 0.7, 0.5, 4); const e = this.ents.get(p[0]); if (e) e.hopT = 0.9; }
+        break;
+      }
       case 'chaos': {
         this.sfx.play('chaos');
         if (m.kind === 'blackout') { this.world.darkTarget = 1; this.sfx.play('blackout'); this.hud.banner('BLACKOUT!', this.team === 'hunter' ? 'Flashlights only. They can see you coming.' : 'Lights out. Move while they are blind!', 'purple'); }
         else if (m.kind === 'poltergeist') { this.world.poltergeist(m.seed, m.ms); this.hud.banner('POLTERGEIST!', 'The toys are alive. Good luck telling who is who.', 'purple'); }
         else if (m.kind === 'shuffle') this.hud.banner('PROP SHUFFLE!', 'Every prop just became a different toy.', 'purple');
         else if (m.kind === 'moon') this.hud.banner('MOON BOUNCE!', 'Low gravity. Jump onto anything.', 'purple');
+        else if (m.kind === 'sneeze') this.hud.banner('ACHOO!', this.team === 'hunter' ? 'Every real prop just sneezed. Did you see it?' : 'Dust everywhere. You sneezed!', 'purple', 2200);
         this.hud.feed(['CHAOS EVENT: ', { b: String(m.kind).toUpperCase() }], 'chaos');
         break;
       }
@@ -570,7 +660,7 @@ export class Game {
     if (now < this.nextFire) return;
     this.nextFire = now + CFG.FIRE_MS;
     this.net.send({ t: 'fire', yaw: this.yaw, pitch: this.pitch, rt: now - INTERP_MS });
-    this.recoil = 1;
+    this.recoil = 1; this.muzzleT = 0.05; this.fovPunch = Math.max(this.fovPunch, 1.6);
     this.sfx.play('shoot');
   }
 
@@ -619,12 +709,26 @@ export class Game {
       e.stepT += dt * (6 + e.speed * 1.6);
       let hop = 0, tilt = 0, sq = 0;
       if (isProp || e.kind === 'duck') { hop = Math.abs(Math.sin(e.stepT)) * 0.07 * move; tilt = Math.sin(e.stepT) * 0.09 * move; }
-      else hop = Math.abs(Math.sin(e.stepT * 0.8)) * 0.05 * move;
+      else hop = Math.abs(Math.sin(e.stepT * 1.6)) * 0.05 * move;
       if (e.flags & F.PANIC) { tilt += Math.sin(this.time * 46) * 0.1; sq += Math.sin(this.time * 31) * 0.06; if (Math.random() < dt * 14) this.fx.burst(e.x, e.y + e.h, e.z, 1, [0x9bdcff, 0xffffff], 1.4, 2, 0.6, 0.5); }
       if (e.flags & F.DASH && Math.random() < dt * 30) this.fx.burst(e.x, e.y + 0.1, e.z, 1, [0xffffff, 0xffe5ec], 0.8, 0.8, 0.9, 0.35, 2);
       if (e.hopT > 0) { e.hopT -= dt; hop += Math.sin((1 - e.hopT / 0.45) * Math.PI) * 0.3; sq += Math.sin(e.hopT * 30) * 0.1; }
       if (e.hitT > 0) { e.hitT -= dt; sq += Math.sin(e.hitT * 40) * 0.22 * (e.hitT / 0.3); }
       if (e.kind === 'duck') tilt += Math.sin(this.time * 9) * 0.15;
+      const dizzy = (e.flags & F.DIZZY) !== 0;
+      if (e.legL && e.legR) {
+        const sw = Math.sin(e.stepT * 0.8) * 0.75 * move;
+        e.legL.rotation.x = sw; e.legR.rotation.x = -sw;
+        if (dizzy) tilt += Math.sin(this.time * 7) * 0.22;
+      }
+      if (dizzy && !e.stars) { e.stars = textSprite('✦ ✦ ✦', '#ffe14d', 0.3, false); e.group.add(e.stars); }
+      if (e.stars) { e.stars.visible = dizzy; e.stars.position.set(Math.sin(this.time * 6) * 0.25, e.h + 0.35, Math.cos(this.time * 6) * 0.25); }
+      if (e.eyes) {
+        const want = (e.flags & (F.PANIC | F.REVEAL)) !== 0 || e.hopT > 0 ? 1 : 0;
+        e.eyeK += (want - e.eyeK) * Math.min(1, dt * (want ? 22 : 7));
+        e.eyes.visible = e.eyeK > 0.03;
+        if (e.eyes.visible) { const k = e.eyes.userData.k * e.eyeK * (1 + Math.sin(this.time * 30) * 0.06 * want); e.eyes.scale.set(k, k, k); e.eyes.position.y = e.h + 0.07 * e.eyes.userData.k + hop; }
+      }
       m.position.y = hop; m.rotation.z = tilt;
       const base = e.kind === 'duck' ? 1.5 : 1;
       m.scale.set(base * (1 + sq), base * (1 - sq), base * (1 + sq));
@@ -632,7 +736,7 @@ export class Game {
       const ghost = (e.flags & F.GHOST) !== 0;
       if (isProp) (m as THREE.Mesh).material = ghost ? this.ghostMat : this.world.material;
       // hunter footsteps carry through the store
-      if (e.kind === 'hunter' && e.speed > 2.5 && !mine) { if (e.stepT > Math.PI) { e.stepT -= Math.PI; this.sfx.play('step', [e.x, e.y, e.z], 0.9); } }
+      if (e.legL && e.speed > 2.5 && !mine) { if (e.stepT > Math.PI) { e.stepT -= Math.PI; this.sfx.play('step', [e.x, e.y, e.z], 0.9); } }
       // name labels: you can always recognise your own side
       let label = '';
       if (r && !mine) {
@@ -669,10 +773,17 @@ export class Game {
     // start the ray at the player's depth so toys between the camera and the player are ignored
     const back = this.camDistNow;
     const hit = this.phys.raycast(o.x + dx * back * 0.6, o.y + dy * back * 0.6, o.z + dz * back * 0.6, dx, dy, dz, 14);
-    if (hit.decor < 0) return -1;
-    const d = this.map.decor[hit.decor];
-    if (!d || Math.hypot(d.x - this.body.x, d.y - this.body.y, d.z - this.body.z) > CFG.TRANSFORM_RANGE) return -1;
-    return d.id;
+    const aimed = hit.decor >= 0 ? this.map.decor[hit.decor] : null;
+    if (aimed && Math.hypot(aimed.x - this.body.x, aimed.y - this.body.y, aimed.z - this.body.z) <= CFG.TRANSFORM_RANGE) return aimed.id;
+    // nothing under the crosshair: offer the closest toy roughly in front, so transforming never needs pixel aim
+    let best = -1, bs = 0.72;
+    for (const d of this.map.decor) {
+      const ox = d.x - this.body.x, oz = d.z - this.body.z, dist = Math.hypot(ox, oz);
+      if (dist > 3.2 || dist < 0.05 || Math.abs(d.y - this.body.y) > 1.6) continue;
+      const score = (ox * dx + oz * dz) / (dist * Math.max(0.2, Math.hypot(dx, dz))) - dist * 0.05;
+      if (score > bs) { bs = score; best = d.id; }
+    }
+    return best;
   }
   private camDistNow = 3.4;
   private myFlags = 0;
@@ -681,13 +792,21 @@ export class Game {
   private updateCamera(dt: number) {
     const cam = this.camera;
     if (!this.inGame) {
-      // attract mode: drift around the store
-      this.menuAngle += dt * 0.07;
-      cam.position.set(Math.cos(this.menuAngle) * 8.5, 3.5, Math.sin(this.menuAngle) * 9.5 + 3);
-      cam.lookAt(Math.cos(this.menuAngle + 1.7) * 6, 1.2, Math.sin(this.menuAngle + 1.7) * 6);
+      // menu: a gently swaying hero shot from the entrance, with your own hunter showing off their look
+      this.menuAngle += dt;
+      const sway = Math.sin(this.menuAngle * 0.23);
+      cam.position.set(1.4 + sway * 0.5, 1.5 + Math.sin(this.menuAngle * 0.31) * 0.05, 16.4);
+      cam.lookAt(-0.4 + sway * 0.25, 1.22, 8);
+      if (cam.fov !== 62) { cam.fov = 62; cam.updateProjectionMatrix(); }
+      this.preview.visible = true;
+      this.preview.rotation.y = 0.35 + Math.sin(this.menuAngle * 0.9) * 0.3;
+      this.preview.position.y = Math.abs(Math.sin(this.menuAngle * 2.2)) * 0.04;
+      const pm = this.preview.children[0] as THREE.Group | undefined;
+      if (pm && pm.children[1]) pm.children[1].rotation.x = -0.5 + Math.sin(this.menuAngle * 2.2) * 0.25;
       this.viewmodel.visible = false;
       return;
     }
+    this.preview.visible = false;
     cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     const spectating = !this.alive || this.team === 'spec' || !this.hasMe;
     if (spectating) {
@@ -719,6 +838,9 @@ export class Game {
       const r = this.recoil * this.recoil;
       this.viewmodel.position.set(0.27 + Math.cos(this.bob * 0.5) * 0.008 * Math.min(1, sp / 5), -0.25 + Math.abs(Math.sin(this.bob * 0.5)) * 0.012 * Math.min(1, sp / 5) + r * 0.02, -0.5 + r * 0.12);
       this.viewmodel.rotation.set(r * 0.35, 0, 0);
+      this.muzzleT -= dt; this.muzzle.visible = this.muzzleT > 0;
+      if (this.muzzle.visible) this.muzzle.scale.setScalar(0.8 + Math.random() * 0.9);
+      if (this.myFlags & F.DIZZY) { cam.rotation.z = Math.sin(this.time * 9) * 0.07; cam.rotation.x += Math.sin(this.time * 6) * 0.03; }
     } else {
       this.viewmodel.visible = false;
       const h = this.body.h;
@@ -730,6 +852,13 @@ export class Game {
       this.camDistNow += (dist - this.camDistNow) * Math.min(1, dt * (dist < this.camDistNow ? 30 : 8));
       cam.position.set(tx - dx * this.camDistNow, Math.max(0.25, tyy - dy * this.camDistNow), tz - dz * this.camDistNow);
     }
+    // field of view: right mouse zooms the hunter's aim; shots and catches give a small punch
+    const ads = firstPerson && this.mouseR && this.locked;
+    this.zoomK = ads ? 0.55 : 1;
+    this.fovPunch *= Math.exp(-dt * 9);
+    const fovT = (ads ? this.baseFov * 0.6 : this.baseFov) + this.fovPunch + (this.body.dashLeft > 0 && !firstPerson ? 7 : 0);
+    this.fovNow += (fovT - this.fovNow) * Math.min(1, dt * 14);
+    if (Math.abs(cam.fov - this.fovNow) > 0.05) { cam.fov = this.fovNow; cam.updateProjectionMatrix(); }
     if (this.shake > 0.001) {
       cam.rotation.x += (Math.random() - 0.5) * this.shake * 0.12;
       cam.rotation.y += (Math.random() - 0.5) * this.shake * 0.12;
@@ -853,7 +982,7 @@ export class Game {
       const a = this.acc / STEP, b = this.body;
       this.smooth.multiplyScalar(Math.exp(-dt * 14));
       this.rpos.set(this.prev.x + (b.x - this.prev.x) * a + this.smooth.x, this.prev.y + (b.y - this.prev.y) * a + this.smooth.y, this.prev.z + (b.z - this.prev.z) * a + this.smooth.z);
-      if (this.mouseL && this.locked && this.team === 'hunter' && this.phase === 'hunt' && !this.quackedMe) this.fire();
+      if (this.mouseL && this.locked && this.team === 'hunter' && this.phase === 'hunt' && !this.quackedMe && !(this.myFlags & F.DIZZY)) this.fire();
     }
 
     this.updateCamera(dt);
@@ -882,6 +1011,8 @@ export class Game {
     this.sfx.setListener(this.camera.position.x, this.camera.position.y, this.camera.position.z, d.x, d.y, d.z);
     // renderEvery > 1 draws only every Nth frame (simulation and input still run every frame);
     // used by the automated browser test on machines without a GPU
-    if (++this.frameN % this.renderEvery === 0) this.renderer.render(this.scene, this.camera);
+    if (++this.frameN % this.renderEvery === 0) {
+      if (this.quality === 'high') this.composer.render(); else this.renderer.render(this.scene, this.camera);
+    }
   }
 }

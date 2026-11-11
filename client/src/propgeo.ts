@@ -7,6 +7,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { PROPS, PROP_INDEX } from '../../shared/props';
+import { HATS, HUNTER_COLORS } from '../../shared/constants';
 
 type G = THREE.BufferGeometry;
 const tmpC = new THREE.Color();
@@ -255,6 +256,7 @@ export function propGeometry(type: number): THREE.BufferGeometry {
   const sx = def.w / (bb.max.x - bb.min.x), sy = def.h / (bb.max.y - bb.min.y), sz = def.d / (bb.max.z - bb.min.z);
   g.translate(-(bb.max.x + bb.min.x) / 2, -bb.min.y, -(bb.max.z + bb.min.z) / 2);
   g.scale(sx, sy, sz);
+  bakeAO(g, def.h);
   g.computeBoundingBox();
   g.computeBoundingSphere();
   cache.set(type, g);
@@ -265,22 +267,65 @@ export function mergeColored(parts: G[]): THREE.BufferGeometry {
   return mergeGeometries(parts, false)!;
 }
 
-/** The hunters: chunky toy-store security guards. Returns separate body and blaster-arm geometry. */
-export function hunterGeometry(): { body: THREE.BufferGeometry; arm: THREE.BufferGeometry } {
-  const NAVY = 0x264653, VEST = 0xff6b35, SKIN = 0xf2c9a1;
+export interface HunterParts { body: THREE.BufferGeometry; leg: THREE.BufferGeometry; arm: THREE.BufferGeometry; }
+const hunterCache = new Map<number, HunterParts>();
+
+/**
+ * The hunters: chunky toy-store security guards. `look` picks a vest colour and a hat, so every
+ * hunter is recognisable at a glance. Legs and the blaster arm are separate so they can animate.
+ */
+export function hunterGeometry(look = 0): HunterParts {
+  const key = look & 63;
+  const hit = hunterCache.get(key);
+  if (hit) return hit;
+  const NAVY = 0x264653, SKIN = 0xf2c9a1, VEST = HUNTER_COLORS[(key >> 3) % HUNTER_COLORS.length];
+  const hat = (key & 7) % HATS.length;
+  const top: G[] =
+    hat === 0 ? [cyl(0.22, 0.22, 0.1, 0x1d3557, 0, 1.72, 0), box(0.3, 0.03, 0.2, 0x1d3557, 0, 1.68, 0.24), cyl(0.06, 0.06, 0.02, YEL, 0, 1.73, 0.21, H)]
+    : hat === 1 ? [sph(0.235, YEL, 0, 1.66, 0, 1, 0.8, 1), box(0.52, 0.03, 0.56, YEL, 0, 1.66, 0.03), sph(0.05, WHT, 0, 1.74, 0.21), box(0.06, 0.2, 0.3, ORG, 0, 1.76, 0)]
+    : hat === 2 ? [cone(0.16, 0.4, PUR, 0, 1.93, 0), sph(0.045, YEL, 0, 2.14, 0), tor(0.155, 0.02, YEL, 0, 1.74, 0), sph(0.03, RED, 0.08, 1.9, 0.1), sph(0.03, GRN, -0.07, 1.84, 0.12)]
+    : hat === 3 ? [sph(0.215, RED, 0, 1.66, 0, 1, 0.7, 1), sph(0.215, BLUE, 0, 1.661, 0, 0.5, 0.71, 1.01), cyl(0.015, 0.015, 0.12, DGREY, 0, 1.86, 0), box(0.5, 0.02, 0.07, YEL, 0, 1.92, 0, 0, 0.5), sph(0.03, RED, 0, 1.93, 0)]
+    : hat === 4 ? [cyl(0.17, 0.17, 0.3, BLK, 0, 1.9, 0), cyl(0.28, 0.28, 0.03, BLK, 0, 1.75, 0), cyl(0.175, 0.175, 0.06, RED, 0, 1.8, 0)]
+    : [cyl(0.21, 0.19, 0.12, YEL, 0, 1.78, 0), ...[0, 1, 2, 3, 4, 5].map((i) => cone(0.05, 0.14, YEL, Math.cos(i * 1.047) * 0.17, 1.9, Math.sin(i * 1.047) * 0.17, 0, 0, 5)), sph(0.035, RED, 0, 1.79, 0.2), sph(0.03, BLUE, 0.17, 1.79, 0.1), sph(0.03, GRN, -0.17, 1.79, 0.1)];
   const body = mergeGeometries([
-    box(0.2, 0.75, 0.24, NAVY, -0.13, 0.375, 0), box(0.2, 0.75, 0.24, NAVY, 0.13, 0.375, 0),
-    box(0.24, 0.1, 0.34, BLK, -0.13, 0.05, 0.04), box(0.24, 0.1, 0.34, BLK, 0.13, 0.05, 0.04),
     box(0.56, 0.62, 0.32, VEST, 0, 1.06, 0), box(0.58, 0.07, 0.34, YEL, 0, 0.95, 0), box(0.58, 0.07, 0.34, YEL, 0, 1.2, 0),
-    box(0.2, 0.12, 0.02, WHT, -0.13, 1.25, 0.165), box(0.14, 0.5, 0.2, VEST, -0.36, 1.1, 0),
-    sph(0.09, SKIN, -0.36, 0.82, 0), sph(0.21, SKIN, 0, 1.56, 0), sph(0.03, BLK, -0.08, 1.6, 0.18), sph(0.03, BLK, 0.08, 1.6, 0.18),
-    box(0.12, 0.03, 0.03, BLK, 0, 1.49, 0.2), cyl(0.22, 0.22, 0.1, 0x1d3557, 0, 1.72, 0), box(0.3, 0.03, 0.2, 0x1d3557, 0, 1.68, 0.24), cyl(0.06, 0.06, 0.02, YEL, 0, 1.73, 0.21, H),
+    box(0.2, 0.12, 0.02, WHT, -0.13, 1.25, 0.165), box(0.5, 0.1, 0.3, NAVY, 0, 0.74, 0), box(0.14, 0.5, 0.2, VEST, -0.36, 1.1, 0),
+    sph(0.09, SKIN, -0.36, 0.82, 0), sph(0.21, SKIN, 0, 1.56, 0), sph(0.05, WHT, -0.08, 1.6, 0.17), sph(0.05, WHT, 0.08, 1.6, 0.17),
+    sph(0.026, BLK, -0.08, 1.6, 0.21), sph(0.026, BLK, 0.08, 1.6, 0.21), box(0.12, 0.03, 0.03, BLK, 0, 1.48, 0.2), ...top,
   ], false)!;
+  // leg geometry hangs from its hip pivot at the origin
+  const leg = mergeGeometries([box(0.2, 0.72, 0.24, NAVY, 0, -0.36, 0), box(0.24, 0.1, 0.34, BLK, 0, -0.7, 0.04)], false)!;
   const arm = mergeGeometries([
     box(0.14, 0.2, 0.46, VEST, 0, 0, 0.18), sph(0.09, SKIN, 0, 0, 0.43),
     box(0.1, 0.16, 0.5, ORG, 0, 0.07, 0.62), box(0.08, 0.16, 0.1, BLUE, 0, -0.05, 0.5), cyl(0.07, 0.07, 0.08, YEL, 0, 0.07, 0.9, H), cyl(0.04, 0.04, 0.1, GRN, 0, 0.17, 0.6, H),
   ], false)!;
-  return { body, arm };
+  for (const g of [body, leg, arm]) bakeAO(g, 1.9);
+  const parts = { body, leg, arm };
+  hunterCache.set(key, parts);
+  return parts;
+}
+
+/** A pair of googly eyes. They pop out of a prop whenever it gives itself away. */
+let eyesGeo: THREE.BufferGeometry | null = null;
+export function eyesGeometry(): THREE.BufferGeometry {
+  return (eyesGeo ??= mergeGeometries([
+    sph(0.1, WHT, -0.11, 0, 0, 1, 1, 0.6), sph(0.1, WHT, 0.11, 0, 0, 1, 1, 0.6),
+    sph(0.045, BLK, -0.1, -0.02, 0.05, 1, 1, 0.5), sph(0.045, BLK, 0.12, 0.01, 0.05, 1, 1, 0.5),
+  ], false)!);
+}
+
+/**
+ * Bake a soft ambient-occlusion gradient into vertex colours: darker near the base and on
+ * downward-facing surfaces. Free at runtime, and it grounds every object on the floor.
+ */
+export function bakeAO(g: THREE.BufferGeometry, height: number, strength = 0.34) {
+  const pos = g.attributes.position, nor = g.attributes.normal, col = g.attributes.color;
+  for (let i = 0; i < pos.count; i++) {
+    const t = Math.min(1, Math.max(0, pos.getY(i) / (height * 0.5)));
+    let k = 1 - strength * (1 - t * t * (3 - 2 * t));
+    if (nor.getY(i) < -0.5) k *= 0.8;
+    col.setXYZ(i, col.getX(i) * k, col.getY(i) * k, col.getZ(i) * k);
+  }
 }
 
 /** First-person toy blaster. Barrel points towards -Z (into the screen). */

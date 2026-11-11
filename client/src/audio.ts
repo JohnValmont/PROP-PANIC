@@ -29,7 +29,7 @@ export class Sfx {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -14; comp.ratio.value = 6;
     this.master = ctx.createGain();
-    this.master.gain.value = this.muted ? 0 : 0.8;
+    this.master.gain.value = this.muted ? 0 : this.volume;
     this.master.connect(comp); comp.connect(ctx.destination);
     this.musicGain = ctx.createGain();
     this.musicGain.gain.value = 0.5;
@@ -40,9 +40,12 @@ export class Sfx {
     if (this.musicMode !== 'none') { const m = this.musicMode; this.musicMode = 'none'; this.music(m); }
   }
 
+  volume = 0.8;
+  setVolume(v: number) { this.volume = v; if (this.ctx && !this.muted) this.master.gain.setTargetAtTime(v, this.ctx.currentTime, 0.02); }
+
   toggleMute(): boolean {
     this.muted = !this.muted;
-    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.8, this.ctx.currentTime, 0.02);
+    if (this.ctx) this.master.gain.setTargetAtTime(this.muted ? 0 : this.volume, this.ctx.currentTime, 0.02);
     return this.muted;
   }
 
@@ -110,6 +113,9 @@ export class Sfx {
       case 'shoot': T({ type: 'square', f0: 980, f1: 180, dur: 0.13, gain: 0.16 }); N({ dur: 0.07, freq: 5000, kind: 'highpass', gain: 0.12 }); break;
       case 'hit': T({ type: 'triangle', f0: 880, dur: 0.09, gain: 0.3 }); T({ type: 'triangle', f0: 1320, dur: 0.14, gain: 0.3, at: 0.06 }); break;
       case 'bonk': T({ type: 'sine', f0: 190, f1: 70, dur: 0.2, gain: 0.5 }); N({ dur: 0.06, freq: 900, gain: 0.25 }); break;
+      case 'bonkHead': T({ type: 'sine', f0: 140, f1: 520, dur: 0.32, gain: 0.5, vib: 50, vibHz: 26 }); N({ dur: 0.07, freq: 700, gain: 0.4 }); T({ type: 'triangle', f0: 1568, dur: 0.1, gain: 0.2, at: 0.12 }); T({ type: 'triangle', f0: 2093, dur: 0.14, gain: 0.2, at: 0.22 }); break;
+      case 'sneeze': N({ dur: 0.18, freq: 900, f1: 3800, kind: 'bandpass', gain: 0.15 }); N({ dur: 0.22, freq: 4200, f1: 600, kind: 'bandpass', gain: 0.5, at: 0.2 }); T({ type: 'sawtooth', f0: 700, f1: 260, dur: 0.2, gain: 0.25, at: 0.2 }); break;
+      case 'levelup': [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => T({ type: 'triangle', f0: f, dur: 0.2, gain: 0.22, at: i * 0.08 })); break;
       case 'thud': N({ dur: 0.08, freq: 500, gain: 0.2 }); break;
       case 'kill': N({ dur: 0.25, freq: 3000, f1: 400, gain: 0.3 }); [523, 659, 784, 1047].forEach((f, i) => T({ type: 'triangle', f0: f, dur: 0.16, gain: 0.25, at: i * 0.07 })); break;
       case 'pop': T({ type: 'sine', f0: 500, f1: 1400, dur: 0.07, gain: 0.35 }); N({ dur: 0.12, freq: 2500, kind: 'bandpass', gain: 0.3 }); break;

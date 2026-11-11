@@ -21,7 +21,7 @@ const PUBLIC_FILL = 5;
 const DC_GRACE_MS = 30_000;
 
 function newStats() {
-  return { shots: 0, hits: 0, innocents: 0, kills: 0, taunts: 0, bamboozles: 0, near: 0, quacks: 0, diedAt: 0, pts: 0 };
+  return { shots: 0, hits: 0, innocents: 0, kills: 0, bonks: 0, escapes: 0, taunts: 0, bamboozles: 0, near: 0, quacks: 0, diedAt: 0, pts: 0 };
 }
 
 export interface Decoy { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number; nextHop: number; hopUntil: number; }
@@ -42,6 +42,7 @@ export class Player {
   bank = 0.3; bankT = now(); ack = 0;
   score = 0; hunterTurns = 0;
   stats = newStats();
+  look = 0; bonkUntil = 0; nextBonkAt = 0; escapeAt = 0;
   connected = true; dcAt = 0; host = false;
   bot: Bot | null = null;
   hist: number[][] = [];
@@ -81,6 +82,8 @@ export class Room {
   private panic = false;
   private firstDeath = 0;
   private lastEventKind = '';
+  private lastProp = false;
+  private roundProps = 0;
   now = now();
 
   constructor(public code: string, public isPublic: boolean) {
@@ -106,9 +109,10 @@ export class Room {
   }
 
   // ================================================================ membership
-  addPlayer(name: string, ws: WebSocket | null, bot = false): Player {
+  addPlayer(name: string, ws: WebSocket | null, bot = false, look = Math.floor(Math.random() * 64)): Player {
     const p = new Player(this.nextId++, name, Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2), ws);
     if (bot) p.bot = new Bot();
+    p.look = look;
     this.players.set(p.id, p);
     if (p.human && ![...this.players.values()].some((q) => q.host)) p.host = true;
     p.disguise = pickOf(STARTER_PROPS);
@@ -184,7 +188,7 @@ export class Room {
   roster(): RosterEntry[] {
     return [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, team: p.team, alive: p.alive, bot: !!p.bot, host: p.host,
-      score: Math.round(p.score), disguise: p.disguise, conn: p.connected, quack: p.team === 'hunter' && p.quackUntil > this.now,
+      score: Math.round(p.score), disguise: p.disguise, conn: p.connected, quack: p.team === 'hunter' && p.quackUntil > this.now, look: p.look,
     }));
   }
 
@@ -221,6 +225,7 @@ export class Room {
   private spawnProp(p: Player) {
     p.team = 'prop'; p.alive = true; p.hp = CFG.PROP_HP;
     p.quackUntil = p.panicUntil = p.ghostUntil = p.revealUntil = p.boostUntil = 0;
+    p.bonkUntil = p.nextBonkAt = p.escapeAt = 0;
     p.cd = { decoy: 0, ghost: 0, taunt: 0, pulse: 0, shock: 0 }; p.cdDirty = true;
     const d = propBody(PROPS[p.disguise]);
     p.body.hw = d.hw; p.body.h = d.h;
@@ -229,7 +234,7 @@ export class Room {
   }
 
   private spawnHunter(p: Player) {
-    p.team = 'hunter'; p.alive = true; p.focus = CFG.FOCUS_MAX;
+    p.team = 'hunter'; p.alive = true; p.focus = CFG.FOCUS_MAX; p.bonkUntil = 0;
     p.quackUntil = p.panicUntil = p.ghostUntil = p.revealUntil = p.boostUntil = 0;
     p.cd = { decoy: 0, ghost: 0, taunt: 0, pulse: this.now + CFG.HIDE_MS + 6000, shock: this.now + CFG.HIDE_MS + 8000 }; p.cdDirty = true;
     p.body.hw = CFG.HUNTER_HW; p.body.h = CFG.HUNTER_H;
@@ -278,7 +283,7 @@ export class Room {
     if (all.length < 2) { this.toLobby(); return; }
     this.round++;
     this.loadMap(1000 + Math.floor(Math.random() * 1e9));
-    this.chaos = 0; this.event = null; this.decoys = []; this.pulses = []; this.panic = false; this.firstDeath = 0;
+    this.chaos = 0; this.event = null; this.decoys = []; this.pulses = []; this.panic = false; this.firstDeath = 0; this.lastProp = false; this.roundProps = 0;
     this.world.gravScale = 1; this.countdownAt = 0;
 
     const nH = all.length <= 5 ? 1 : all.length <= 9 ? 2 : 3;
@@ -320,6 +325,8 @@ export class Room {
     const add = (title: string, p: Player | null, detail: (p: Player) => string) => { if (p && awards.length < 4 && !awards.some((a) => a.name === p.name)) awards.push({ title, name: p.name, detail: detail(p) }); };
     add('Untouchable', best((p) => (p.team === 'prop' && p.alive && p.hp >= CFG.PROP_HP ? 1 + p.stats.near : 0), 1), () => 'survived without a scratch');
     add('Furniture Assassin', best((p) => p.stats.innocents, 3), (p) => `murdered ${p.stats.innocents} innocent toys`);
+    add('Bonk Master', best((p) => p.stats.bonks, 1), (p) => `landed on a hunter's head ${p.stats.bonks}×`);
+    add('Escape Artist', best((p) => p.stats.escapes, 2), (p) => `got hit and got away ${p.stats.escapes}×`);
     add('Bamboozler', best((p) => p.stats.bamboozles, 1), (p) => `fooled hunters ${p.stats.bamboozles}× with decoys`);
     add('Sharpshooter', best((p) => (p.stats.shots >= 4 && p.stats.hits >= 2 ? p.stats.hits / p.stats.shots : 0), 0.34), (p) => `${Math.round((100 * p.stats.hits) / p.stats.shots)}% accuracy`);
     add('Daredevil', best((p) => p.stats.near, 5), (p) => `${Math.round(p.stats.near)}s within arm's reach of a hunter`);
@@ -420,7 +427,7 @@ export class Room {
 
   fire(p: Player, yaw: number, pitch: number, rt: number) {
     const t = this.now;
-    if (this.phase !== 'hunt' || p.team !== 'hunter' || !p.alive || p.quackUntil > t || t < p.nextFireAt) return;
+    if (this.phase !== 'hunt' || p.team !== 'hunter' || !p.alive || p.quackUntil > t || p.bonkUntil > t || t < p.nextFireAt) return;
     p.nextFireAt = t + CFG.FIRE_MS - 40;
     p.lastShotAt = t;
     p.stats.shots++;
@@ -452,6 +459,7 @@ export class Room {
       this.points(p, 20, '');
       victim.hp -= CFG.DMG;
       victim.panicUntil = t + CFG.PANIC_BURST_MS;
+      victim.escapeAt = t + CFG.ESCAPE_MS;
       victim.revealUntil = Math.max(victim.revealUntil, t + 1500);
       victim.ghostUntil = 0;
       if (victim.hp <= 0) {
@@ -570,7 +578,7 @@ export class Room {
   // ================================================================ chaos
   private triggerChaos() {
     const t = this.now;
-    const kinds = ['blackout', 'poltergeist', 'shuffle', 'moon'].filter((k) => k !== this.lastEventKind);
+    const kinds = ['blackout', 'poltergeist', 'shuffle', 'moon', 'sneeze'].filter((k) => k !== this.lastEventKind);
     const kind = pickOf(kinds);
     this.lastEventKind = kind;
     this.chaos = 0;
@@ -578,6 +586,18 @@ export class Room {
     if (kind === 'blackout') ms = CFG.BLACKOUT_MS;
     else if (kind === 'poltergeist') ms = CFG.POLTERGEIST_MS;
     else if (kind === 'moon') { ms = CFG.MOON_MS; this.world.gravScale = 0.3; }
+    else if (kind === 'sneeze') {
+      // the one chaos event that favours hunters: every real prop sneezes itself into the air
+      ms = 2500;
+      const pts: number[][] = [];
+      for (const p of this.players.values()) {
+        if (p.team !== 'prop' || !p.alive) continue;
+        p.body.vy = 6.2; p.body.ground = false; p.lastMovedAt = t; p.ghostUntil = 0;
+        pts.push([p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z)]);
+      }
+      for (const d of this.decoys) { d.hopUntil = t + 700; this.broadcast({ t: 'ev', k: 'decoyHop', id: d.id }); pts.push([0, d.x, d.y, d.z]); }
+      this.broadcast({ t: 'ev', k: 'sneeze', pts });
+    }
     else {
       ms = 3000;
       const pool = PROPS.map((_, i) => i).filter((i) => PROPS[i].h <= 1.4);
@@ -670,7 +690,7 @@ export class Room {
       this.broadcast({ t: 'ev', k: 'panic' });
     }
     if (t >= this.nextRoll) {
-      this.nextRoll = t + (this.panic ? CFG.ROLLCALL_PANIC_MS : CFG.ROLLCALL_MS);
+      this.nextRoll = t + (this.panic ? CFG.ROLLCALL_PANIC_MS : this.lastProp ? CFG.ROLLCALL_LAST_MS : CFG.ROLLCALL_MS);
       const pts: number[][] = [];
       for (const p of this.players.values()) if (p.team === 'prop' && p.alive) pts.push([r2(p.body.x), r2(p.body.y), r2(p.body.z)]);
       for (const d of this.decoys) pts.push([d.x, d.y, d.z]);
@@ -707,6 +727,35 @@ export class Room {
     }
     this.pulses = this.pulses.filter((p) => t - p.t0 < 1900);
 
+    // last prop standing: a showdown, with a little help for the survivor
+    this.roundProps = Math.max(this.roundProps, propsAlive + (this.firstDeath ? 1 : 0));
+    if (propsAlive === 1 && !this.lastProp && this.roundProps >= 2) {
+      this.lastProp = true;
+      const last = [...this.players.values()].find((p) => p.team === 'prop' && p.alive)!;
+      last.cd.ghost = t; last.cd.decoy = t; last.cdDirty = true; last.body.dashCd = 0;
+      this.points(last, 50, 'Last prop standing');
+      this.nextRoll = Math.min(this.nextRoll, t + 9000);
+      this.broadcast({ t: 'ev', k: 'last', who: last.id });
+    }
+
+    // head bonks: a prop that drops onto a hunter's head leaves them seeing stars
+    for (const q of this.players.values()) {
+      if (q.team !== 'prop' || !q.alive) continue;
+      if (q.escapeAt && t >= q.escapeAt) { q.escapeAt = 0; q.stats.escapes++; this.points(q, 40, 'Great escape!'); }
+      if (q.body.vy > -1.5 || t < q.nextBonkAt) continue;
+      for (const h of this.players.values()) {
+        if (h.team !== 'hunter' || !h.alive || h.quackUntil > t || h.bonkUntil > t) continue;
+        const top = h.body.y + CFG.HUNTER_H;
+        if (q.body.y > top + 0.3 || q.body.y < top - 0.6 || Math.hypot(q.body.x - h.body.x, q.body.z - h.body.z) > h.body.hw + q.body.hw + 0.12) continue;
+        h.bonkUntil = t + CFG.BONK_MS;
+        q.nextBonkAt = t + CFG.BONK_CD; q.body.vy = 8.5; q.body.ground = false; q.stats.bonks++;
+        this.points(q, 50, 'BONK!');
+        this.chaos = Math.min(100, this.chaos + CFG.CHAOS_TAUNT);
+        this.broadcast({ t: 'ev', k: 'bonk', who: q.id, on: h.id, x: r2(h.body.x), y: r2(top), z: r2(h.body.z) });
+        break;
+      }
+    }
+
     // survival + nerve scoring
     for (const p of this.players.values()) {
       if (p.team !== 'prop' || !p.alive) continue;
@@ -728,6 +777,7 @@ export class Room {
       if (p.ghostUntil > t) f |= F.GHOST;
       if (p.body.dashLeft > 0) f |= F.DASH;
       if (p.revealUntil > t) f |= F.REVEAL;
+      if (p.bonkUntil > t) f |= F.DIZZY;
       flagsOf.set(p, f);
       rows.push({ p, row: [p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f] });
     }
@@ -744,7 +794,7 @@ export class Room {
       }
       const b = p.body;
       const me = p.alive && p.team !== 'spec'
-        ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0]
+        ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0, b.air]
         : null;
       p.ws.send(JSON.stringify({ t: 's', st, ack: p.ack, me, p: list, ch }));
       if (p.cdDirty) { p.cdDirty = false; this.send(p, { t: 'cd', ...p.cd }); }

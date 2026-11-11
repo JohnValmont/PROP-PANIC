@@ -14,6 +14,7 @@
 </head>
 <body>
   <canvas id="c"></canvas>
+  <div id="boot"><div class="bootLogo">PROP PANIC</div><div class="bootBar"><i></i></div><div class="bootMsg">Stocking the shelves…</div></div>
 
   <!-- ============================== in-game HUD ============================== -->
   <div id="hud" class="hidden">
@@ -64,23 +65,33 @@
   </div>
 
   <!-- ============================== main menu ============================== -->
+  <div id="vig"></div>
   <div id="menu">
-    <div class="menuCard">
-      <h1 class="logo"><span class="l1">PROP</span><span class="l2">PANIC</span></h1>
+    <div class="hero">
+      <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
       <div class="tagline">Blend in. Don't get caught.</div>
+      <div class="feats">
+        <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 32 toys. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
+        <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent toys and you turn into a duck.</span></div></div>
+        <div class="feat"><i class="fi f3"></i><div><b>Survive the chaos</b><span>Blackouts, haunted toys, sneezing fits and a frantic final 30 seconds.</span></div></div>
+      </div>
+      <div id="online"></div>
+    </div>
+    <div class="menuCard">
+      <div class="lvl"><div class="lvlBadge" id="lvlBadge">1</div><div class="lvlMid"><div class="lvlTop"><span>LEVEL</span><span id="lvlXp"></span></div><div class="lvlBar"><i id="lvlFill"></i></div></div></div>
       <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
       <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
-      <div class="row">
-        <button id="createBtn" class="btn teal">Create private room</button>
+      <div class="row split">
+        <button id="createBtn" class="btn teal">Private room</button>
         <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
       </div>
       <div id="menuError"></div>
-      <div class="how">
-        <div><b class="tp">PROPS</b> turn into toys, hide in plain sight, taunt for points and drop decoys.</div>
-        <div><b class="th">HUNTERS</b> zap the fakes — but shoot too many innocent toys and you get turned into a duck.</div>
-        <div><b class="tc">CHAOS</b> builds all round: blackouts, haunted toys, forced shuffles. Survive the final PANIC!</div>
+      <div class="custom">
+        <div class="tiny">YOUR HUNTER</div>
+        <div id="swatches" class="swatches"></div>
+        <div id="hats" class="hats"></div>
       </div>
-      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Mouse</kbd> look · <kbd>E</kbd>/<kbd>Click</kbd> act · <kbd>Q</kbd> <kbd>F</kbd> abilities · <kbd>Shift</kbd> dash · <kbd>T</kbd> taunt · <kbd>Tab</kbd> scores</div>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Click</kbd>/<kbd>E</kbd> act · <kbd>Q</kbd> <kbd>F</kbd> abilities · <kbd>Shift</kbd> dash · <kbd>T</kbd> taunt</div>
     </div>
   </div>
 
@@ -89,8 +100,13 @@
       <h2>Paused</h2>
       <button id="resumeBtn" class="btn big yellow">Click to play</button>
       <div class="row"><button id="gfxBtn" class="btn teal">Graphics: High</button><button id="muteBtn" class="btn teal">Sound: On</button></div>
+      <div class="sliders">
+        <label>Mouse sensitivity <input id="sensRange" type="range" min="0.3" max="3" step="0.05" /></label>
+        <label>Field of view <input id="fovRange" type="range" min="60" max="100" step="1" /></label>
+        <label>Volume <input id="volRange" type="range" min="0" max="1" step="0.05" /></label>
+      </div>
       <button id="leaveBtn" class="btn pink">Leave game</button>
-      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> ghost / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> ghost / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation (prop) / zoom (hunter) · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
     </div>
   </div>
 

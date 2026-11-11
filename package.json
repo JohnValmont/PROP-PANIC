@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx test/smoke.ts",
     "test:e2e": "node test/e2e.cjs",
-    "test:soak": "tsx test/soak.ts"
+    "test:soak": "tsx test/soak.ts",
+    "test:mechanics": "tsx test/mechanics.ts"
   },
   "dependencies": {
     "three": "^0.170.0",

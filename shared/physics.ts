@@ -15,6 +15,8 @@ export interface Body {
   ground: boolean;
   dashLeft: number;
   dashCd: number;
+  /** Seconds since last on the ground (for coyote-time jumps). */
+  air: number;
 }
 
 export interface Cmd {
@@ -27,7 +29,7 @@ export interface Cmd {
 }
 
 export function newBody(hw: number, h: number): Body {
-  return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, hw, h, ground: false, dashLeft: 0, dashCd: 0 };
+  return { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, hw, h, ground: false, dashLeft: 0, dashCd: 0, air: 0 };
 }
 
 const E = 1e-4;
@@ -144,7 +146,9 @@ export class World {
 
     const wasGround = b.ground;
     b.vy -= CFG.GRAVITY * this.gravScale * dt;
-    if (c.jump && b.ground) { b.vy = jumpV; }
+    // coyote time: a jump still counts for a moment after walking off a ledge
+    if (b.ground) b.air = 0; else b.air += dt;
+    if (c.jump && (b.ground || (b.air < CFG.COYOTE && b.vy <= 0))) { b.vy = jumpV; b.air = 1; }
     if (b.vy < -40) b.vy = -40;
 
     // sub-step so fast bodies can never tunnel through thin walls, whatever dt the command carries

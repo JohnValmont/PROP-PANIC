@@ -46,6 +46,7 @@ function toMenu(message = '') {
   err.textContent = message;
   history.replaceState(null, '', location.pathname);
   game.sfx.music('lobby');
+  game.onMenu();
 }
 
 game.net.onState = (s, info) => {
@@ -95,6 +96,34 @@ $('copyLink').onclick = async () => {
 
 // HUD buttons give focus straight back so game keys can't re-trigger them
 for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#hud button, #pause button'))) b.addEventListener('click', () => b.blur());
+
+// ---------------------------------------------------------------- profile: level, hunter colour and hat
+import { HATS, HAT_LEVEL, HUNTER_COLORS, levelXp, xpLevel } from '../../shared/constants';
+function renderProfile() {
+  const lvl = xpLevel(game.xp), lo = levelXp(lvl), hi = levelXp(lvl + 1);
+  $('lvlBadge').textContent = String(lvl);
+  $('lvlXp').textContent = `${Math.round(game.xp - lo)} / ${hi - lo} XP`;
+  $('lvlFill').style.width = `${Math.min(100, ((game.xp - lo) / (hi - lo)) * 100)}%`;
+  const color = game.look >> 3, hat = game.look & 7;
+  $('swatches').innerHTML = HUNTER_COLORS.map((c, i) => `<div class="sw${i === color ? ' on' : ''}" data-c="${i}" style="background:#${c.toString(16).padStart(6, '0')}"></div>`).join('');
+  $('hats').innerHTML = HATS.map((h, i) => `<button class="hat${i === hat ? ' on' : ''}" data-h="${i}" ${lvl < HAT_LEVEL[i] ? 'disabled' : ''}>${h}${lvl < HAT_LEVEL[i] ? ` · Lv ${HAT_LEVEL[i]}` : ''}</button>`).join('');
+}
+$('swatches').onclick = (e) => { const c = (e.target as HTMLElement).dataset.c; if (c !== undefined) { game.setLook(Number(c) * 8 + (game.look & 7)); game.sfx.play('click'); renderProfile(); } };
+$('hats').onclick = (e) => { const h = (e.target as HTMLElement).dataset.h; if (h !== undefined) { game.setLook((game.look >> 3) * 8 + Number(h)); game.sfx.play('click'); renderProfile(); } };
+if (xpLevel(game.xp) < HAT_LEVEL[game.look & 7]) game.setLook((game.look >> 3) * 8);
+renderProfile();
+game.onMenu = renderProfile;
+
+// ---------------------------------------------------------------- settings sliders
+const sens = $<HTMLInputElement>('sensRange'), fov = $<HTMLInputElement>('fovRange'), vol = $<HTMLInputElement>('volRange');
+sens.value = String(game.sens / 0.0022); fov.value = String(game.baseFov); vol.value = String(game.sfx.volume);
+sens.oninput = () => { game.sens = Number(sens.value) * 0.0022; localStorage.setItem('pp_sens', String(game.sens)); };
+fov.oninput = () => { game.baseFov = Number(fov.value); localStorage.setItem('pp_fov', fov.value); };
+vol.oninput = () => { game.sfx.setVolume(Number(vol.value)); localStorage.setItem('pp_vol', vol.value); };
+
+// ---------------------------------------------------------------- live player count + boot splash
+fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online').textContent = `● ${h.humans} playing right now`; }).catch(() => {});
+requestAnimationFrame(() => requestAnimationFrame(() => { $('boot').classList.add('done'); setTimeout(() => $('boot').remove(), 600); }));
 
 // first interaction unlocks audio and starts the menu tune
 window.addEventListener('pointerdown', () => { game.sfx.unlock(); if (!game.inGame) game.sfx.music('lobby'); }, { once: true });

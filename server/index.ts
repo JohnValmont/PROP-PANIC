@@ -116,7 +116,8 @@ wss.on('connection', (ws: WebSocket) => {
     } else {
       room = findPublic();
     }
-    player = room.addPlayer(cleanName(m.name), ws);
+    const look = typeof m.look === 'number' && Number.isFinite(m.look) ? Math.max(0, Math.min(63, m.look | 0)) : 0;
+    player = room.addPlayer(cleanName(m.name), ws, false, look);
   });
 
   ws.on('close', () => {

@@ -57,6 +57,12 @@ export const CFG = {
   REVEAL_MS: 4000,
   SHOCK_RADIUS: 4.5,
 
+  BONK_MS: 1700,
+  BONK_CD: 12_000,
+  ESCAPE_MS: 6000,
+  COYOTE: 0.1,
+  ROLLCALL_LAST_MS: 15_000,
+
   ROLLCALL_MS: 30_000,
   ROLLCALL_PANIC_MS: 7_000,
 
@@ -73,7 +79,14 @@ export type Phase = 'lobby' | 'hiding' | 'hunt' | 'end';
 export type Team = 'prop' | 'hunter' | 'spec';
 
 /** Entity flag bits used in snapshots. */
-export const F = { ALIVE: 1, PANIC: 2, QUACK: 4, GHOST: 8, DASH: 16, REVEAL: 32 };
+export const F = { ALIVE: 1, PANIC: 2, QUACK: 4, GHOST: 8, DASH: 16, REVEAL: 32, DIZZY: 64 };
+
+/** Hunter cosmetics. A player's look is colour * 8 + hat. Hats unlock with player level (client-side, cosmetic only). */
+export const HUNTER_COLORS = [0xff6b35, 0x2ec4b6, 0xef476f, 0x9b5de5, 0xffd166, 0x118ab2, 0x06d6a0, 0x495057];
+export const HATS = ['Cap', 'Hard Hat', 'Party Hat', 'Propeller', 'Top Hat', 'Crown'];
+export const HAT_LEVEL = [1, 1, 2, 3, 5, 8];
+export const xpLevel = (xp: number) => Math.floor(Math.sqrt(Math.max(0, xp) / 150)) + 1;
+export const levelXp = (level: number) => (level - 1) * (level - 1) * 150;
 
 export const TAUNTS = ['Squeak', 'Honk', 'Boing', 'Raspberry', 'Quack'];
 
