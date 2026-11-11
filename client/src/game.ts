@@ -268,7 +268,18 @@ export class Game {
     this.preview.add(this.previewRig.root);
   }
 
-  requestLock() { if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
+  // touch devices have no pointer to lock: the game counts as "locked" whenever it is not paused
+  touch = false; touchPaused = false; stick = { x: 0, y: 0 };
+  /** Look around by a pointer delta in pixels (shared by touch drag). */
+  turn(mx: number, my: number) {
+    if (!this.locked) return;
+    this.yaw -= mx * this.sens * this.zoomK;
+    this.pitch -= my * this.sens * this.zoomK * (this.invertY ? -1 : 1);
+    const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
+    this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
+  }
+  touchFire(down: boolean) { if (!this.locked) return; this.mouseL = down; if (down && this.team === 'prop') this.tryTransform(); }
+  requestLock() { if (this.touch) return; if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
 
   // ================================================================ input
   private bindInput() {
@@ -678,6 +689,7 @@ export class Game {
     let mz = (k.has(B.fwd) || k.has('ArrowUp') ? 1 : 0) - (k.has(B.back) || k.has('ArrowDown') ? 1 : 0);
     let jump = k.has(B.jump), dash = this.dashQueued;
     this.dashQueued = false;
+    if (this.touch) { mx = this.stick.x; mz = -this.stick.y; }
     if (!this.canMove || !this.locked) { mx = 0; mz = 0; jump = false; dash = false; }
     const moving = mx !== 0 || mz !== 0;
     if (this.team === 'prop') {
@@ -1037,6 +1049,7 @@ export class Game {
     const dt = Math.min(0.1, raw);
     this.last = t;
     this.time += dt;
+    if (this.touch) this.locked = this.inGame && !this.touchPaused;
     this.hitch = raw > 0.2 ? 2 : Math.max(0, this.hitch - 1);
 
     // adaptive quality: if a machine can't hold a playable frame rate, drop shadows once

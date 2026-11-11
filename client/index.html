@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <meta name="mobile-web-app-capable" content="yes" />
   <title>PROP PANIC — Blend in. Don't get caught.</title>
   <meta name="description" content="A chaotic multiplayer prop-hunt party game in your browser. Become a rubber duck. Fool your friends. Don't get caught." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -14,6 +15,12 @@
 </head>
 <body>
   <canvas id="c"></canvas>
+  <div id="touch" class="hidden">
+    <div id="tStick"><i></i></div>
+    <button id="tMenu">&#9776;</button>
+    <button id="tAct">ZAP</button><button id="tJump">JUMP</button><button id="tQ">SCAN</button><button id="tF">SHOCK</button><button id="tDash">DASH</button><button id="tTaunt">TAUNT</button>
+  </div>
+  <div id="rotate">Turn your phone sideways to play</div>
   <div id="boot"><div class="bootLogo">PROP PANIC</div><div class="bootBar"><i></i></div><div class="bootMsg">Stocking the shelves…</div></div>
 
   <!-- ============================== in-game HUD ============================== -->

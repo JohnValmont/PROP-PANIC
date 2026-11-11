@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.0
+- **Touch controls.** On phones and tablets: a floating stick under the left thumb, drag on the right to look, and
+  buttons for the action, jump, both abilities, dash, taunt and the menu. The menu fits a phone held sideways, and a
+  prompt asks you to rotate from portrait. Add `?touch` to the address to try it on a desktop.
+- **Settings no longer stall.** The menus and HUD used a live blur over the 3D view, which is very expensive on weak
+  graphics chips; it is gone. Changing graphics now says what it is doing before it does it.
+
 ## 2.1.0
 - **Fast graphics rebuilt for low-end laptops.** It now loads separate low-detail models (about a third of the
   triangles, 4 MB instead of 17 MB), colour textures only, simple per-vertex shading, no extra lights, no grass,
