@@ -2,6 +2,7 @@
  * One game room: authoritative simulation of lobby -> hiding -> hunt -> end, forever.
  * Clients only ever send intent (inputs, "fire", "use ability"); every outcome is decided here.
  */
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { CFG, F, QUICK_CHAT, TAUNTS, type Phase, type Team } from '../shared/constants';
 import { buildMap, BOUNDS, type GameMap } from '../shared/map';
@@ -15,10 +16,18 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const pickOf = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
+const TAU = Math.PI * 2;
+/** Any finite angle, folded into (-pi, pi]. */
+const wrapAngle = (a: number) => a - Math.round(a / TAU) * TAU;
+function sameToken(a: string, b: string): boolean {
+  const x = Buffer.from(a), y = Buffer.from(b);
+  return x.length === y.length && timingSafeEqual(x, y);
+}
 
 const DUCK = PROP_INDEX['duck'];
 const PUBLIC_FILL = 5;
 const DC_GRACE_MS = 30_000;
+const AFK_MS = 240_000;
 
 function newStats() {
   return { shots: 0, hits: 0, innocents: 0, kills: 0, bonks: 0, escapes: 0, taunts: 0, bamboozles: 0, near: 0, quacks: 0, diedAt: 0, pts: 0 };
@@ -47,6 +56,11 @@ export class Player {
   bot: Bot | null = null;
   hist: number[][] = [];
   msgN = 0; msgT = 0;
+  /** Round-trip time in ms, measured by the socket heartbeat. */
+  rtt = 0;
+  lastInputAt = now();
+  /** Interest management: which props this hunter can currently see, and when each pair is next re-tested. */
+  sight = new Map<number, { until: number; next: number }>();
   playing = false; // took part in the current round
 
   constructor(public id: number, public name: string, public token: string, public ws: WebSocket | null) {
@@ -100,10 +114,23 @@ export class Room {
   get humanSlots(): number { let n = 0; for (const p of this.players.values()) if (p.human) n++; return n; }
 
   // ================================================================ networking helpers
-  private send(p: Player, msg: object) { if (p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(msg)); }
+  /**
+   * Every byte to a client goes through here. A client that has stopped reading must not be allowed
+   * to make the server queue without bound: droppable traffic (snapshots) is skipped while it is
+   * behind, and a hopeless backlog ends the connection.
+   */
+  private out(p: Player, s: string, droppable = false) {
+    const ws = p.ws;
+    if (!ws || ws.readyState !== 1) return;
+    const queued = ws.bufferedAmount ?? 0;
+    if (queued > 1_000_000) { try { ws.terminate(); } catch { /* ignore */ } return; }
+    if (droppable && queued > 96_000) return;
+    ws.send(s);
+  }
+  private send(p: Player, msg: object) { this.out(p, JSON.stringify(msg)); }
   private broadcast(msg: object, filter?: (p: Player) => boolean) {
     const s = JSON.stringify(msg);
-    for (const p of this.players.values()) if (p.ws && p.ws.readyState === 1 && (!filter || filter(p))) p.ws.send(s);
+    for (const p of this.players.values()) if (!filter || filter(p)) this.out(p, s);
   }
   private toast(p: Player, msg: string) { this.send(p, { t: 'ev', k: 'toast', msg }); }
   private points(p: Player, n: number, why: string) {
@@ -113,7 +140,7 @@ export class Room {
 
   // ================================================================ membership
   addPlayer(name: string, ws: WebSocket | null, bot = false, look = Math.floor(Math.random() * 64)): Player {
-    const p = new Player(this.nextId++, name, Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2), ws);
+    const p = new Player(this.nextId++, name, randomBytes(18).toString('base64url'), ws); // the seat token is a bearer credential: unguessable
     if (bot) p.bot = new Bot();
     p.look = look;
     this.players.set(p.id, p);
@@ -140,7 +167,7 @@ export class Room {
   /** Full state for a client that just (re)connected. */
   private sendState(p: Player) {
     this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap() });
-    this.send(p, { t: 'roster', p: this.roster() });
+    this.send(p, { t: 'roster', p: this.roster(p) });
     this.send(p, { t: 'decoys', d: this.decoys.map((d) => ({ id: d.id, type: d.type, x: d.x, y: d.y, z: d.z, yaw: d.yaw, owner: d.owner })) });
     if (this.event && this.event.until > this.now) this.send(p, { t: 'ev', k: 'chaos', kind: this.event.kind, ms: this.event.until - this.now, seed: this.round });
     if (this.panic) this.send(p, { t: 'ev', k: 'panic' });
@@ -150,7 +177,7 @@ export class Room {
 
   reattach(token: string, ws: WebSocket): Player | null {
     for (const p of this.players.values()) {
-      if (p.human && p.token === token) {
+      if (p.human && sameToken(p.token, token)) {
         if (p.ws && p.ws !== ws) { try { p.ws.close(); } catch { /* ignore */ } }
         p.ws = ws; p.connected = true; p.dcAt = 0; p.bank = 0.3; p.bankT = now();
         this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now });
@@ -188,11 +215,26 @@ export class Room {
     for (let i = bots.length; i > cap; i--) this.removePlayer(bots[i - 1]);
   }
 
-  roster(): RosterEntry[] {
+  /**
+   * The player list as `viewer` is allowed to see it. A hunting hunter is never told what a living
+   * prop is disguised as: that only arrives with the prop's position, while the prop is in view.
+   */
+  roster(viewer?: Player): RosterEntry[] {
+    const hide = !!viewer && viewer.team === 'hunter' && viewer.alive && (this.phase === 'hiding' || this.phase === 'hunt');
     return [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, team: p.team, alive: p.alive, bot: !!p.bot, host: p.host,
-      score: Math.round(p.score), disguise: p.disguise, conn: p.connected, quack: p.team === 'hunter' && p.quackUntil > this.now, look: p.look,
+      score: Math.round(p.score), disguise: hide && p.team === 'prop' && p.alive ? -1 : p.disguise, conn: p.connected,
+      quack: p.team === 'hunter' && p.quackUntil > this.now, look: p.look, ping: p.bot ? 0 : Math.round(p.rtt / 5) * 5,
     }));
+  }
+  private sendRoster() {
+    let full = '', masked = '';
+    for (const p of this.players.values()) {
+      if (!p.ws) continue;
+      const hunting = p.team === 'hunter' && p.alive && (this.phase === 'hiding' || this.phase === 'hunt');
+      if (hunting) this.out(p, (masked ||= JSON.stringify({ t: 'roster', p: this.roster(p) })));
+      else this.out(p, (full ||= JSON.stringify({ t: 'roster', p: this.roster() })));
+    }
   }
 
   private sendLobby() {
@@ -267,6 +309,7 @@ export class Room {
 
   // ================================================================ round flow
   private setPhase(phase: Phase, ms: number, results?: Results) {
+    this.rosterDirty = true; // what a viewer may know about the other team changes with the phase
     this.phase = phase;
     this.phaseEnds = ms ? this.now + ms : 0;
     this.broadcast({ t: 'phase', phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap(), results });
@@ -357,9 +400,10 @@ export class Room {
     if (t - p.msgT > 1000) { p.msgT = t; p.msgN = 0; }
     if (++p.msgN > 240) { try { p.ws?.close(4008, 'rate'); } catch { /* ignore */ } return; }
     if (!m || typeof m.t !== 'string') return;
+    if (m.t !== 'in' && m.t !== 'ping') p.lastInputAt = t;
     switch (m.t) {
       case 'in': this.onInput(p, m.c); break;
-      case 'fire': if (fin(m.yaw) && fin(m.pitch) && p.team === 'hunter') { p.yaw = m.yaw; this.fire(p, m.yaw, m.pitch, fin(m.rt) ? m.rt : this.now); } break;
+      case 'fire': if (fin(m.yaw) && fin(m.pitch) && p.team === 'hunter') { p.yaw = wrapAngle(m.yaw); this.fire(p, p.yaw, m.pitch, fin(m.rt) ? m.rt : this.now); } break;
       case 'tf': if (fin(m.d)) this.transform(p, m.d | 0); break;
       case 'ab': this.ability(p, m.k); break;
       case 'taunt': this.taunt(p, fin(m.i) ? m.i | 0 : 0); break;
@@ -386,8 +430,9 @@ export class Room {
       if (dt > p.bank) dt = Math.max(0, p.bank);
       p.bank -= dt;
       if (dt <= 0) continue;
-      const cmd: Cmd = { dt, mx: Math.max(-1, Math.min(1, c[2])), mz: Math.max(-1, Math.min(1, c[3])), yaw: c[4], jump: (c[6] & 1) !== 0, dash: (c[6] & 2) !== 0 };
-      this.applyCmd(p, cmd, c[5], c[7], t);
+      const cmd: Cmd = { dt, mx: Math.max(-1, Math.min(1, c[2])), mz: Math.max(-1, Math.min(1, c[3])), yaw: wrapAngle(c[4]), jump: (c[6] & 1) !== 0, dash: (c[6] & 2) !== 0 };
+      if (cmd.mx !== 0 || cmd.mz !== 0 || cmd.jump || Math.abs(cmd.yaw - p.yaw) > 0.002) p.lastInputAt = t;
+      this.applyCmd(p, cmd, c[5], wrapAngle(c[7]), t);
     }
   }
 
@@ -474,7 +519,7 @@ export class Room {
         if (!this.firstDeath) this.firstDeath = victim.id;
         p.stats.kills++; p.focus = Math.min(CFG.FOCUS_MAX, p.focus + CFG.FOCUS_KILL);
         this.points(p, 150, 'Prop caught!');
-        this.broadcast({ t: 'ev', k: 'kill', by: p.id, who: victim.id, x: r2(victim.body.x), y: r2(victim.body.y), z: r2(victim.body.z) });
+        this.broadcast({ t: 'ev', k: 'kill', by: p.id, who: victim.id, ty: victim.disguise, x: r2(victim.body.x), y: r2(victim.body.y), z: r2(victim.body.z) });
         this.rosterDirty = true;
       }
       this.send(victim, { t: 'ev', k: 'hurt', hp: victim.hp });
@@ -634,6 +679,14 @@ export class Room {
     // seats are held through a refresh or a network blip; much longer mid-round than in the lobby
     const grace = this.phase === 'lobby' ? 15_000 : DC_GRACE_MS;
     for (const p of [...this.players.values()]) if (p.human && !p.connected && t - p.dcAt > grace) this.removePlayer(p);
+    // public rooms: a seat that has sent no input at all for four minutes (longer than a whole round) is given back
+    if (this.isPublic) for (const p of [...this.players.values()]) {
+      if (!p.human || !p.connected || t - p.lastInputAt < AFK_MS) continue;
+      this.send(p, { t: 'err', msg: 'You were removed for being idle.' });
+      try { p.ws?.close(4001, 'idle'); } catch { /* ignore */ }
+      p.ws = null; p.connected = false;
+      this.removePlayer(p);
+    }
     if (this.humans === 0) { if (!this.emptySince) this.emptySince = t; } else this.emptySince = 0;
     if (this.emptySince && t - this.emptySince > (this.humanSlots ? grace + 2000 : 3000)) { this.closed = true; return; }
 
@@ -678,7 +731,7 @@ export class Room {
       this.broadcast({ t: 'ev', k: 'decoyHop', id: d.id });
     }
 
-    if (this.rosterDirty) { this.rosterDirty = false; this.broadcast({ t: 'roster', p: this.roster() }); }
+    if (this.rosterDirty) { this.rosterDirty = false; this.sendRoster(); }
     this.snapshot(t);
   }
 
@@ -773,6 +826,38 @@ export class Room {
     }
   }
 
+  /** Is prop `q` in hunter `h`'s view? Re-tested about ten times a second per pair, and sticky for a moment so nothing flickers at an edge. */
+  private inView(h: Player, q: Player, t: number): boolean {
+    let s = h.sight.get(q.id);
+    if (!s) h.sight.set(q.id, (s = { until: 0, next: 0 }));
+    if (t >= s.next) { s.next = t + 90; if (this.canSee(h, q, t)) s.until = t + 650; }
+    return t < s.until;
+  }
+
+  /**
+   * Conservative line of sight against walls and fixtures only (loose objects never hide anything from
+   * this test). Rays run from the hunter's eye, now and a quarter of a second ahead, to nine points on
+   * the prop. Erring towards "visible" costs nothing; a false "hidden" would make a prop pop into view.
+   */
+  private canSee(h: Player, q: Player, t: number): boolean {
+    if (q.revealUntil > t) return true; // scanner pings show through walls by design
+    const hb = h.body, qb = q.body;
+    const dx = qb.x - hb.x, dz = qb.z - hb.z, d2 = dx * dx + dz * dz;
+    if (d2 < 12) return true; // within arm's reach of a corner
+    const def = PROPS[q.disguise], hw = Math.max(def.w, def.d) / 2 + 0.05, top = qb.y + Math.max(0.15, def.h) - 0.03, mid = qb.y + Math.max(0.15, def.h) / 2;
+    const ey = hb.y + CFG.HUNTER_EYE;
+    for (const lead of [0, 0.25]) {
+      const ex = hb.x + hb.vx * lead, ez = hb.z + hb.vz * lead;
+      if (lead && !this.world.sightClear(hb.x, ey, hb.z, ex, ey, ez)) continue; // the hunter cannot get there
+      const qx = qb.x + qb.vx * lead, qz = qb.z + qb.vz * lead;
+      if (this.world.sightClear(ex, ey, ez, qx, mid, qz) || this.world.sightClear(ex, ey, ez, qx, top, qz)) return true;
+      for (const sx of [-hw, hw]) for (const sz of [-hw, hw]) {
+        if (this.world.sightClear(ex, ey, ez, qx + sx, top, qz + sz) || this.world.sightClear(ex, ey, ez, qx + sx, qb.y + 0.06, qz + sz)) return true;
+      }
+    }
+    return false;
+  }
+
   private snapshot(t: number) {
     const rows: { p: Player; row: number[] }[] = [];
     const flagsOf = new Map<Player, number>();
@@ -786,7 +871,7 @@ export class Room {
       if (p.revealUntil > t) f |= F.REVEAL;
       if (p.bonkUntil > t) f |= F.DIZZY;
       flagsOf.set(p, f);
-      rows.push({ p, row: [p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f] });
+      rows.push({ p, row: [p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f, p.team === 'prop' ? p.disguise : -1] });
     }
     const st = Math.round(t), ch = Math.round(this.chaos);
     for (const p of this.players.values()) {
@@ -795,15 +880,19 @@ export class Room {
       const list: number[][] = [];
       for (const r of rows) {
         if (r.p === p) continue;
-        // hunters get no data about props while blindfolded, nor about ghosted props
-        if (isHunter && r.p.team === 'prop' && (this.phase === 'hiding' || r.p.ghostUntil > t)) continue;
+        // hunters get no data about props while blindfolded, nor about ghosted props,
+        // nor about any prop they have no line of sight to (so a hacked client cannot see through walls)
+        if (isHunter && r.p.team === 'prop') {
+          if (this.phase === 'hiding' || r.p.ghostUntil > t) continue;
+          if (this.phase === 'hunt' && !this.inView(p, r.p, t)) continue;
+        }
         list.push(r.row);
       }
       const b = p.body;
       const me = p.alive && p.team !== 'spec'
         ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0, b.air]
         : null;
-      p.ws.send(JSON.stringify({ t: 's', st, ack: p.ack, me, p: list, ch }));
+      this.out(p, JSON.stringify({ t: 's', st, ack: p.ack, me, p: list, ch }), true);
       if (p.cdDirty) { p.cdDirty = false; this.send(p, { t: 'cd', ...p.cd }); }
     }
   }

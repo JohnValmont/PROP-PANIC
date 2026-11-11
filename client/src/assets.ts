@@ -59,6 +59,11 @@ class AssetStore {
   private queue: (() => Promise<void>)[] = []; private active = 0;
 
   async init(): Promise<void> {
+    // ?noart keeps the plain placeholders: the automated browser test checks game logic, not art, on a machine with no GPU
+    try {
+      if (new URLSearchParams(location.search).has('noart')) sessionStorage.setItem('pp_noart', '1');
+      if (sessionStorage.getItem('pp_noart') === '1') return;
+    } catch { /* storage blocked */ }
     try { this.manifest = await (await fetch(BASE + 'manifest.json', { cache: 'no-cache' })).json(); }
     catch { this.manifest = null; }
   }

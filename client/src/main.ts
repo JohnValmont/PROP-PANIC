@@ -8,7 +8,13 @@ declare const __BUILD__: string;
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 await assets.init(); // the asset manifest: which models, textures and skies exist
 const game = new Game($<HTMLCanvasElement>('c'));
-(window as any).__pp = game; (window as any).__assets = assets; // handy for debugging and automated tests; the server remains authoritative
+// the web font loads without blocking first paint: switch it on once it has arrived
+for (const l of document.querySelectorAll<HTMLLinkElement>('link[data-async]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
+// debugging and automated tests reach the game through ?debug; normal play exposes nothing on window
+try {
+  if (new URLSearchParams(location.search).has('debug')) sessionStorage.setItem('pp_debug', '1'); // survives the URL being rewritten to the room link
+  if (sessionStorage.getItem('pp_debug') === '1') { (window as any).__pp = game; (window as any).__assets = assets; }
+} catch { /* storage blocked: no debug handle */ }
 
 const menu = $('menu'), pause = $('pause'), conn = $('conn');
 const nameInput = $<HTMLInputElement>('nameInput'), codeInput = $<HTMLInputElement>('codeInput'), err = $('menuError');

@@ -8,13 +8,13 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&
 export interface AbilityView { key: string; name: string; icon: string; left: number; total: number; active?: boolean; }
 
 const TIPS = [
-  'Shooting innocent toys drains your FOCUS. Hit zero and you spend 6 seconds as a rubber duck.',
+  'Shooting innocent objects drains your FOCUS. Hit zero and you spend 6 seconds as a rubber duck.',
   'Your Scanner (Q) only catches props that MOVE while the ring passes over them.',
-  'Shockwave (F) launches real props into the air. Innocent toys never flinch.',
+  'Shockwave (F) launches real props into the air. Innocent objects never flinch.',
   'Every 22 seconds all props are forced to squeak. Listen for where it comes from.',
   'Decoys squeak too. Shoot one and you get flash-blinded.',
   'The PROP-O-METER warms up when any prop is within a few metres.',
-  'A toy facing the wrong way on a tidy shelf is probably not a toy.',
+  'A vase facing the wrong way on a tidy shelf is probably not a vase.',
 ];
 
 export class Hud {
@@ -145,7 +145,7 @@ export class Hud {
     $('lobbyCode').textContent = o.code;
     const mb = $('mapBtn');
     mb.style.display = !o.pub && o.host ? 'block' : 'none';
-    const mt = `Map: ${['Alternate', 'Toy Emporium', 'Sunny Meadow'][o.map] ?? 'Alternate'}`;
+    const mt = `Map: ${['Alternate', 'Emporium', 'Sunny Meadow'][o.map] ?? 'Alternate'}`;
     if (mb.textContent !== mt) mb.textContent = mt;
     const html = o.roster.map((r) => `<div class="pl${r.id === o.me ? ' me' : ''}"><span>${esc(r.name)}${r.bot ? ' <span class="tag b">BOT</span>' : ''}${r.host ? ' <span class="tag s">HOST</span>' : ''}</span><small>${r.score || ''}</small></div>`).join('');
     const lp = $('lobbyPlayers');
@@ -165,8 +165,8 @@ export class Hud {
     el.style.display = show ? 'flex' : 'none';
     if (!show || !roster) return;
     const rows = roster.slice().sort((a, b) => b.score - a.score).map((r) =>
-      `<tr class="${r.id === me ? 'me' : ''}${r.alive ? '' : ' dead'}"><td>${esc(r.name)}${this.tags(r, r.alive)}${r.conn ? '' : ' <span class="tag b">OFFLINE</span>'}</td><td class="n">${r.score}</td></tr>`).join('');
-    el.innerHTML = `<h2>Scoreboard</h2><table class="board"><tr><th>PLAYER</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>`;
+      `<tr class="${r.id === me ? 'me' : ''}${r.alive ? '' : ' dead'}"><td>${esc(r.name)}${this.tags(r, r.alive)}${r.conn ? '' : ' <span class="tag b">OFFLINE</span>'}</td><td class="n dim">${r.bot ? '' : `${r.ping | 0} ms`}</td><td class="n">${r.score}</td></tr>`).join('');
+    el.innerHTML = `<h2>Scoreboard</h2><table class="board"><tr><th>PLAYER</th><th style="text-align:right">PING</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>`;
   }
 
   results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '') {
@@ -178,7 +178,7 @@ export class Hud {
       el.dataset.key = key;
       const won = (res.winner === 'props' && myTeam === 'prop') || (res.winner === 'hunters' && myTeam === 'hunter');
       const title = res.winner === 'props' ? 'PROPS WIN!' : 'HUNTERS WIN!';
-      const sub = myTeam === 'spec' ? 'You watched this one. You are in next round!' : won ? 'Nicely done.' : res.winner === 'props' ? 'The toys got away this time.' : 'Every last prop was found.';
+      const sub = myTeam === 'spec' ? 'You watched this one. You are in next round!' : won ? 'Nicely done.' : res.winner === 'props' ? 'The props got away this time.' : 'Every last prop was found.';
       const awards = res.awards.map((a) => `<div class="award"><div class="at">${esc(a.title.toUpperCase())}</div><div class="an">${esc(a.name)}</div><div class="ad">${esc(a.detail)}</div></div>`).join('');
       const rows = res.board.map((r) => `<tr class="${r.id === me ? 'me' : ''}"><td>${esc(r.name)}${this.tags(r, r.survived || r.team !== 'prop')}</td><td class="n">${r.round >= 0 ? '+' : ''}${r.round}</td><td class="n">${r.total}</td></tr>`).join('');
       el.innerHTML = `<h2 class="${res.winner}">${title}</h2><div class="resSub">${sub}</div>${awards ? `<div class="awards">${awards}</div>` : ''}<table class="board"><tr><th>PLAYER</th><th style="text-align:right">ROUND</th><th style="text-align:right">TOTAL</th></tr>${rows}</table><div class="nextIn" id="nextIn"></div>`;

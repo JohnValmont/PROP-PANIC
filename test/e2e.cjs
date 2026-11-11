@@ -10,6 +10,7 @@ const path = require('node:path');
 
 const PORT = 8098;
 const URL = `http://localhost:${PORT}/`;
+const DEBUG = 'debug=1&noart=1'; // exposes window.__pp for the test; skips the art downloads (no GPU here)
 const SHOTS = path.join(__dirname, 'shots');
 let failures = 0;
 const ok = (cond, label) => { if (cond) console.log('  ✓', label); else { failures++; console.log('  ✗ FAIL:', label); } };
@@ -83,7 +84,7 @@ async function main() {
   try {
     console.log('menu');
     const A = await open('A');
-    await A.goto(URL);
+    await A.goto(`${URL}?${DEBUG}`);
     await A.waitForFunction(() => window.__pp && window.__pp.renderer.info.render.calls > 10, null, { timeout: 20000 });
     ok(await A.isVisible('#menu') && (await A.textContent('.logo')).includes('PANIC'), 'menu renders over a live 3D scene');
     const lite = (page) => page.evaluate(() => { window.__pp.renderEvery = 20; }); // no GPU here: draw 1 frame in 20, simulate all of them
@@ -101,7 +102,7 @@ async function main() {
     ok(!a.locked && await A.isDisabled('#startBtn'), 'host keeps the mouse in the lobby; Start is disabled with one player');
 
     const B = await open('B');
-    await B.goto(`${URL}?room=${a.code}`);
+    await B.goto(`${URL}?room=${a.code}&${DEBUG}`);
     await B.waitForFunction(() => window.__pp, null, { timeout: 20000 });
     ok((await B.inputValue('#codeInput')) === a.code, 'invite link pre-fills the room code');
     await lite(B);
@@ -192,7 +193,10 @@ async function main() {
     ok(dead, 'hunter shot the prop three times with held fire and caught it');
     await waitPhase(H, 'end', 8000); await waitPhase(P, 'end', 8000);
     await sleep(400);
-    ok((await H.textContent('#results h2')).includes('HUNTERS WIN') && await P.isVisible('#results'), 'both clients show the results screen: hunters win');
+    // wait on the panels themselves rather than a fixed delay: software-rendered test pages can be slow to paint
+    await H.waitForFunction(() => (document.querySelector('#results h2')?.textContent ?? '').includes('WIN'), null, { timeout: 8000 }).catch(() => {});
+    await P.waitForSelector('#results', { state: 'visible', timeout: 8000 }).catch(() => {});
+    ok(((await H.textContent('#results h2').catch(() => '')) ?? '').includes('HUNTERS WIN') && await P.isVisible('#results'), 'both clients show the results screen: hunters win');
     const hs = await state(H);
     ok(hs.roster.find((r) => r.id === hs.id).score >= 250 || (await H.textContent('#results')).includes('+'), 'hunter was awarded points for the catch');
     await shot(H, '06-results.png');

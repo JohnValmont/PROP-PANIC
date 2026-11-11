@@ -163,6 +163,25 @@ export class World {
   }
 
   /** Nearest hit of a ray against the world. Returns distance (Infinity if none) and the decor id (-1 = architecture). */
+  /** Is the straight segment between two points free of walls and fixtures? Loose props are ignored. */
+  sightClear(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
+    const dx = bx - ax, dy = by - ay, dz = bz - az;
+    const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
+    const boxes = this.boxes;
+    for (let i = 0; i < boxes.length; i++) {
+      const b = boxes[i];
+      if (b.decor >= 0) continue;
+      let t0 = (b.x0 - ax) * ix, t1 = (b.x1 - ax) * ix;
+      let tmin = Math.min(t0, t1), tmax = Math.max(t0, t1);
+      t0 = (b.y0 - ay) * iy; t1 = (b.y1 - ay) * iy;
+      tmin = Math.max(tmin, Math.min(t0, t1)); tmax = Math.min(tmax, Math.max(t0, t1));
+      t0 = (b.z0 - az) * iz; t1 = (b.z1 - az) * iz;
+      tmin = Math.max(tmin, Math.min(t0, t1)); tmax = Math.min(tmax, Math.max(t0, t1));
+      if (tmax >= Math.max(tmin, 0) && tmin < 1) return false;
+    }
+    return true;
+  }
+
   raycast(ox: number, oy: number, oz: number, dx: number, dy: number, dz: number, maxT: number): { t: number; decor: number } {
     let best = maxT, decor = -1, found = false;
     const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;

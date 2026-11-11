@@ -25,6 +25,8 @@ export interface RosterEntry {
   score: number; disguise: number; conn: boolean;
   /** Hunter cosmetics: colour * 8 + hat. */
   look: number;
+  /** Round-trip time in ms (0 for bots). */
+  ping: number;
   /** Hunter currently serving time as a rubber duck. */
   quack: boolean;
 }

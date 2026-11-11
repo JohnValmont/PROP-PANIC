@@ -34,6 +34,8 @@ interface Sample { t: number; x: number; y: number; z: number; f: number; p: num
 interface Ent {
   id: number; group: THREE.Group; model: THREE.Object3D | null; rig: HunterRig | null; kind: string;
   pitch: number; kick: number; vy: number;
+  /** Disguise last reported alongside this player's position (-1 = never seen). */
+  netType: number;
   eyes: THREE.Object3D | null; stars: THREE.Sprite | null; eyeK: number;
   buf: Sample[]; flags: number; lastSeen: number; label: THREE.Sprite | null; labelKey: string; marker: THREE.Sprite | null;
   hitT: number; hopT: number; x: number; y: number; z: number; f: number; speed: number; stepT: number; h: number;
@@ -376,7 +378,7 @@ export class Game {
     } else if (m.phase === 'hunt') {
       this.sfx.music('hunt'); this.sfx.play('go');
       if (prevPhase === 'hiding') {
-        if (this.team === 'hunter') this.hud.banner('GO HUNT!', 'Zap the fakes. Innocent toys cost you FOCUS.', 'pink');
+        if (this.team === 'hunter') this.hud.banner('GO HUNT!', 'Zap the fakes. Innocent objects cost you FOCUS.', 'pink');
         else if (this.alive) this.hud.banner('HUNTERS RELEASED!', 'Hold your nerve. Taunt (T) near them for big points.', '');
       }
     } else if (m.phase === 'end') {
@@ -415,11 +417,13 @@ export class Game {
         this.quackedMe = r.team === 'hunter' && r.quack;
         if (teamChanged) { this.pitch = r.team === 'hunter' ? 0 : -0.22; this.mouseL = false; }
       }
-      const wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter:' + (r.look | 0)) : 'prop:' + r.disguise;
       let e = this.ents.get(r.id);
+      // hunters are not told a prop's disguise up front (-1): it arrives with the prop's position once it is in view
+      let wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter:' + (r.look | 0)) : r.disguise >= 0 ? 'prop:' + r.disguise : '?';
+      if (wantKind === '?') wantKind = e && e.kind.startsWith('prop:') ? e.kind : 'prop:' + (PROPS[e?.netType ?? -1] ? e!.netType : -1);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
-        e = { id: r.id, group: new THREE.Group(), model: null, rig: null, pitch: 0, kick: 0, vy: 0, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
+        e = { id: r.id, group: new THREE.Group(), model: null, rig: null, pitch: 0, kick: 0, vy: 0, netType: -1, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
         e.group.visible = false;
         this.scene.add(e.group);
         this.ents.set(r.id, e);
@@ -434,14 +438,15 @@ export class Game {
     }
     if (this.bannerPending === 'hiding') {
       this.bannerPending = '';
-      if (this.team === 'prop' && this.alive) this.hud.banner('HIDE!', 'Aim at a toy and press E to become it. Hunters are coming!', 'teal', 3200);
+      if (this.team === 'prop' && this.alive) this.hud.banner('HIDE!', 'Aim at an object and press E to become it. Hunters are coming!', 'teal', 3200);
     }
   }
 
   private buildModel(e: Ent, kind: string) {
     if (e.model) e.group.remove(e.model);
     if (e.eyes) { e.group.remove(e.eyes); e.eyes = null; }
-    e.kind = kind; e.rig = null;
+    e.kind = kind; e.rig = null; e.model = null;
+    if (kind === 'prop:-1') { e.labelKey = ''; return; } // an unseen prop: nothing to draw yet
     if (kind.startsWith('hunter')) {
       e.rig = new HunterRig(Number(kind.slice(7)) || 0);
       e.model = e.rig.root; e.h = CFG.HUNTER_H;
@@ -474,6 +479,8 @@ export class Game {
       if (!e) continue;
       if (m.st - e.lastSeen > 500) e.buf.length = 0; // re-appeared (ghost ended, round start): don't lerp from stale data
       e.buf.push({ t: m.st, x: row[1], y: row[2], z: row[3], f: row[4], p: row[5] });
+      const type = row[7] ?? -1;
+      if (type >= 0 && PROPS[type]) { e.netType = type; if (e.kind.startsWith('prop:') && e.kind !== 'prop:' + type) this.buildModel(e, 'prop:' + type); }
       if (e.buf.length > 14) e.buf.shift();
       e.flags = row[6]; e.lastSeen = m.st;
     }
@@ -531,7 +538,7 @@ export class Game {
           this.world.wobble(m.tg);
           this.fx.burst(m.x, m.y, m.z, 9, [0xffffff, 0xffd166, 0xbbbbbb], 2.2, 2.4, 0.7, 0.6);
           this.sfx.play('bonk', [m.x, m.y, m.z]);
-          if (mine) { this.hud.hitmark('#b8c0cc'); this.hud.popup(`Innocent toy!  −${CFG.FOCUS_MISS} focus`, true); }
+          if (mine) { this.hud.hitmark('#b8c0cc'); this.hud.popup(`Innocent object!  −${CFG.FOCUS_MISS} focus`, true); }
         } else if (m.hit === 3) {
           this.fx.burst(m.x, m.y, m.z, 16, CONFETTI, 3.5, 3.5, 0.9, 0.8);
           this.sfx.play('hit', mine ? undefined : [m.x, m.y, m.z]);
@@ -546,11 +553,11 @@ export class Game {
         this.fx.floater(m.x, m.y + 1.2, m.z, 'CAUGHT!', '#ff8fa3', 0.6, false, 1.6);
         this.sfx.play('kill', m.who === me || m.by === me ? undefined : [m.x, m.y, m.z]);
         const r = this.roster.get(m.who);
-        this.hud.feed([{ b: this.nameOf(m.by) }, ' caught ', { b: this.nameOf(m.who) }, r ? ` (the ${PROPS[r.disguise].name})` : ''], 'kill');
+        this.hud.feed([{ b: this.nameOf(m.by) }, ' caught ', { b: this.nameOf(m.who) }, PROPS[m.ty ?? r?.disguise ?? -1] ? ` (the ${PROPS[m.ty ?? r!.disguise].name})` : ''], 'kill');
         this.fx.flash(m.x, m.y + 0.6, m.z, 0xff8fa3, 40);
         if (m.by === me) this.fovPunch = 9;
         if (m.who === me) { this.hud.banner('CAUGHT!', 'You are a ghost now. Fly around and watch the chaos.', 'pink', 3200); this.specPos.set(m.x, m.y + 2.5, m.z); this.shake = 0.5; }
-        else if (m.by === me) this.hud.banner('GOT ONE!', `${this.nameOf(m.who)} was the ${r ? PROPS[r.disguise].name : 'prop'}`, '', 1800);
+        else if (m.by === me) this.hud.banner('GOT ONE!', `${this.nameOf(m.who)} was the ${PROPS[m.ty ?? r?.disguise ?? -1]?.name ?? 'prop'}`, '', 1800);
         break;
       }
       case 'taunt': {
@@ -600,7 +607,7 @@ export class Game {
         if (pos) { this.fx.burst(pos[0], pos[1] + 0.6, pos[2], 30, [0xffd166, 0xffffff, 0xf78c2b], 3.5, 3.5, 1.1, 0.9); this.sfx.play(m.on ? 'quacked' : 'poof', m.who === me ? undefined : [pos[0], pos[1], pos[2]], 1.3); }
         if (m.on) {
           this.hud.feed([{ b: this.nameOf(m.who) }, ' ran out of focus and turned into a duck'], 'chaos');
-          if (m.who === me) { this.hud.banner('QUACK!', 'Too many innocent toys. Enjoy 6 seconds as a duck.', 'purple', 2600); this.pitch = Math.min(this.pitch, 0.3); }
+          if (m.who === me) { this.hud.banner('QUACK!', 'Too many innocent objects. Enjoy 6 seconds as a duck.', 'purple', 2600); this.pitch = Math.min(this.pitch, 0.3); }
         }
         break;
       }
@@ -626,8 +633,8 @@ export class Game {
       case 'chaos': {
         this.sfx.play('chaos');
         if (m.kind === 'blackout') { this.world.darkTarget = 1; this.sfx.play('blackout'); this.hud.banner(this.mapId === 1 ? 'ECLIPSE!' : 'BLACKOUT!', this.team === 'hunter' ? 'Flashlights only. They can see you coming.' : 'Darkness falls. Move while they are blind!', 'purple'); }
-        else if (m.kind === 'poltergeist') { this.world.poltergeist(m.seed, m.ms); this.hud.banner('POLTERGEIST!', 'The toys are alive. Good luck telling who is who.', 'purple'); }
-        else if (m.kind === 'shuffle') this.hud.banner('PROP SHUFFLE!', 'Every prop just became a different toy.', 'purple');
+        else if (m.kind === 'poltergeist') { this.world.poltergeist(m.seed, m.ms); this.hud.banner('POLTERGEIST!', 'The furniture is alive. Good luck telling who is who.', 'purple'); }
+        else if (m.kind === 'shuffle') this.hud.banner('PROP SHUFFLE!', 'Every prop just became something else.', 'purple');
         else if (m.kind === 'moon') this.hud.banner('MOON BOUNCE!', 'Low gravity. Jump onto anything.', 'purple');
         else if (m.kind === 'sneeze') this.hud.banner('ACHOO!', this.team === 'hunter' ? 'Every real prop just sneezed. Did you see it?' : 'Dust everywhere. You sneezed!', 'purple', 2200);
         this.hud.feed(['CHAOS EVENT: ', { b: String(m.kind).toUpperCase() }], 'chaos');
@@ -726,6 +733,7 @@ export class Game {
         e.group.visible = !firstPerson;
         e.pitch = this.pitch; e.vy = this.body.ground ? 0 : 5;
       } else {
+        if (!e.model) { e.group.visible = false; continue; }
         this.sampleEnt(e, rt, dt);
         // "not heard about recently" hides a player (ghosted, blindfold) — but never on the frame right after
         // a hitch, when the network messages that would refresh them are still waiting to be processed
@@ -910,7 +918,7 @@ export class Game {
     const lobby = this.phase === 'lobby';
     const playing = this.alive && this.team !== 'spec' && this.hasMe;
     const hunter = this.team === 'hunter';
-    if (playing) h.setRole(this.team, true, hunter ? (this.quackedMe ? 'Rubber Duck?!' : 'Zap the fakes') : PROPS[this.disguise].name, hunter ? this.focus : this.hp, lobby);
+    if (playing) h.setRole(this.team, true, hunter ? (this.quackedMe ? 'Rubber Duck?!' : 'Zap the fakes') : PROPS[this.disguise]?.name ?? 'Prop', hunter ? this.focus : this.hp, lobby);
     else h.setRole('prop', false, '', 0, false);
 
     const ab: AbilityView[] = [];
@@ -975,20 +983,20 @@ export class Game {
       spec = this.team === 'spec' ? 'Round in progress — you join the next one. WASD + mouse to fly around.' : 'You were caught! Fly around with WASD (Space / Shift = up / down).';
     } else if (!this.locked && this.phase !== 'end') hint = 'Click the game to run around  ·  Esc frees the mouse again';
     else if (lobby) hint = 'Lobby warm-up: transform (E), taunt (T), drop a decoy (Q), dash (Shift)';
-    else if (playing && !hunter && this.phase === 'hiding' && left < CFG.HIDE_MS - 3500) hint = 'Right-click holds your rotation · scroll zooms · small toys fit on shelves';
+    else if (playing && !hunter && this.phase === 'hiding' && left < CFG.HIDE_MS - 3500) hint = 'Right-click holds your rotation · scroll zooms · small objects fit on shelves';
     h.hint(hint); h.spectate(spec);
 
     // always-on objective line and a controls card, so a first-time player is never left guessing
     let obj = '';
-    if (lobby) obj = 'Warm-up. The round starts soon — try becoming a toy.';
-    else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent toys. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake toys and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
-    else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at a toy and press [${keyLabel(B.act)}] to become it, then stand among similar toys.`;
+    if (lobby) obj = 'Warm-up. The round starts soon — try becoming an object.';
+    else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake toys and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
+    else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at an object and press [${keyLabel(B.act)}] to become it, then stand among similar ones.`;
     else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
     h.objective(obj);
     const K = (id: string) => `<kbd>${keyLabel(B[id])}</kbd>`;
     const rows = !playing ? null : hunter
       ? [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Zap', '<kbd>Left click</kbd>'], ['Zoom aim', '<kbd>Right click</kbd>'], ['Scanner', K('ab1')], ['Shockwave', K('ab2')]]
-      : [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Become toy', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
+      : [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Become object', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
     h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
     void ACTIONS;
 

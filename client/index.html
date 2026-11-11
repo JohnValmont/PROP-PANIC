@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <!-- non-blocking: the game must boot even if the font CDN is slow or unreachable -->
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet" media="print" data-async />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231b2a4a'/%3E%3Cellipse cx='30' cy='42' rx='20' ry='14' fill='%23ffd166'/%3E%3Ccircle cx='40' cy='24' r='12' fill='%23ffd166'/%3E%3Crect x='48' y='22' width='12' height='6' rx='3' fill='%23f78c2b'/%3E%3Ccircle cx='43' cy='21' r='2.5' fill='%2322223b'/%3E%3C/svg%3E" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -25,7 +25,7 @@
     <div id="top">
       <div id="counts"><span class="chip prop"><b id="propsAlive">0</b> props left</span></div>
       <div id="phaseBox"><div id="phaseLabel">LOBBY</div><div id="timer"></div><div id="mapName"></div></div>
-      <div id="chaosWrap" title="Shooting innocent toys and taunting fills the Chaos meter"><span>CHAOS</span><div id="chaosBar"><i></i></div></div>
+      <div id="chaosWrap" title="Shooting innocent objects and taunting fills the Chaos meter"><span>CHAOS</span><div id="chaosBar"><i></i></div></div>
     </div>
 
     <div id="feed"></div>
@@ -59,7 +59,7 @@
       <button id="mapBtn" class="btn small ghost">Map: Alternate</button>
       <div id="lobbyStatus"></div>
       <button id="startBtn" class="btn big yellow">START ROUND</button>
-      <div class="tiny dim">Run around, press <kbd>E</kbd> on toys to transform, <kbd>T</kbd> to taunt.</div>
+      <div class="tiny dim">Run around, press <kbd>E</kbd> on objects to transform, <kbd>T</kbd> to taunt.</div>
     </div>
 
     <div id="scoreboard" class="panel"></div>
@@ -74,9 +74,9 @@
       <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
       <div class="tagline">Blend in. Don't get caught.</div>
       <div class="feats">
-        <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 49 objects, indoors and out. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
-        <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent toys and you turn into a duck.</span></div></div>
-        <div class="feat"><i class="fi f3"></i><div><b>Two worlds, endless chaos</b><span>A packed toy store and a wide-open meadow, with blackouts, haunted toys and a frantic final 30 seconds.</span></div></div>
+        <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 66 real-world objects, indoors and out. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
+        <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent objects and you turn into a duck.</span></div></div>
+        <div class="feat"><i class="fi f3"></i><div><b>Two worlds, endless chaos</b><span>A packed emporium and a wide-open meadow, with blackouts, haunted furniture and a frantic final 30 seconds.</span></div></div>
       </div>
       <div id="online"></div>
     </div>
@@ -126,8 +126,8 @@
         <div class="howCol prop">
           <h3>If you are a PROP</h3>
           <ol>
-            <li><b>Become an object.</b> Aim at any toy, rock or bush and press the Become key (E).</li>
-            <li><b>Hide in plain sight.</b> Stand among toys like you and stop moving.</li>
+            <li><b>Become an object.</b> Aim at any object and press the Become key (E).</li>
+            <li><b>Hide in plain sight.</b> Stand among objects like you and stop moving.</li>
             <li><b>Don't flinch.</b> Freeze when the blue scanner ring passes. Moving reveals you.</li>
             <li><b>Got hit?</b> You get a speed burst. Run, drop a decoy (Q), turn ghost (F).</li>
             <li><b>Feeling brave?</b> Taunt (T) near hunters for points, or jump on a hunter's head to stun them.</li>
@@ -139,7 +139,7 @@
           <ol>
             <li><b>Wait blindfolded</b> while the props hide.</li>
             <li><b>Zap the fakes.</b> Left click fires. Three hits catch a prop.</li>
-            <li><b>Don't guess.</b> Every innocent toy you shoot drains Focus. At zero you become a duck.</li>
+            <li><b>Don't guess.</b> Every innocent object you shoot drains Focus. At zero you become a duck.</li>
             <li><b>Use your tools.</b> Scanner (Q) pings props that move. Shockwave (F) throws nearby fakes into the air.</li>
             <li><b>Listen.</b> All props squeak every 22 seconds, and the meter warms up when one is close.</li>
           </ol>
