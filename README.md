@@ -19,9 +19,11 @@ fake. It runs in any desktop browser, with no install and no downloaded art or a
 | ![Toy store](docs/screenshots/hunter.png) | ![Sunny Meadow](docs/screenshots/meadow.png) |
 
 Maps alternate every round (the host of a private room can lock one). Each has its own disguises, 49 in total, and
-its loose props are re-laid out from a new seed every round. Blackout becomes an eclipse outdoors:
+its loose props are re-laid out from a new seed every round. Blackout becomes an eclipse outdoors.
 
-![Eclipse on Sunny Meadow](docs/screenshots/meadow-eclipse.png)
+| Hunting on the meadow | Eclipse (the outdoor blackout) |
+| --- | --- |
+| ![Hunter on Sunny Meadow](docs/screenshots/meadow-hunter.png) | ![Eclipse on Sunny Meadow](docs/screenshots/meadow-eclipse.png) |
 
 ## What makes it different from plain Prop Hunt
 

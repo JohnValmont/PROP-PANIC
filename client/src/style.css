@@ -241,3 +241,4 @@ table.board tr.dead td { opacity: 0.55; }
 #phaseBox, #role, .ab, #meter, .chip, #chaosWrap { backdrop-filter: blur(4px); }
 .btn { letter-spacing: 0.01em; }
 .btn:focus-visible, .hat:focus-visible, .bind button:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+#hud:not(.hidden) ~ #build { display: none; } /* the version stamp belongs to the menu, not on top of the HUD */
