@@ -1,5 +1,21 @@
 # Changelog
 
+## 2.0.0
+- **Scanned assets.** The 49 procedural toys are replaced by 66 photo-scanned, physically based disguises plus set
+  dressing, all CC0 from Poly Haven, optimised by a new asset pipeline (`tools/assets.mjs`). See `CREDITS.md`.
+- **New renderer.** Image-based lighting from HDR panoramas, textured architecture, soft shadows, ambient occlusion,
+  bloom, and Ultra / High / Fast tiers with automatic step-down.
+- **Maps re-themed.** Tumbleton's Emporium (furniture hall, curiosities, stock room, crate fort, bargain pen) and a
+  rebuilt Sunny Meadow (HDR sky, textured terrain, wind-blown grass, leafy trees, reflective pond, plank barn).
+- **Hunters** are articulated security robots with clear-coat paint and procedural walk, aim and recoil animation.
+- **Anti-cheat.** Hunters only receive props they have line of sight to, and a prop's disguise travels with its
+  position instead of the player list. The debug handle on `window` needs `?debug`.
+- **Server hardening.** Fixed three single-request crashes; guarded handlers; payload, rate and per-address limits;
+  origin checks; heartbeats; back-pressure handling; OS-random seat tokens and room codes; strict content security
+  policy; compressed, cacheable static files; idle seats released. See `SECURITY.md`.
+- Ping in the scoreboard. A new security test suite (34 checks).
+- Breaking: prop ids changed, so a 1.x client cannot play on a 2.x server.
+
 ## 1.0.0
 - New map: **Sunny Meadow**, an open-air fairground with a barn and hay loft, bandstand, campsite, pond, market stalls,
   pumpkin patch, hay-bale maze and play fort, plus 17 outdoor disguises. Maps alternate each round; private hosts can pick.

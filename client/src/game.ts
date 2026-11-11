@@ -172,7 +172,7 @@ export class Game {
     const v = Number(localStorage.getItem('pp_vol')); if (localStorage.getItem('pp_vol') !== null && v >= 0 && v <= 1) this.sfx.volume = v;
 
     this.loadMap(1);
-    this.preview.position.set(0.95, 0, 13.2);
+    this.preview.position.set(0.25, 0, 13.0);
     this.scene.add(this.preview);
     this.setLook(this.look);
     this.bindInput();
