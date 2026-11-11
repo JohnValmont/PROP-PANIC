@@ -63,7 +63,30 @@ export function initTouch(game: Game, openMenu: () => void) {
     const up = (e: Event) => { e.preventDefault(); el.classList.remove('down'); off(); };
     el.addEventListener('touchend', up); el.addEventListener('touchcancel', up);
   };
-  hold('tAct', () => game.touchFire(true), () => game.touchFire(false));
+  // the fire button doubles as a look pad: keep your thumb on it and slide to track a target while zapping
+  {
+    const el = $('tAct');
+    let id = -1, ax = 0, ay = 0;
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); game.sfx.unlock(); const t = e.changedTouches[0]; id = t.identifier; ax = t.clientX; ay = t.clientY; el.classList.add('down'); game.touchFire(true); }, { passive: false });
+    el.addEventListener('touchmove', (e) => { e.preventDefault(); e.stopPropagation(); for (const t of Array.from(e.changedTouches)) if (t.identifier === id) { game.turn((t.clientX - ax) * 2.6, (t.clientY - ay) * 2.6); ax = t.clientX; ay = t.clientY; } }, { passive: false });
+    const up = (e: Event) => { e.preventDefault(); id = -1; el.classList.remove('down'); game.touchFire(false); };
+    el.addEventListener('touchend', up); el.addEventListener('touchcancel', up);
+  }
+  // zoom (hunter) / hold rotation (prop): tap to switch on, tap again to switch off
+  {
+    const el = $('tAlt');
+    let on = false;
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); on = !on; el.classList.toggle('down', on); game.touchAlt(on); }, { passive: false });
+  }
+  // phones: go full screen and sideways on the first tap of a button (browsers only allow it from a tap)
+  document.addEventListener('touchend', (e) => {
+    if (document.fullscreenElement || !(e.target as HTMLElement)?.closest?.('button')) return;
+    const el = document.documentElement as any;
+    try {
+      const p = (el.requestFullscreen ?? el.webkitRequestFullscreen)?.call(el, { navigationUI: 'hide' });
+      Promise.resolve(p).then(() => (screen.orientation as any)?.lock?.('landscape')).catch(() => {});
+    } catch { /* not supported (iPhone Safari): use Add to Home Screen instead */ }
+  });
   hold('tJump', () => key(B.jump, true), () => key(B.jump, false));
   hold('tQ', () => key(B.ab1, true), () => key(B.ab1, false));
   hold('tF', () => key(B.ab2, true), () => key(B.ab2, false));
@@ -78,6 +101,6 @@ export function initTouch(game: Game, openMenu: () => void) {
     const set = (id: string, text: string, show = true) => { const el = $(id); if (el.textContent !== text) el.textContent = text; el.style.display = show ? '' : 'none'; };
     set('tAct', hunter ? 'ZAP' : 'BECOME');
     set('tQ', hunter ? 'SCAN' : 'DECOY'); set('tF', hunter ? 'SHOCK' : 'GHOST');
-    set('tDash', 'DASH', !hunter); set('tTaunt', 'TAUNT', !hunter);
+    set('tDash', 'DASH', !hunter); set('tTaunt', 'TAUNT', !hunter); set('tAlt', hunter ? 'ZOOM' : 'LOCK');
   }, 100);
 }

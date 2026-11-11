@@ -277,3 +277,4 @@ body.touch #abilities { opacity: 0.85; transform: scale(0.8); transform-origin: 
   .menuCard { padding: 12px !important; gap: 8px !important; } .menuCard .custom, .menuCard .lvl { display: none; }
   .btn.big { padding: 10px !important; font-size: 20px !important; }
 }
+#tAlt { right: 30px; bottom: 284px; width: 58px !important; height: 58px !important; }

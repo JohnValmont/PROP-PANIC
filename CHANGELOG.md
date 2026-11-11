@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.1
+- Touch: the game goes full screen and landscape on the first button tap (where the browser allows it); the fire
+  button doubles as a look pad so hunters can track a target while zapping; new ZOOM (hunter) / LOCK (prop) toggle.
+
 ## 2.2.0
 - **Touch controls.** On phones and tablets: a floating stick under the left thumb, drag on the right to look, and
   buttons for the action, jump, both abilities, dash, taunt and the menu. The menu fits a phone held sideways, and a

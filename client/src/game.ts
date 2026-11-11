@@ -278,6 +278,7 @@ export class Game {
     const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
     this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
   }
+  touchAlt(on: boolean) { this.mouseR = on; }
   touchFire(down: boolean) { if (!this.locked) return; this.mouseL = down; if (down && this.team === 'prop') this.tryTransform(); }
   requestLock() { if (this.touch) return; if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
 
