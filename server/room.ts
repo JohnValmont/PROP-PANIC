@@ -184,7 +184,7 @@ export class Room {
   roster(): RosterEntry[] {
     return [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, team: p.team, alive: p.alive, bot: !!p.bot, host: p.host,
-      score: Math.round(p.score), disguise: p.quackUntil > this.now ? DUCK : p.disguise, conn: p.connected,
+      score: Math.round(p.score), disguise: p.disguise, conn: p.connected, quack: p.team === 'hunter' && p.quackUntil > this.now,
     }));
   }
 

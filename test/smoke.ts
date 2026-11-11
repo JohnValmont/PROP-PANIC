@@ -106,6 +106,7 @@ async function main() {
     const hunters = a.roster.filter((r: any) => r.team === 'hunter');
     ok(hunters.length === 1 && a.roster.filter((r: any) => r.team === 'prop').length === 3, 'server assigned 1 hunter / 3 props');
     ok(buildMap(a.phase.seed).decor.length > 100, 'round seed reproduces the map client-side');
+    ok(a.roster.every((r: any) => r.quack === false), 'nobody starts the round quacked, whatever their last disguise was');
 
     // Make sure a human is the hunter for the shooting test; otherwise just use whoever is.
     const humanHunter = [a, b].find((c) => c.me().team === 'hunter') ?? null;

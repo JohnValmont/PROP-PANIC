@@ -93,5 +93,8 @@ $('copyLink').onclick = async () => {
   setTimeout(() => ($('copyLink').textContent = 'Copy invite link'), 1800);
 };
 
+// HUD buttons give focus straight back so game keys can't re-trigger them
+for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#hud button, #pause button'))) b.addEventListener('click', () => b.blur());
+
 // first interaction unlocks audio and starts the menu tune
 window.addEventListener('pointerdown', () => { game.sfx.unlock(); if (!game.inGame) game.sfx.music('lobby'); }, { once: true });

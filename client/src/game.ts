@@ -89,6 +89,8 @@ export class Game {
   private fpsAcc = 0; private fpsN = 0; private fpsChecked = false;
   quality: 'high' | 'low' = 'high';
   fps = 60;
+  renderEvery = 1;
+  private frameN = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
@@ -183,7 +185,8 @@ export class Game {
 
   // ================================================================ input
   private bindInput() {
-    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === this.canvas; this.skipMouse = 2; if (!this.locked) { this.keys.clear(); this.mouseL = this.mouseR = false; } });
+    document.addEventListener('pointerlockchange', () => { this.locked = document.pointerLockElement === this.canvas; this.skipMouse = 2;
+      if (this.locked && document.activeElement instanceof HTMLElement) document.activeElement.blur(); if (!this.locked) { this.keys.clear(); this.mouseL = this.mouseR = false; } });
     this.canvas.addEventListener('click', () => { this.sfx.unlock(); this.requestLock(); });
     document.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
@@ -206,6 +209,8 @@ export class Game {
     document.addEventListener('keyup', (e) => { this.keys.delete(e.code); if (e.code === 'Tab') this.showScores = false; });
     document.addEventListener('keydown', (e) => {
       if (!this.inGame || (e.target as HTMLElement)?.tagName === 'INPUT') return;
+      // game keys must never activate a focused HUD button (Space would re-click "Start" or "+ bot")
+      if (e.code === 'Space' || e.code === 'Enter' || e.code.startsWith('Arrow')) e.preventDefault();
       if (e.code === 'Tab') { e.preventDefault(); this.showScores = true; return; }
       if (e.repeat) return;
       this.keys.add(e.code);
@@ -314,10 +319,10 @@ export class Game {
       if (r.id === this.myId) {
         const teamChanged = this.team !== r.team || this.alive !== r.alive;
         this.team = r.team; this.alive = r.alive; this.disguise = r.disguise;
-        this.quackedMe = r.team === 'hunter' && r.disguise === DUCK_TYPE;
+        this.quackedMe = r.team === 'hunter' && r.quack;
         if (teamChanged) { this.pitch = r.team === 'hunter' ? 0 : -0.22; this.mouseL = false; }
       }
-      const wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.disguise === DUCK_TYPE ? 'duck' : 'hunter') : 'prop:' + r.disguise;
+      const wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter') : 'prop:' + r.disguise;
       let e = this.ents.get(r.id);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
@@ -870,6 +875,8 @@ export class Game {
     const d = new THREE.Vector3();
     this.camera.getWorldDirection(d);
     this.sfx.setListener(this.camera.position.x, this.camera.position.y, this.camera.position.z, d.x, d.y, d.z);
-    this.renderer.render(this.scene, this.camera);
+    // renderEvery > 1 draws only every Nth frame (simulation and input still run every frame);
+    // used by the automated browser test on machines without a GPU
+    if (++this.frameN % this.renderEvery === 0) this.renderer.render(this.scene, this.camera);
   }
 }

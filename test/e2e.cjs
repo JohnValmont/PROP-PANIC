@@ -53,7 +53,7 @@ async function walkTo(page, x, z) {
 
 async function main() {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '60000', PP_HUNT_MS: '90000', PP_END_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '30000', PP_HUNT_MS: '60000', PP_END_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   // One browser per client: a background page in a shared headless browser gets its animation loop throttled.
   const browsers = [];
@@ -86,14 +86,17 @@ async function main() {
     await A.goto(URL);
     await A.waitForFunction(() => window.__pp && window.__pp.renderer.info.render.calls > 10, null, { timeout: 20000 });
     ok(await A.isVisible('#menu') && (await A.textContent('.logo')).includes('PROP'), 'menu renders over a live 3D scene');
+    const lite = (page) => page.evaluate(() => { window.__pp.renderEvery = 20; }); // no GPU here: draw 1 frame in 20, simulate all of them
     await A.fill('#nameInput', 'Alice');
     await shot(A, '01-menu.png');
+    await lite(A);
 
     console.log('private room');
     await A.click('#createBtn');
     await A.waitForFunction(() => window.__pp.inGame, null, { timeout: 8000 });
     let a = await state(A);
     ok(/^[A-Z]{4}$/.test(a.code) && A.url().includes(`room=${a.code}`), `room ${a.code} created and reflected in the URL`);
+    await A.waitForFunction(() => document.getElementById('lobbyCode').textContent.length === 4, null, { timeout: 5000 }).catch(() => {});
     ok(await A.isVisible('#lobby') && (await A.textContent('#lobbyCode')) === a.code, 'lobby panel shows the invite code');
     ok(!a.locked && await A.isDisabled('#startBtn'), 'host keeps the mouse in the lobby; Start is disabled with one player');
 
@@ -101,6 +104,7 @@ async function main() {
     await B.goto(`${URL}?room=${a.code}`);
     await B.waitForFunction(() => window.__pp, null, { timeout: 20000 });
     ok((await B.inputValue('#codeInput')) === a.code, 'invite link pre-fills the room code');
+    await lite(B);
     await B.fill('#nameInput', 'Bob');
     await B.click('#joinBtn');
     await B.waitForFunction(() => window.__pp.inGame && window.__pp.roster.size === 2, null, { timeout: 8000 });
@@ -114,6 +118,7 @@ async function main() {
     await B.reload();
     await B.waitForFunction(() => window.__pp && window.__pp.inGame, null, { timeout: 25000 });
     ok((await state(B)).id === bId, 'page refresh resumes the same seat');
+    await lite(B);
 
     console.log('round 1');
     await A.click('#startBtn');
@@ -152,7 +157,7 @@ async function main() {
     for (const [wx, wz] of [[p0.x, 8.6], [2.6, 8.8], [2.6, 12.6]]) { d = await walkTo(P, wx, wz); const q = await state(P); legs.push(`${q.x.toFixed(1)},${q.z.toFixed(1)}`); }
     let p1 = await state(P);
     if (d >= 0.8) console.log(`  (walk debug) start ${p0.x.toFixed(1)},${p0.z.toFixed(1)} legs ended at ${legs.join(' | ')} as ${await P.textContent('#roleName')}; canMove/locked ${JSON.stringify(await P.evaluate(() => [window.__pp.canMove, window.__pp.locked, window.__pp.fps]))}`);
-    console.log(`  (software-rendered test clients run at ~${Math.round(await P.evaluate(() => window.__pp.fps))} fps)`);
+    console.log(`  (test clients simulate at ~${Math.round(await P.evaluate(() => window.__pp.fps))} fps)`);
     ok(d < 0.8, `prop walked to the checkout with real key input (${p1.x.toFixed(1)}, ${p1.z.toFixed(1)})`);
     await sleep(900);
     ok((await state(P)).smooth < 0.25, 'client prediction agrees with the server (no rubber-banding)');
@@ -184,6 +189,7 @@ async function main() {
       dead = !(await state(P)).alive;
     }
     await H.mouse.up();
+    if (!dead) console.log('  (shoot debug)', JSON.stringify(await H.evaluate((pid) => { const g = window.__pp, e = g.ents.get(pid); return { log: window.__log.slice(-5), locked: g.locked, mouseL: g.mouseL, team: g.team, phase: g.phase, quacked: g.quackedMe, focus: g.focus, me: [g.body.x, g.body.y, g.body.z].map((v) => +v.toFixed(2)), ent: e && [e.x, e.y, e.z, e.h].map((v) => +v.toFixed(2)), vis: e && e.group.visible, yaw: g.yaw, pitch: g.pitch }; }, p1.id)), JSON.stringify(await state(P).then((q) => ({ hp: q.hp, alive: q.alive, pos: [q.x, q.y, q.z].map((v) => +v.toFixed(2)) }))));
     ok(dead, 'hunter shot the prop three times with held fire and caught it');
     await waitPhase(H, 'end', 8000); await waitPhase(P, 'end', 8000);
     await sleep(400);
@@ -199,7 +205,10 @@ async function main() {
     ok(h2.round === 2 && h2.team === 'prop' && p2.team === 'hunter', 'rematch starts automatically and the roles swap');
     ok(await P.isVisible('#blindfold'), 'the new hunter is blindfolded');
     await H.keyboard.press('KeyQ');
-    await H.waitForFunction(() => window.__pp.decoys.size === 1, null, { timeout: 4000 });
+    await H.waitForFunction(() => window.__pp.decoys.size === 1, null, { timeout: 4000 }).catch(async () => {
+      console.log('  (decoy debug)', JSON.stringify(await H.evaluate(() => { const g = window.__pp; return { log: window.__log.slice(-6), team: g.team, alive: g.alive, hasMe: g.hasMe, phase: g.phase, cd: g.cd, now: g.serverNow(), chat: g.chatOpen, active: document.activeElement && document.activeElement.id, decoys: g.decoys.size }; })));
+      throw new Error('decoy did not appear');
+    });
     await P.waitForFunction(() => window.__pp.decoys.size === 1, null, { timeout: 4000 }).catch(() => {});
     ok((await P.evaluate(() => window.__pp.decoys.size)) === 1, 'a decoy placed by the prop appears on the other client');
     await H.keyboard.down('ShiftLeft'); await sleep(120); await H.keyboard.up('ShiftLeft');
