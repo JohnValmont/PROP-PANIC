@@ -38,6 +38,7 @@ its loose props are re-laid out from a new seed every round. Blackout becomes an
 | **Last prop standing** | The final survivor gets Ghost and Decoy recharged; hunters get faster roll calls. |
 | **Great escape** | Survive six seconds after being hit and you bank bonus points. |
 | **Ghost (prop, F) / Dash (Shift)** | Three seconds of invisibility to hunters; a short sprint. |
+| **Caught? Haunt the round** | A caught prop becomes a spectator ghost, attached to the hunter who caught it. Click (or Q / F) to hop between players, Space to look through a hunter's eyes, or push a direction to let go and fly free through walls. Ghosts see every name through walls. Works with the touch stick and buttons too. |
 | **Risky taunts (T or 1-5)** | Taunting scores more the closer a hunter is, and shortens ability cooldowns. |
 | **Chaos meter** | Missed shots, taunts and popped decoys fill it. When full: **Blackout**, **Poltergeist** (objects start hopping), **Prop Shuffle** (everyone becomes a different toy), **Moon Bounce** (low gravity) or **Achoo** (every real prop sneezes into the air). |
 | **Roll call** | Every 22 s all props squeak, positioned in 3D audio. |
@@ -68,13 +69,33 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
 - **Play now** drops you into a public room. Empty seats are filled with clearly labelled bots, and
   humans replace them as they join. You can join mid-round.
 - **Create private room** gives a 4-letter code and an invite link (`?room=CODE`). The host can add
-  bots and starts the round.
+  bots, picks the game length and starts the game.
+- **A game is a set of rounds**, three by default. Scores run across the game, the hunter role rotates each
+  round, and the last round ends with the final standings before everyone returns to the lobby. Public games
+  are always three rounds; the host of a private room can pick 1, 3, 5, 7 or 10.
 - Refreshing the page or a short network drop puts you back in your seat.
 
 ## Progression and looks
 
 Points earned each round become XP (stored in the browser). Levels unlock hunter hats; vest colour is
 free to choose. Both are cosmetic only and visible to everyone in the match.
+
+### Coins
+
+Coins are the currency for cosmetics. Nothing is on sale yet: this release adds the earning side and the wallet.
+The server works out every payout (`COINS` in `shared/constants.ts`) and sends it with the results:
+
+| When | Coins |
+| --- | --- |
+| Each round, for taking part | 5 |
+| Each round, per 20 points scored | +1 (round total capped at 40) |
+| Each round, on the winning side | +10 |
+| Last round, for finishing the game | +15 |
+| Last round, 1st / 2nd / 3rd in the game | +30 / +20 / +10 (last place never gets one) |
+
+The wallet is kept in the browser, like XP, because there are no accounts. Anyone can edit their own balance
+with the browser's developer tools. That is harmless while coins buy nothing; before they buy anything other
+players can see, or anything sold for real money, the wallet has to move to the server behind a login.
 
 ## Controls
 
@@ -131,13 +152,14 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
 ```bash
 npm test             # protocol: rooms, roles, movement authority, speed-hack clamp, shooting, reconnect
 npm run build && npm run test:e2e   # two real browsers play a full round against each other
+npm run build && npm run test:ghost # a late joiner haunts a round of bots, with mouse and keyboard and with touch
 npm run test:maps        # both maps: deterministic, free spawns, bot-navigable, sane prop counts
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
-`PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS` override them).
+`PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
 CI (`.github/workflows/ci.yml`) runs the typecheck, build, map, mechanics, security and protocol tests on every push.
 

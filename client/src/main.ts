@@ -90,14 +90,16 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Escape' && game.inGame && !game.locked) showPause(!pauseOpen);
 });
+// a pause panel left open (or raised by a reload during the results) must not cover the lobby after a game
+game.onLobby = () => { if (pauseOpen && !pause.classList.contains('menuMode')) showPause(false); };
 $('resumeBtn').onclick = () => { showPause(false); game.requestLock(); };
 $('leaveBtn').onclick = () => toMenu();
 const gfx = $('gfxBtn'), mute = $('muteBtn');
 const label = () => { gfx.textContent = `Graphics: ${game.quality === 'ultra' ? 'Ultra' : game.quality === 'high' ? 'High' : 'Fast'}`; mute.textContent = `Sound: ${game.sfx.muted ? 'Off' : 'On'}`; };
 gfx.onclick = () => {
   const next = game.quality === 'ultra' ? 'high' : game.quality === 'high' ? 'low' : 'ultra';
-  // say so first, then apply on the next frame: rebuilding shadows (or reloading for Fast) takes a moment
-  gfx.textContent = next === 'low' || game.quality === 'low' ? 'Reloading…' : 'Applying…';
+  // say so first, then apply on the next frame: rebuilding shadows (or the whole scene, for Fast) takes a moment
+  gfx.textContent = 'Applying…';
   setTimeout(() => { game.setQuality(next); label(); }, 60);
 };
 if (isTouchDevice()) initTouch(game, () => showPause(true));
@@ -119,10 +121,11 @@ $('copyLink').onclick = async () => {
 for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#hud button, #pause button'))) b.addEventListener('click', () => b.blur());
 
 // ---------------------------------------------------------------- profile: level, hunter colour and hat
-import { HATS, HAT_LEVEL, HUNTER_COLORS, levelXp, xpLevel } from '../../shared/constants';
+import { HATS, HAT_LEVEL, HUNTER_COLORS, ROUND_CHOICES, levelXp, xpLevel } from '../../shared/constants';
 function renderProfile() {
   const lvl = xpLevel(game.xp), lo = levelXp(lvl), hi = levelXp(lvl + 1);
   $('lvlBadge').textContent = String(lvl);
+  $('coinN').textContent = game.coins.toLocaleString('en-US');
   $('lvlXp').textContent = `${Math.round(game.xp - lo)} / ${hi - lo} XP`;
   $('lvlFill').style.width = `${Math.min(100, ((game.xp - lo) / (hi - lo)) * 100)}%`;
   const color = game.look >> 3, hat = game.look & 7;
@@ -146,6 +149,7 @@ mus.value = String(game.sfx.musicVol); invY.checked = game.invertY;
 mus.oninput = () => { game.sfx.setMusicVolume(Number(mus.value)); localStorage.setItem('pp_mus', mus.value); };
 invY.onchange = () => { game.invertY = invY.checked; localStorage.setItem('pp_invy', invY.checked ? '1' : '0'); };
 $('mapBtn').onclick = () => game.net.send({ t: 'map', m: (game.lobbyInfo.map + 1) % 3 });
+$('roundsBtn').onclick = () => game.net.send({ t: 'rounds', n: ROUND_CHOICES[(ROUND_CHOICES.indexOf(game.lobbyInfo.rounds) + 1) % ROUND_CHOICES.length] });
 // soft tick when the pointer moves onto anything clickable
 let lastHover: Element | null = null;
 document.addEventListener('mouseover', (e) => {

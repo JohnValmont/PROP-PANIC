@@ -1,5 +1,52 @@
 # Changelog
 
+## 2.4.1
+
+- **Changing graphics no longer reloads the page.** Switching to or from Fast used to reload the whole site,
+  because Fast uses its own models and materials. They are now swapped in place: the old set is released, the
+  map and everyone on it are rebuilt, and the new set streams in. Ultra and High never reloaded, but two of the
+  three steps of the Graphics button did. The automatic step-down to Fast on a slow machine no longer reloads
+  either.
+- Known difference: anti-aliasing of the Fast picture is decided when the page loads. A session that started on
+  High or Ultra and switches to Fast keeps it (slightly smoother edges, slightly more work for the graphics
+  chip); one that started on Fast has none, as before.
+
+## 2.4.0
+
+- **Games.** Rounds used to chain forever with one running score. A game is now a set of rounds, three by
+  default: scores start at zero, the hunter role rotates each round, and the last round ends with the final
+  standings and the winner of the game before everyone returns to the lobby. The header counts the rounds
+  ("ROUND 2/3"), and the results panel says which round is next.
+- **Game length for private rooms.** The host picks 1, 3, 5, 7 or 10 rounds in the lobby. The choice is fixed
+  once a game starts; changing it mid-game applies to the next one. Public games are always three rounds.
+- **Coins.** Every round pays coins: 5 for taking part, 1 per 20 points scored (capped at 40), 10 for being on the
+  winning side. The last round adds 15 for finishing the game and 30 / 20 / 10 for the podium. The server works
+  out each payout; the results panel shows it and the menu shows the wallet. There is nothing to buy yet. The
+  wallet is stored in the browser like XP, so it is not tamper-proof (see `SECURITY.md`).
+- Rewards are banked once per round, including XP: reloading during the results no longer pays XP a second time.
+- Maps alternate across games too, so a three-round game no longer always opens on the Emporium.
+- Fixed: a pause panel left open when a game ended would have covered the lobby. It closes, and the host of a
+  private room gets the mouse back for the lobby buttons.
+- New tests: `npm run test:match` (17 browser checks) and 19 server checks for game flow and payouts.
+- Protocol: the phase, lobby and results messages carry new fields, so a 2.3 client should be reloaded.
+
+## 2.3.0
+
+- **Ghost mode for caught props and late joiners.** Being caught used to leave you with a bare fly camera that
+  did not work on touch at all. Now:
+  - You start attached to the hunter who caught you (late joiners: to the first hunter), with a camera that
+    orbits them and stays out of walls.
+  - Left click or F steps to the next player, right click or Q to the previous one. Props and hunters both.
+  - Space looks through a watched hunter's eyes, blaster and recoil included; Space again steps back out.
+  - Pushing a direction lets go and flies you free from where the camera is. Space / Shift climb and descend,
+    the view looks all the way up and down, and E swaps between flying and watching.
+  - While flying, look at a player and click to attach to them (the nearest one if nobody is under the crosshair).
+  - Touch: the stick flies the ghost and the buttons become FLY / WATCH, PREV, NEXT, EYES, UP and DOWN.
+  - Ghosts see every living player's name through walls, scaled to stay readable from across the map, and a strip
+    at the bottom says who is being watched and as what.
+- Fixed: the screen shake from being caught, and the wider view of a dash, no longer linger into the next round.
+- New browser test, `npm run test:ghost` (41 checks, desktop and touch).
+
 ## 2.2.3
 
 - Fixed: players (props and hunters) could still freeze after a reconnect. An input numbered for the old

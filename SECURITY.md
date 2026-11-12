@@ -27,8 +27,10 @@ server defends against, how, and what it does not.
   keeping the layout secret from hunters and merging still players into it, which changes how collisions work.
 - **Aim assistance.** A modified client can aim perfectly at whatever it has identified.
 - **Teammates sharing information** over voice chat or a second screen (spectators and props see everything).
-- **Cosmetic unlocks.** Level and hat unlocks live in the browser's storage; there are no accounts to check them
-  against. They affect looks only.
+- **Cosmetic unlocks and coins.** Level, hat unlocks and the coin wallet live in the browser's storage; there are
+  no accounts to check them against. The server decides how many coins a round pays, but the running balance is
+  the client's word. They affect looks only. A shop that sells anything for coins needs accounts and a
+  server-side balance first.
 - **Volumetric denial of service.** The limits above handle abusive clients, not a flood of traffic; that needs
   a network-level service in front (the host's, or a CDN).
 - **Per-address limits behind shared addresses.** Behind a proxy the server reads `CF-Connecting-IP` or the

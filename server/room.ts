@@ -4,7 +4,7 @@
  */
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import { CFG, F, QUICK_CHAT, TAUNTS, type Phase, type Team } from '../shared/constants';
+import { CFG, COINS, F, QUICK_CHAT, ROUNDS_DEFAULT, ROUND_CHOICES, TAUNTS, type Phase, type Team } from '../shared/constants';
 import { buildMap, BOUNDS, type GameMap } from '../shared/map';
 import { World, aimDir, newBody, rayOBB, type Body, type Cmd } from '../shared/physics';
 import { PROPS, PROP_INDEX, STARTER_PROPS, propBody } from '../shared/props';
@@ -101,6 +101,11 @@ export class Room {
   private unstickN = 0;
   /** 0 = alternate maps each round, otherwise map id + 1. */
   mapPref = 0;
+  /** Rounds in the game being played (fixed when it starts), and what the host has picked for the next one. */
+  rounds = ROUNDS_DEFAULT;
+  roundsPref = ROUNDS_DEFAULT;
+  /** Every round this room has started, across games. */
+  private played = 0;
   private lastProp = false;
   private roundProps = 0;
   now = now();
@@ -168,7 +173,7 @@ export class Room {
 
   /** Full state for a client that just (re)connected. */
   private sendState(p: Player) {
-    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap(), results: this.phase === 'end' ? this.lastResults : undefined });
+    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, rounds: this.rounds, seed: this.seed, map: this.mapId, next: this.nextMap(), results: this.phase === 'end' ? this.lastResults : undefined });
     this.send(p, { t: 'roster', p: this.roster(p) });
     this.send(p, { t: 'decoys', d: this.decoys.map((d) => ({ id: d.id, type: d.type, x: d.x, y: d.y, z: d.z, yaw: d.yaw, owner: d.owner })) });
     if (this.event && this.event.until > this.now) this.send(p, { t: 'ev', k: 'chaos', kind: this.event.kind, ms: this.event.until - this.now, seed: this.round });
@@ -242,7 +247,7 @@ export class Room {
 
   private sendLobby() {
     const n = this.players.size;
-    this.broadcast({ t: 'lobby', bots: [...this.players.values()].filter((q) => q.bot).length, countdown: this.countdownAt ? Math.max(0, this.countdownAt - this.now) : 0, canStart: n >= 2, map: this.mapPref });
+    this.broadcast({ t: 'lobby', bots: [...this.players.values()].filter((q) => q.bot).length, countdown: this.countdownAt ? Math.max(0, this.countdownAt - this.now) : 0, canStart: n >= 2, map: this.mapPref, rounds: this.isPublic ? ROUNDS_DEFAULT : this.roundsPref });
   }
 
   // ================================================================ spawning & forms
@@ -317,11 +322,11 @@ export class Room {
     this.rosterDirty = true; // what a viewer may know about the other team changes with the phase
     this.phase = phase;
     this.phaseEnds = ms ? this.now + ms : 0;
-    this.broadcast({ t: 'phase', phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap(), results });
+    this.broadcast({ t: 'phase', phase, ends: this.phaseEnds, round: this.round, rounds: this.rounds, seed: this.seed, map: this.mapId, next: this.nextMap(), results });
     this.rosterDirty = true;
   }
 
-  private nextMap(): number { return this.mapPref ? this.mapPref - 1 : this.round % 2; }
+  private nextMap(): number { return this.mapPref ? this.mapPref - 1 : this.played % 2; }
 
   private loadMap(seed: number, id = 0) {
     this.seed = seed; this.mapId = id;
@@ -335,7 +340,12 @@ export class Room {
     const all = [...this.players.values()].filter((p) => p.bot || p.connected);
     if (all.length < 2) { this.toLobby(); return; }
     const mapId = this.nextMap();
-    this.round++;
+    if (this.round === 0) {
+      // a new game: the host's choice of length is fixed for its duration, and everyone starts level
+      this.rounds = this.isPublic ? ROUNDS_DEFAULT : this.roundsPref;
+      for (const p of this.players.values()) { p.score = 0; p.hunterTurns = 0; }
+    }
+    this.round++; this.played++;
     this.loadMap(1000 + Math.floor(Math.random() * 1e9), mapId);
     this.chaos = 0; this.event = null; this.decoys = []; this.pulses = []; this.panic = false; this.firstDeath = 0; this.lastProp = false; this.roundProps = 0;
     this.world.gravScale = 1; this.countdownAt = 0;
@@ -390,12 +400,19 @@ export class Room {
     if (this.firstDeath) add('First to Fall', this.players.get(this.firstDeath) ?? null, () => 'found before anyone else');
 
     for (const p of played) p.score += p.stats.pts;
+    const roundCoins = (p: Player) => Math.max(COINS.round, Math.min(COINS.roundCap, COINS.round + Math.floor(p.stats.pts / COINS.perPoints)))
+      + ((p.team === 'hunter') === (winner === 'hunters') ? COINS.win : 0);
     const board = played
-      .map((p) => ({ id: p.id, name: p.name, team: p.team, round: Math.round(p.stats.pts), total: Math.round(p.score), survived: p.team === 'prop' && p.alive }))
+      .map((p) => ({ id: p.id, name: p.name, team: p.team, round: Math.round(p.stats.pts), total: Math.round(p.score), survived: p.team === 'prop' && p.alive, coins: roundCoins(p) }))
       .sort((a, b) => b.round - a.round);
+    // the last round of a game also settles the game: final standings, and a bonus for finishing and for the podium
+    const last = this.round >= this.rounds;
+    const paid = Math.min(COINS.place.length, played.length - 1); // last place never takes a podium bonus
+    const final = last ? played.slice().sort((a, b) => b.score - a.score)
+      .map((p, i) => ({ id: p.id, name: p.name, total: Math.round(p.score), coins: COINS.game + (i < paid ? COINS.place[i] : 0), bot: !!p.bot })) : undefined;
     this.event = null; this.world.gravScale = 1; this.pulses = [];
     void t;
-    this.setPhase('end', CFG.END_MS, { winner, awards, board });
+    this.setPhase('end', last ? CFG.FINAL_MS : CFG.END_MS, { winner, awards, board, n: this.played, round: this.round, rounds: this.rounds, final });
   }
 
   // ================================================================ input
@@ -414,6 +431,7 @@ export class Room {
       case 'taunt': this.taunt(p, fin(m.i) ? m.i | 0 : 0); break;
       case 'chat': if (fin(m.i) && m.i >= 0 && m.i < QUICK_CHAT.length && t > p.nextChatAt) { p.nextChatAt = t + 1500; this.broadcast({ t: 'ev', k: 'chat', who: p.id, i: m.i | 0 }); } break;
       case 'start': if (p.host && this.phase === 'lobby' && this.players.size >= 2) this.startRound(); break;
+      case 'rounds': if (p.host && !this.isPublic && fin(m.n) && ROUND_CHOICES.includes(m.n)) { this.roundsPref = m.n; this.sendLobby(); } break;
       case 'map': if (p.host && !this.isPublic && fin(m.m)) { this.mapPref = Math.max(0, Math.min(2, m.m | 0)); this.sendLobby(); } break;
       case 'bots': if (p.host && !this.isPublic && fin(m.n)) { this.botsWanted = Math.max(0, Math.min(8, m.n | 0)); this.balanceBots(); this.sendLobby(); } break;
       case 'ping': if (fin(m.c)) this.send(p, { t: 'pong', c: m.c, now: now() }); break;
@@ -719,7 +737,8 @@ export class Room {
         break;
       case 'hunt': this.tickHunt(t, dt); break;
       case 'end':
-        if (t >= this.phaseEnds) { if (this.humans >= 1) this.startRound(); else this.toLobby(); }
+        // between rounds the game rolls straight on; after the last one everybody goes back to the lobby
+        if (t >= this.phaseEnds) { if (this.humans >= 1 && this.round < this.rounds) this.startRound(); else this.toLobby(); }
         break;
     }
     if (this.closed) return;

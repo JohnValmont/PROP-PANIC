@@ -111,7 +111,7 @@ async function main() {
     await B.waitForFunction(() => window.__pp.inGame && window.__pp.roster.size === 2, null, { timeout: 8000 });
     await A.waitForFunction(() => window.__pp.roster.size === 2, null, { timeout: 8000 });
     ok(true, 'second browser joined through the invite link');
-    ok(!(await B.isVisible('#startBtn')), 'only the host sees the Start button');
+    ok(!(await B.isVisible('#startBtn')) && !(await B.isVisible('#roundsBtn')) && await A.isVisible('#roundsBtn'), 'only the host sees the Start button and the game length');
     await shot(A, '02-lobby.png');
 
     console.log('refresh keeps your seat');
@@ -191,6 +191,10 @@ async function main() {
     await H.mouse.up();
     if (!dead) console.log('  (shoot debug)', JSON.stringify(await H.evaluate((pid) => { const g = window.__pp, e = g.ents.get(pid); return { log: window.__log.slice(-5), locked: g.locked, mouseL: g.mouseL, team: g.team, phase: g.phase, quacked: g.quackedMe, focus: g.focus, me: [g.body.x, g.body.y, g.body.z].map((v) => +v.toFixed(2)), ent: e && [e.x, e.y, e.z, e.h].map((v) => +v.toFixed(2)), vis: e && e.group.visible, yaw: g.yaw, pitch: g.pitch }; }, p1.id)), JSON.stringify(await state(P).then((q) => ({ hp: q.hp, alive: q.alive, pos: [q.x, q.y, q.z].map((v) => +v.toFixed(2)) }))));
     ok(dead, 'hunter shot the prop three times with held fire and caught it');
+    const hid = (await state(H)).id;
+    await P.waitForFunction((id) => window.__pp.specOn && window.__pp.specTarget === id, hid, { timeout: 4000 }).catch(() => {});
+    const gh = await P.evaluate(() => { const g = window.__pp; return [g.specOn, g.specMode, g.specTarget]; });
+    ok(gh[0] && gh[1] === 'follow' && gh[2] === hid, 'the caught prop becomes a ghost attached to the hunter who caught it');
     await waitPhase(H, 'end', 8000); await waitPhase(P, 'end', 8000);
     await sleep(400);
     // wait on the panels themselves rather than a fixed delay: software-rendered test pages can be slow to paint
@@ -199,12 +203,15 @@ async function main() {
     ok(((await H.textContent('#results h2').catch(() => '')) ?? '').includes('HUNTERS WIN') && await P.isVisible('#results'), 'both clients show the results screen: hunters win');
     const hs = await state(H);
     ok(hs.roster.find((r) => r.id === hs.id).score >= 250 || (await H.textContent('#results')).includes('+'), 'hunter was awarded points for the catch');
+    const paid = [await H.evaluate(() => window.__pp.coins), await P.evaluate(() => window.__pp.coins)];
+    ok(paid[0] > paid[1] && paid[1] >= 5 && await H.isVisible('#results .coinRow') && !(await H.isVisible('#results .final')), `both players are paid coins for round 1 of 3, the winning hunter more (${paid.join(' vs ')})`);
     await shot(H, '06-results.png');
 
     console.log('round 2');
     await waitPhase(A, 'hiding', 10000); await waitPhase(B, 'hiding', 10000);
     await P.waitForFunction(() => window.__pp.team === 'hunter' && document.getElementById('blindfold').style.display === 'flex', null, { timeout: 10000 }).catch(() => {});
     const h2 = await state(H), p2 = await state(P);
+    ok(!(await H.evaluate(() => window.__pp.specOn)) && !(await P.evaluate(() => window.__pp.specOn)), 'nobody is left a ghost when the next round starts');
     ok(h2.round === 2 && h2.team === 'prop' && p2.team === 'hunter', 'rematch starts automatically and the roles swap');
     ok(await P.isVisible('#blindfold'), 'the new hunter is blindfolded');
     await H.keyboard.press('KeyQ');

@@ -1,6 +1,6 @@
 {
   "name": "prop-panic",
-  "version": "2.2.3",
+  "version": "2.4.1",
   "private": true,
   "type": "module",
   "description": "PROP PANIC \u2014 Blend in. Don't get caught. A browser multiplayer prop-hunt party game.",
@@ -13,6 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "tsx test/smoke.ts",
     "test:e2e": "node test/e2e.cjs",
+    "test:ghost": "node test/ghost.cjs",
+    "test:match": "node test/match.cjs",
     "test:soak": "tsx test/soak.ts",
     "test:mechanics": "tsx test/mechanics.ts",
     "test:maps": "tsx test/maps.ts",

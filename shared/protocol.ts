@@ -17,6 +17,9 @@ export type ClientMsg =
   | { t: 'chat'; i: number }
   | { t: 'start' }
   | { t: 'bots'; n: number }
+  | { t: 'map'; m: number }
+  /** Host of a private room: how many rounds the next game runs for (one of ROUND_CHOICES). */
+  | { t: 'rounds'; n: number }
   | { t: 'ping'; c: number };
 
 // ------------------------------------------------------------------ server -> client
@@ -36,11 +39,17 @@ export interface Award { title: string; name: string; detail: string; }
 export interface Results {
   winner: 'props' | 'hunters';
   awards: Award[];
-  board: { id: number; name: string; team: Team; round: number; total: number; survived: boolean }[];
+  /** `coins` is what this round paid the player. */
+  board: { id: number; name: string; team: Team; round: number; total: number; survived: boolean; coins: number }[];
+  /** Counts every round the room has played, so a client can bank its rewards exactly once. */
+  n: number;
+  round: number; rounds: number;
+  /** Only after the last round of a game: the final standings, best first. `coins` is the end-of-game bonus. */
+  final?: { id: number; name: string; total: number; coins: number; bot: boolean }[];
 }
 
 export interface PhaseMsg {
-  t: 'phase'; phase: Phase; ends: number; round: number; seed: number; results?: Results; countdown?: number;
+  t: 'phase'; phase: Phase; ends: number; round: number; rounds: number; seed: number; map: number; next: number; results?: Results;
 }
 
 export interface WelcomeMsg {
@@ -91,6 +100,6 @@ export type ServerMsg =
   | { t: 'roster'; p: RosterEntry[] }
   | { t: 'cd'; decoy: number; ghost: number; taunt: number; pulse: number; shock: number }
   | { t: 'decoys'; d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }[] }
-  | { t: 'lobby'; bots: number; countdown: number; canStart: boolean }
+  | { t: 'lobby'; bots: number; countdown: number; canStart: boolean; map: number; rounds: number }
   | { t: 'pong'; c: number; now: number }
   | { t: 'err'; msg: string };

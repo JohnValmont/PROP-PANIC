@@ -9,14 +9,14 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
-import { CFG, F, QUICK_CHAT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
+import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
 import type { Results, RosterEntry } from '../../shared/protocol';
 import { Sfx } from './audio';
 import { Fx, textSprite } from './fx';
-import { Hud, type AbilityView } from './hud';
+import { Hud, esc, type AbilityView } from './hud';
 import { Net } from './net';
 import { assets } from './assets';
 import { HunterRig, buildBlaster, buildEyes } from './hunter';
@@ -56,12 +56,14 @@ export class Game {
   // session
   inGame = false;
   myId = 0; code = ''; pub = false;
-  phase: Phase = 'lobby'; phaseEnds = 0; round = 0; seed = -1; panic = false;
+  phase: Phase = 'lobby'; phaseEnds = 0; round = 0; rounds = ROUNDS_DEFAULT; seed = -1; panic = false;
   results: Results | undefined;
   roster = new Map<number, RosterEntry>();
-  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0, map: 0 };
+  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0, map: 0, rounds: ROUNDS_DEFAULT };
   chaos = 0;
   onLeave: (reason?: string) => void = () => {};
+  /** A game has finished and everyone is back in the lobby. */
+  onLobby: () => void = () => {};
 
   // world state
   private map!: GameMap;
@@ -83,7 +85,10 @@ export class Game {
   private cd = { decoy: 0, ghost: 0, taunt: 0, pulse: 0, shock: 0 };
   private nextFire = 0; private recoil = 0; private shake = 0; private bob = 0;
   private dashQueued = false; private wasMoving = false;
-  private specPos = new THREE.Vector3(0, 3, 10);
+  // ghost (caught props and late joiners): attached to a player, looking through a hunter's eyes, or flying free
+  private specPos = new THREE.Vector3(0, 3, 10); private specVel = new THREE.Vector3();
+  specOn = false; specMode: 'follow' | 'free' = 'follow'; specTarget = 0; specPov = false;
+  private specFrom = new THREE.Vector3(); private specWant = new THREE.Vector3(); private specBlend = 1; private specSeek = 0;
   private target = -1;
   private freezeUntil = 0; private revealedUntil = 0; private quackedMe = false;
   private nextBeep = 0; private nextHeart = 0; private lastTickSec = -1;
@@ -107,9 +112,11 @@ export class Game {
   helpOn = true;
   private slowSecs = 0;
   look = 0; baseFov = 78; xp = 0;
+  /** Wallet for cosmetics. Kept in the browser, like XP: there are no accounts for the server to keep it against. */
+  coins = 0; private coinGain = 0; private paid = '';
   private composer!: EffectComposer; private bloom!: UnrealBloomPass; private gtao!: GTAOPass;
   private muzzle!: THREE.Mesh; private previewRig: HunterRig | null = null;
-  private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0; private xpRound = -1;
+  private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0;
   private hitch = 0;
   private frameN = 0;
 
@@ -163,6 +170,8 @@ export class Game {
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
     this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
+    this.coins = Math.max(0, Math.floor(Number(localStorage.getItem('pp_coins')) || 0));
+    this.paid = localStorage.getItem('pp_paid') ?? '';
     this.invertY = localStorage.getItem('pp_invy') === '1';
     const mv = localStorage.getItem('pp_mus'); if (mv !== null && Number(mv) >= 0 && Number(mv) <= 1) this.sfx.musicVol = Number(mv);
     const hp = localStorage.getItem('pp_help');
@@ -198,10 +207,17 @@ export class Game {
 
   setQuality(q: Quality) {
     try { localStorage.setItem('pp_quality', q); } catch { /* ignore */ }
-    // fast graphics uses different models and materials, chosen at load: switching to or from it reloads (the seat is kept)
-    if ((q === 'low') !== assets.lite) { location.reload(); return; }
     this.quality = q;
     this.world.setQuality(q === 'ultra' ? 2 : q === 'high' ? 1 : 0);
+    // fast graphics uses different models and materials: swap them in place and rebuild what is on screen
+    if ((q === 'low') !== assets.lite) {
+      assets.setLite(q === 'low');
+      if (this.map) {
+        this.world.rebuild(this.map);
+        for (const e of this.ents.values()) if (e.kind) this.buildModel(e, e.kind);
+        for (const d of this.decoys.values()) { this.scene.remove(d.mesh); d.mesh = assets.propObject(d.type); d.mesh.position.set(d.x, d.y, d.z); d.mesh.rotation.y = d.yaw + Math.PI; this.scene.add(d.mesh); }
+      }
+    }
     this.gtao.enabled = q === 'ultra';
     this.resize();
   }
@@ -243,6 +259,7 @@ export class Game {
   leave() {
     this.net.close();
     this.inGame = false; this.hasMe = false; this.alive = false;
+    this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow';
     for (const e of this.ents.values()) this.scene.remove(e.group);
     this.ents.clear();
     for (const d of this.decoys.values()) this.scene.remove(d.mesh);
@@ -272,14 +289,22 @@ export class Game {
   touch = false; touchPaused = false; stick = { x: 0, y: 0 };
   /** Look around by a pointer delta in pixels (shared by touch drag). */
   turn(mx: number, my: number) {
-    if (!this.locked) return;
+    if (!this.locked || (this.specOn && this.specPov)) return; // a borrowed view is steered by its owner
     this.yaw -= mx * this.sens * this.zoomK;
     this.pitch -= my * this.sens * this.zoomK * (this.invertY ? -1 : 1);
-    const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
-    this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
+    this.clampPitch();
+  }
+  /** First-person views and free flight look all the way up and down; a camera orbiting a body does not. */
+  private clampPitch() {
+    const free = this.specOn ? this.specMode === 'free' || this.specPov : this.team === 'hunter' && !this.quackedMe && this.alive;
+    this.pitch = Math.max(free ? -1.5 : -1.35, Math.min(free ? 1.5 : this.specOn ? 0.5 : 0.3, this.pitch));
   }
   touchAlt(on: boolean) { this.mouseR = on; }
-  touchFire(down: boolean) { if (!this.locked) return; this.mouseL = down; if (down && this.team === 'prop') this.tryTransform(); }
+  touchFire(down: boolean) {
+    if (!this.locked) return;
+    if (this.specOn) { if (down) this.specSwitch(); return; }
+    this.mouseL = down; if (down && this.team === 'prop') this.tryTransform();
+  }
   requestLock() { if (this.touch) return; if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
 
   // ================================================================ input
@@ -291,14 +316,16 @@ export class Game {
       if (!this.locked) return;
       // browsers sometimes report one huge bogus delta right after the pointer locks: drop it
       if (this.skipMouse > 0) { this.skipMouse--; return; }
+      if (this.specOn && this.specPov) return;
       const mx = Math.max(-300, Math.min(300, e.movementX)), my = Math.max(-300, Math.min(300, e.movementY));
       this.yaw -= mx * this.sens * this.zoomK;
       this.pitch -= my * this.sens * this.zoomK * (this.invertY ? -1 : 1);
-      const fp = this.team === 'hunter' && !this.quackedMe && this.alive;
-      this.pitch = Math.max(fp ? -1.5 : -1.35, Math.min(fp ? 1.5 : 0.3, this.pitch));
+      this.clampPitch();
     });
     document.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
+      // a ghost's mouse buttons pick who to watch
+      if (this.specOn) { if (e.button === 0) this.specClick(); else if (e.button === 2) this.specCycle(-1); return; }
       if (e.button === 0) { this.mouseL = true; if (this.team === 'prop') this.tryTransform(); }
       if (e.button === 2) this.mouseR = true;
     });
@@ -319,6 +346,7 @@ export class Game {
         this.chatOpen = false; this.hud.chatMenu(false);
         return;
       }
+      if (this.specOn && this.specKey(e.code)) return;
       switch (e.code) {
         case 'Enter': this.chatOpen = true; this.hud.chatMenu(true); break;
         case B.act: this.tryTransform(); break;
@@ -366,7 +394,7 @@ export class Game {
       case 's': this.onSnap(m); break;
       case 'ev': this.onEvent(m); break;
       case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock }; break;
-      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0 }; break;
+      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0, rounds: m.rounds | 0 || ROUNDS_DEFAULT }; break;
       case 'decoys': {
         for (const d of this.decoys.values()) this.scene.remove(d.mesh);
         this.decoys.clear();
@@ -378,7 +406,7 @@ export class Game {
 
   private onPhase(m: any) {
     const prevPhase = this.phase;
-    this.phase = m.phase; this.phaseEnds = m.ends; this.round = m.round; this.results = m.results;
+    this.phase = m.phase; this.phaseEnds = m.ends; this.round = m.round; this.rounds = m.rounds | 0 || ROUNDS_DEFAULT; this.results = m.results;
     this.loadMap(m.seed, m.map | 0);
     this.nextMap = m.next | 0;
     this.lastTickSec = -1;
@@ -404,18 +432,28 @@ export class Game {
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
       const mine = res.board.find((r) => r.id === this.myId);
-      if (mine && this.xpRound !== m.round) {
-        this.xpRound = m.round;
+      // bank this round's rewards once: results are sent again to a client that reconnects or reloads during them
+      const key = `${this.code}:${res.n}:${m.seed}`;
+      if (mine && this.paid !== key) {
+        this.paid = key;
         const gain = Math.max(10, mine.round), before = xpLevel(this.xp);
         this.xp += gain;
-        try { localStorage.setItem('pp_xp', String(this.xp)); } catch { /* ignore */ }
+        this.coinGain = Math.max(0, (mine.coins | 0) + ((res.final?.find((r) => r.id === this.myId)?.coins ?? 0) | 0));
+        this.coins += this.coinGain;
+        try { localStorage.setItem('pp_xp', String(this.xp)); localStorage.setItem('pp_coins', String(this.coins)); localStorage.setItem('pp_paid', key); } catch { /* ignore */ }
         this.hud.popup(`+${gain} XP`);
+        if (this.coinGain) this.hud.popup(`+${this.coinGain} coins`);
         if (xpLevel(this.xp) > before) { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${xpLevel(this.xp)}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }
-      }
+      } else if (!mine) this.coinGain = 0;
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
     } else {
       this.sfx.music('lobby');
+      if (prevPhase !== 'lobby' && this.inGame) {
+        // back from a game: the host of a private room needs the mouse for Start, bots and the game length
+        if (!this.pub && this.roster.get(this.myId)?.host && document.pointerLockElement) document.exitPointerLock();
+        this.onLobby();
+      }
     }
   }
   private bannerPending = '';
@@ -538,11 +576,13 @@ export class Game {
     switch (m.k) {
       case 'shot': {
         const mine = m.by === me;
+        const eyes = this.specOn && this.specPov && this.specMode === 'follow' && m.by === this.specTarget; // watching through this hunter's eyes
+        if (eyes) { this.recoil = 1; this.muzzleT = 0.05; }
         const src = this.entPos(m.by);
         const shooter = this.ents.get(m.by); if (shooter) shooter.kick = 1;
         const to = new THREE.Vector3(m.x, m.y, m.z);
         if (src) {
-          const from = mine && !this.quackedMe
+          const from = (mine && !this.quackedMe) || eyes
             ? this.camera.localToWorld(new THREE.Vector3(0.27, -0.2, -0.9))
             : new THREE.Vector3(src[0], src[1] + 1.3, src[2]);
           this.fx.tracer(from, to, 0xfff27a);
@@ -572,7 +612,11 @@ export class Game {
         this.hud.feed([{ b: this.nameOf(m.by) }, ' caught ', { b: this.nameOf(m.who) }, PROPS[m.ty ?? r?.disguise ?? -1] ? ` (the ${PROPS[m.ty ?? r!.disguise].name})` : ''], 'kill');
         this.fx.flash(m.x, m.y + 0.6, m.z, 0xff8fa3, 40);
         if (m.by === me) this.fovPunch = 9;
-        if (m.who === me) { this.hud.banner('CAUGHT!', 'You are a ghost now. Fly around and watch the chaos.', 'pink', 3200); this.specPos.set(m.x, m.y + 2.5, m.z); this.shake = 0.5; }
+        if (m.who === me) {
+          // the ghost starts out attached to whoever caught it (see enterSpectator)
+          this.hud.banner('CAUGHT!', this.touch ? 'You are a ghost now. Watch anyone, or push the stick to fly.' : 'You are a ghost now. Click to watch other players, or move to fly free.', 'pink', 3600);
+          this.specPos.set(m.x, m.y + 2.5, m.z); this.specTarget = m.by; this.shake = 0.5;
+        }
         else if (m.by === me) this.hud.banner('GOT ONE!', `${this.nameOf(m.who)} was the ${PROPS[m.ty ?? r?.disguise ?? -1]?.name ?? 'prop'}`, '', 1800);
         break;
       }
@@ -747,6 +791,8 @@ export class Game {
     const viewerHunter = this.team === 'hunter' && this.alive;
     const viewerSpec = !this.alive || this.team === 'spec';
     const firstPerson = viewerHunter && !this.quackedMe;
+    const eyesOf = this.specOn && this.specPov && this.specMode === 'follow' ? this.specTarget : 0;
+    const cam = this.camera.position;
     for (const e of this.ents.values()) {
       const mine = e.id === this.myId;
       if (mine) {
@@ -762,6 +808,7 @@ export class Game {
         // "not heard about recently" hides a player (ghosted, blindfold) — but never on the frame right after
         // a hitch, when the network messages that would refresh them are still waiting to be processed
         e.group.visible = (now - e.lastSeen < 450 || (this.hitch > 0 && e.group.visible)) && e.buf.length > 0;
+        if (e.id === eyesOf) e.group.visible = false; // a ghost looking through this hunter's eyes
         if (!e.group.visible) continue;
       }
       const r = this.roster.get(e.id);
@@ -807,13 +854,22 @@ export class Game {
         else if (viewerHunter) label = r.team === 'hunter' ? r.name : '';
         else label = r.name;
       }
-      const key = label + '|' + (r?.team ?? '');
+      // ghosts read every name through walls, and at a size that stays legible across the map
+      const key = label + '|' + (r?.team ?? '') + (viewerSpec ? '|g' : '');
       if (key !== e.labelKey) {
         e.labelKey = key;
         if (e.label) { e.group.remove(e.label); e.label.material.dispose(); e.label = null; }
-        if (label) { e.label = textSprite(label, r!.team === 'hunter' ? '#ff8fa3' : '#ffe9a8', 0.26); e.group.add(e.label); }
+        if (label) {
+          e.label = textSprite(label, r!.team === 'hunter' ? '#ff8fa3' : '#ffe9a8', 0.26, !viewerSpec);
+          e.label.userData.w = e.label.scale.x; e.label.renderOrder = viewerSpec ? 6 : 0;
+          e.group.add(e.label);
+        }
       }
-      if (e.label) e.label.position.y = e.h + 0.32;
+      if (e.label) {
+        const k = viewerSpec ? Math.max(1, Math.min(7, Math.hypot(e.x - cam.x, e.y - cam.y, e.z - cam.z) / 8)) : 1;
+        e.label.scale.set(e.label.userData.w * k, 0.26 * k, 1);
+        e.label.position.y = e.h + 0.19 + 0.13 * k;
+      }
       // scanner pings show through walls for hunters
       const showMark = (e.flags & F.REVEAL) !== 0 && isProp && (viewerHunter || viewerSpec);
       if (showMark && !e.marker) { e.marker = textSprite('!', '#33e1ff', 0.7, false); e.group.add(e.marker); }
@@ -882,58 +938,33 @@ export class Game {
       return;
     }
     this.preview.visible = false;
-    cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
-    const spectating = !this.alive || this.team === 'spec' || !this.hasMe;
-    if (spectating) {
-      const k = this.keys;
-      const f = (k.has(B.fwd) ? 1 : 0) - (k.has(B.back) ? 1 : 0), s = (k.has(B.right) ? 1 : 0) - (k.has(B.left) ? 1 : 0), u = (k.has(B.jump) ? 1 : 0) - (k.has(B.dash) ? 1 : 0);
-      const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
-      const sp = 9 * dt;
-      this.specPos.x += (dx * f + Math.cos(this.yaw) * s) * sp;
-      this.specPos.y += (dy * f + u) * sp;
-      this.specPos.z += (dz * f - Math.sin(this.yaw) * s) * sp;
-      this.specPos.x = Math.max(BOUNDS.x0 + 0.5, Math.min(BOUNDS.x1 - 0.5, this.specPos.x));
-      this.specPos.z = Math.max(BOUNDS.z0 + 0.5, Math.min(BOUNDS.z1 - 0.5, this.specPos.z));
-      this.specPos.y = Math.max(0.5, Math.min(this.mapId === 1 ? 10 : 4.2, this.specPos.y));
-      cam.position.copy(this.specPos);
-      this.viewmodel.visible = false;
-      return;
-    }
-    // smooth the vertical pops from stepping up ledges
-    const ty = this.rpos.y;
-    if (Math.abs(ty - this.camY) > 0.6 || !this.body.ground) this.camY = ty; else this.camY += (ty - this.camY) * Math.min(1, dt * 16);
-    const firstPerson = this.team === 'hunter' && !this.quackedMe;
-    const sp = Math.hypot(this.body.vx, this.body.vz);
-    if (firstPerson) {
-      this.bob += dt * sp * 1.9;
-      const steps = Math.floor(this.bob / Math.PI);
-      if (steps !== this.stepCount) { this.stepCount = steps; if (this.body.ground && sp > 2) this.sfx.play('stepSoft', undefined, 0.5); }
-      const bobY = this.body.ground ? Math.sin(this.bob) * 0.035 * Math.min(1, sp / 5) : 0;
-      cam.position.set(this.rpos.x, this.camY + CFG.HUNTER_EYE + bobY, this.rpos.z);
-      this.viewmodel.visible = true;
-      this.recoil = Math.max(0, this.recoil - dt * 7);
-      const r = this.recoil * this.recoil;
-      this.viewmodel.position.set(0.27 + Math.cos(this.bob * 0.5) * 0.008 * Math.min(1, sp / 5), -0.25 + Math.abs(Math.sin(this.bob * 0.5)) * 0.012 * Math.min(1, sp / 5) + r * 0.02, -0.5 + r * 0.12);
-      this.viewmodel.rotation.set(r * 0.35, 0, 0);
-      this.muzzleT -= dt; this.muzzle.visible = this.muzzleT > 0;
-      if (this.muzzle.visible) this.muzzle.scale.setScalar(0.8 + Math.random() * 0.9);
-      if (this.myFlags & F.DIZZY) { cam.rotation.z = Math.sin(this.time * 9) * 0.07; cam.rotation.x += Math.sin(this.time * 6) * 0.03; }
+    const ghost = !this.alive || this.team === 'spec';
+    if (ghost !== this.specOn) { if (ghost) this.enterSpectator(); else { this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow'; } }
+    let firstPerson = false, dashing = false;
+    if (ghost || !this.hasMe) {
+      this.updateSpectator(dt); // may steer yaw and pitch (through a hunter's eyes), so the rotation is applied after
+      cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     } else {
-      this.viewmodel.visible = false;
-      const h = this.body.h;
-      const tx = this.rpos.x, tyy = this.camY + Math.min(1.7, Math.max(0.95, h * 0.75 + 0.35)), tz = this.rpos.z;
-      const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
-      let dist = this.camDist + h * 0.5;
-      const hit = this.phys.raycast(tx, tyy, tz, -dx, -dy, -dz, dist + 0.3);
-      if (hit.t < dist + 0.3) dist = Math.max(0.35, hit.t - 0.3);
-      this.camDistNow += (dist - this.camDistNow) * Math.min(1, dt * (dist < this.camDistNow ? 30 : 8));
-      cam.position.set(tx - dx * this.camDistNow, Math.max(0.25, tyy - dy * this.camDistNow), tz - dz * this.camDistNow);
+      cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      // smooth the vertical pops from stepping up ledges
+      const ty = this.rpos.y;
+      if (Math.abs(ty - this.camY) > 0.6 || !this.body.ground) this.camY = ty; else this.camY += (ty - this.camY) * Math.min(1, dt * 16);
+      firstPerson = this.team === 'hunter' && !this.quackedMe;
+      dashing = this.body.dashLeft > 0 && !firstPerson;
+      if (firstPerson) {
+        const bobY = this.poseViewmodel(dt, Math.hypot(this.body.vx, this.body.vz), this.body.ground);
+        cam.position.set(this.rpos.x, this.camY + CFG.HUNTER_EYE + bobY, this.rpos.z);
+        if (this.myFlags & F.DIZZY) { cam.rotation.z = Math.sin(this.time * 9) * 0.07; cam.rotation.x += Math.sin(this.time * 6) * 0.03; }
+      } else {
+        this.viewmodel.visible = false;
+        this.orbit(cam.position, this.rpos.x, this.camY, this.rpos.z, this.body.h, dt);
+      }
     }
     // field of view: right mouse zooms the hunter's aim; shots and catches give a small punch
     const ads = firstPerson && this.mouseR && this.locked;
     this.zoomK = ads ? 0.55 : 1;
     this.fovPunch *= Math.exp(-dt * 9);
-    const fovT = (ads ? this.baseFov * 0.6 : this.baseFov) + this.fovPunch + (this.body.dashLeft > 0 && !firstPerson ? 7 : 0);
+    const fovT = (ads ? this.baseFov * 0.6 : this.baseFov) + this.fovPunch + (dashing ? 7 : 0);
     this.fovNow += (fovT - this.fovNow) * Math.min(1, dt * 14);
     if (Math.abs(cam.fov - this.fovNow) > 0.05) { cam.fov = this.fovNow; cam.updateProjectionMatrix(); }
     if (this.shake > 0.001) {
@@ -943,10 +974,191 @@ export class Game {
     }
   }
 
+  /** Third-person camera: sits behind (x, y, z) along the aim, pulled in when a wall is in the way. */
+  private orbit(out: THREE.Vector3, x: number, y: number, z: number, h: number, dt: number) {
+    const ty = y + Math.min(1.7, Math.max(0.95, h * 0.75 + 0.35));
+    const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
+    let dist = this.camDist + h * 0.5;
+    const hit = this.phys.raycast(x, ty, z, -dx, -dy, -dz, dist + 0.3);
+    if (hit.t < dist + 0.3) dist = Math.max(0.35, hit.t - 0.3);
+    this.camDistNow += (dist - this.camDistNow) * Math.min(1, dt * (dist < this.camDistNow ? 30 : 8));
+    out.set(x - dx * this.camDistNow, Math.max(0.25, ty - dy * this.camDistNow), z - dz * this.camDistNow);
+  }
+
+  /** First-person blaster: sway with the stride, kick back on a shot. Returns this frame's head bob. */
+  private poseViewmodel(dt: number, sp: number, ground: boolean): number {
+    this.bob += dt * sp * 1.9;
+    const steps = Math.floor(this.bob / Math.PI);
+    if (steps !== this.stepCount) { this.stepCount = steps; if (ground && sp > 2) this.sfx.play('stepSoft', undefined, 0.5); }
+    const k = Math.min(1, sp / 5);
+    this.viewmodel.visible = true;
+    this.recoil = Math.max(0, this.recoil - dt * 7);
+    const r = this.recoil * this.recoil;
+    this.viewmodel.position.set(0.27 + Math.cos(this.bob * 0.5) * 0.008 * k, -0.25 + Math.abs(Math.sin(this.bob * 0.5)) * 0.012 * k + r * 0.02, -0.5 + r * 0.12);
+    this.viewmodel.rotation.set(r * 0.35, 0, 0);
+    this.muzzleT -= dt; this.muzzle.visible = this.muzzleT > 0;
+    if (this.muzzle.visible) this.muzzle.scale.setScalar(0.8 + Math.random() * 0.9);
+    return ground ? Math.sin(this.bob) * 0.035 * k : 0;
+  }
+
+  // ================================================================ ghost mode
+  // Caught props and late joiners become ghosts. A ghost is either attached to a living player (orbiting
+  // them, or looking through a hunter's eyes) or flying free through the map. All of it is local: the
+  // server already sends spectators everybody's position.
+
+  /** Players a ghost can attach to, hunters first, in a stable order for cycling. */
+  private specList(): number[] {
+    const now = this.serverNow(), out: RosterEntry[] = [];
+    for (const r of this.roster.values()) {
+      if (r.id === this.myId || !r.alive || r.team === 'spec') continue;
+      const e = this.ents.get(r.id);
+      if (e && e.model && e.buf.length && now - e.lastSeen < 1500) out.push(r);
+    }
+    out.sort((a, b) => (a.team === b.team ? a.id - b.id : a.team === 'hunter' ? -1 : 1));
+    return out.map((r) => r.id);
+  }
+
+  /** The player under the crosshair (within about 17 degrees); with `orNearest`, otherwise the closest one. */
+  private specAim(orNearest: boolean): number {
+    const c = this.camera.position, [dx, dy, dz] = aimDir(this.yaw, this.pitch);
+    let best = 0, bs = 0.956, near = 0, nd = 1e9;
+    for (const id of this.specList()) {
+      const e = this.ents.get(id)!;
+      const ox = e.x - c.x, oy = e.y + e.h / 2 - c.y, oz = e.z - c.z, d = Math.hypot(ox, oy, oz) || 1;
+      const dot = (ox * dx + oy * dy + oz * dz) / d;
+      if (dot > bs) { bs = dot; best = id; }
+      if (d < nd) { nd = d; near = id; }
+    }
+    return best || (orNearest ? near : 0);
+  }
+
+  /** True while the watched player is a hunter whose eyes a ghost can borrow. */
+  get specEyes(): boolean { return this.specOn && this.specMode === 'follow' && this.canPov(this.specTarget); }
+  private canPov(id: number): boolean { const r = this.roster.get(id); return !!r && r.team === 'hunter' && !r.quack; }
+
+  private enterSpectator() {
+    this.specOn = true; this.specPov = false; this.specVel.set(0, 0, 0);
+    const list = this.specList();
+    if (!list.includes(this.specTarget)) this.specTarget = list[0] ?? 0;
+    if (this.specTarget) this.specAttach(this.specTarget, true);
+    else {
+      // nobody to watch yet (a late joiner's first positions are still on their way): hover, and attach when they arrive
+      this.specMode = 'free'; this.specSeek = this.time + 3;
+      if (this.hasMe) this.specPos.copy(this.camera.position);
+    }
+  }
+
+  private specAttach(id: number, quiet = false) {
+    this.specMode = 'follow'; this.specTarget = id; this.specPov = false; this.specSeek = 0;
+    this.specFrom.copy(this.camera.position); this.specBlend = 0; // glide over rather than cut
+    const e = this.ents.get(id);
+    if (e) this.camY = e.y;
+    this.pitch = Math.max(-1.2, Math.min(0.2, this.pitch));
+    if (!quiet) this.sfx.play('click', undefined, 0.6);
+  }
+
+  private specFree() {
+    this.specMode = 'free'; this.specPov = false; this.specSeek = 0; this.specBlend = 1;
+    this.specPos.copy(this.camera.position); this.specVel.set(0, 0, 0);
+    this.viewmodel.visible = false;
+  }
+
+  /** Step to the next (dir 1) or previous (dir -1) player. */
+  private specCycle(dir: number) {
+    const list = this.specList();
+    if (!list.length) { this.sfx.play('deny'); return; }
+    const i = list.indexOf(this.specTarget);
+    this.specAttach(list[i < 0 ? 0 : (i + dir + list.length) % list.length]);
+  }
+
+  /** Left click: while flying, attach to whoever you are looking at; while attached, move on to the next player. */
+  private specClick() {
+    if (this.specMode === 'follow') { this.specCycle(1); return; }
+    const id = this.specAim(true);
+    if (id) this.specAttach(id); else this.sfx.play('deny');
+  }
+
+  /** Swap between flying free and watching a player. */
+  private specSwitch() { if (this.specMode === 'follow') { this.specFree(); this.sfx.play('click', undefined, 0.6); } else this.specClick(); }
+
+  /** Ghost key presses. Returns false for keys a ghost has no use for, so chat, mute and the rest still work. */
+  private specKey(code: string): boolean {
+    if (code === B.ab2) this.specCycle(1);
+    else if (code === B.ab1) this.specCycle(-1);
+    else if (code === B.act) this.specSwitch();
+    else if (code === B.jump && this.specMode === 'follow') {
+      // through a hunter's eyes and back out again
+      if (!this.canPov(this.specTarget)) return true;
+      this.specPov = !this.specPov; this.specFrom.copy(this.camera.position); this.specBlend = 0;
+      if (!this.specPov) { this.pitch = Math.max(-1.2, Math.min(0.2, this.pitch)); this.viewmodel.visible = false; }
+      this.sfx.play('click', undefined, 0.6);
+    } else return false;
+    return true;
+  }
+
+  private updateSpectator(dt: number) {
+    const cam = this.camera, k = this.keys;
+    let f = (k.has(B.fwd) || k.has('ArrowUp') ? 1 : 0) - (k.has(B.back) || k.has('ArrowDown') ? 1 : 0);
+    let s = (k.has(B.right) || k.has('ArrowRight') ? 1 : 0) - (k.has(B.left) || k.has('ArrowLeft') ? 1 : 0);
+    let u = (k.has(B.jump) ? 1 : 0) - (k.has(B.dash) ? 1 : 0);
+    if (this.touch) { s = this.stick.x; f = -this.stick.y; if (!this.locked) f = s = u = 0; }
+    const moving = f !== 0 || s !== 0;
+
+    if (this.specOn && this.specMode === 'follow') {
+      let e = this.ents.get(this.specTarget);
+      if (moving) { this.specFree(); e = undefined; } // pushing a direction lets go and flies off from right here
+      else if (!e || !this.specList().includes(this.specTarget)) {
+        // the player we were watching was caught or left: move on to the next one
+        const list = this.specList();
+        if (list.length) { const was = this.specPov; this.specAttach(list[0], true); this.specPov = was && this.canPov(list[0]); e = this.ents.get(list[0]); }
+        else { this.specFree(); e = undefined; }
+      }
+      if (e) {
+        if (this.specPov && !this.canPov(e.id)) { this.specPov = false; this.specFrom.copy(cam.position); this.specBlend = 0; }
+        const want = this.specWant;
+        if (this.specPov) {
+          const a = Math.min(1, dt * 18);
+          this.yaw = lerpAngle(this.yaw, e.f, a); this.pitch += (e.pitch - this.pitch) * a;
+          const bobY = this.poseViewmodel(dt, e.speed, Math.abs(e.vy) < 1.2);
+          want.set(e.x, e.y + CFG.HUNTER_EYE + bobY, e.z);
+        } else {
+          this.viewmodel.visible = false;
+          if (Math.abs(e.y - this.camY) > 0.6 || Math.abs(e.vy) > 1.2) this.camY = e.y; else this.camY += (e.y - this.camY) * Math.min(1, dt * 16);
+          this.orbit(want, e.x, this.camY, e.z, e.h, dt);
+        }
+        if (this.specBlend < 1) {
+          this.specBlend = Math.min(1, this.specBlend + dt * 3.2);
+          const t = this.specBlend * this.specBlend * (3 - 2 * this.specBlend);
+          cam.position.lerpVectors(this.specFrom, want, t);
+        } else cam.position.copy(want);
+        this.specPos.copy(cam.position);
+        return;
+      }
+    }
+
+    // free flight: forward follows the look direction, so looking up and pushing forward climbs
+    this.viewmodel.visible = false;
+    if (this.specOn && this.specSeek) {
+      if (moving || this.time > this.specSeek) this.specSeek = 0;
+      else { const list = this.specList(); if (list.length) { this.specAttach(list[0], true); this.updateSpectator(dt); return; } }
+    }
+    const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
+    const len = Math.max(1, Math.hypot(f, s)), sp = 10;
+    const v = this.specVel, ease = 1 - Math.exp(-dt * 12);
+    v.x += ((dx * f + Math.cos(this.yaw) * s) / len * sp - v.x) * ease;
+    v.y += ((dy * f / len + u) * sp - v.y) * ease;
+    v.z += ((dz * f - Math.sin(this.yaw) * s) / len * sp - v.z) * ease;
+    const p = this.specPos;
+    p.x = Math.max(BOUNDS.x0 + 0.5, Math.min(BOUNDS.x1 - 0.5, p.x + v.x * dt));
+    p.z = Math.max(BOUNDS.z0 + 0.5, Math.min(BOUNDS.z1 - 0.5, p.z + v.z * dt));
+    p.y = Math.max(0.4, Math.min(this.mapId === 1 ? 10 : 4.2, p.y + v.y * dt));
+    cam.position.copy(p);
+  }
+
   private updateHud(dt: number) {
     const h = this.hud, now = this.serverNow(), pnow = performance.now();
     const left = this.phaseEnds - now;
-    h.setPhase(this.phase, this.round, this.panic);
+    h.setPhase(this.phase, this.round, this.panic, this.rounds);
     h.setTimer(left, this.phase !== 'lobby');
     h.setChaos(this.chaos);
     let props = 0;
@@ -974,12 +1186,19 @@ export class Game {
 
     const blindfolded = this.phase === 'hiding' && hunter && this.alive;
     h.blindfold(blindfolded, left);
-    h.crosshair(!playing || blindfolded ? 'none' : hunter && !this.quackedMe ? 'hunter' : 'prop');
+    // ghost: who (if anyone) the camera is attached to
+    const ghost = this.specOn && this.roster.has(this.myId) && this.phase !== 'end';
+    const watching = ghost && this.specMode === 'follow' ? this.roster.get(this.specTarget) : undefined;
+    const eyes = !!watching && this.specPov;
+    h.crosshair(ghost ? (eyes ? 'hunter' : watching ? 'none' : 'prop') : !playing || blindfolded ? 'none' : hunter && !this.quackedMe ? 'hunter' : 'prop');
 
-    // transform prompt
+    // transform prompt (a flying ghost gets "watch this player" instead)
     if (this.target >= 0 && playing && !hunter) {
       const info = this.world.decorDef(this.target);
       if (info) h.prompt(info.d.type === this.disguise ? `You are already a <b>${info.def.name}</b>` : `<b>[${keyLabel(B.act)}]</b> Become <b>${info.def.name}</b>`);
+    } else if (ghost && !watching) {
+      const r = this.roster.get(this.specAim(false));
+      h.prompt(r ? `<b>[${this.touch ? 'WATCH' : 'Click'}]</b> Watch <b>${esc(r.name)}</b>` : null);
     } else h.prompt(null);
 
     h.freeze(pnow < this.freezeUntil && playing);
@@ -1015,30 +1234,46 @@ export class Game {
     }
 
     // contextual hint / spectate strip
-    let hint: string | null = null, spec: string | null = null;
-    if (!playing && this.phase !== 'end') {
-      spec = this.team === 'spec' ? 'Round in progress — you join the next one. WASD + mouse to fly around.' : 'You were caught! Fly around with WASD (Space / Shift = up / down).';
-    } else if (!this.locked && this.phase !== 'end') hint = 'Click the game to run around  ·  Esc frees the mouse again';
-    else if (lobby) hint = 'Lobby warm-up: transform (E), taunt (T), drop a decoy (Q), dash (Shift)';
-    else if (playing && !hunter && this.phase === 'hiding' && left < CFG.HIDE_MS - 3500) hint = 'Right-click holds your rotation · scroll zooms · small objects fit on shelves';
-    h.hint(hint); h.spectate(spec);
+    const K = (id: string) => `<kbd>${keyLabel(B[id])}</kbd>`;
+    const move = `${K('fwd')}${K('left')}${K('back')}${K('right')}`;
+    let hint: string | null = null;
+    if (ghost) {
+      const pov = !!watching && this.canPov(watching.id);
+      h.spectate({
+        head: this.team === 'spec' ? 'ROUND IN PROGRESS · YOU JOIN THE NEXT ONE' : 'YOU WERE CAUGHT · GHOST MODE',
+        label: eyes ? 'THROUGH THE EYES OF' : watching ? 'WATCHING' : 'FLYING FREE',
+        name: watching?.name ?? '', team: watching?.team ?? null,
+        note: watching && watching.team === 'prop' && PROPS[watching.disguise] ? `the ${PROPS[watching.disguise].name}` : '',
+        hint: !this.locked ? 'Click the game to look around' : watching
+          ? `<kbd>Click</kbd> next player · ${move} fly free${pov ? ` · ${K('jump')} ${eyes ? 'step back out' : 'their eyes'}` : ''}`
+          : `<kbd>Click</kbd> watch a player · ${move} fly · ${K('jump')} ${K('dash')} up / down`,
+      });
+    } else {
+      h.spectate(null);
+      if (!playing) hint = null;
+      else if (!this.locked && this.phase !== 'end') hint = 'Click the game to run around  ·  Esc frees the mouse again';
+      else if (lobby) hint = 'Lobby warm-up: transform (E), taunt (T), drop a decoy (Q), dash (Shift)';
+      else if (!hunter && this.phase === 'hiding' && left < CFG.HIDE_MS - 3500) hint = 'Right-click holds your rotation · scroll zooms · small objects fit on shelves';
+    }
+    h.hint(hint);
 
     // always-on objective line and a controls card, so a first-time player is never left guessing
     let obj = '';
-    if (lobby) obj = 'Warm-up. The round starts soon — try becoming an object.';
+    if (lobby) obj = 'Warm-up. The game starts soon — try becoming an object.';
     else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake objects and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
     else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at an object and press [${keyLabel(B.act)}] to become it, then stand among similar ones.`;
     else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
     h.objective(obj);
-    const K = (id: string) => `<kbd>${keyLabel(B[id])}</kbd>`;
-    const rows = !playing ? null : hunter
-      ? [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Zap', '<kbd>Left click</kbd>'], ['Zoom aim', '<kbd>Right click</kbd>'], ['Scanner', K('ab1')], ['Shockwave', K('ab2')]]
-      : [['Move', `${K('fwd')}${K('left')}${K('back')}${K('right')}`], ['Jump', K('jump')], ['Become object', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
-    h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
+    const rows = ghost
+      ? [['Next player', `<kbd>Click</kbd> ${K('ab2')}`], ['Previous player', `<kbd>Right click</kbd> ${K('ab1')}`], ['Fly free', move], ['Fly up / down', `${K('jump')} ${K('dash')}`], ["Hunter's eyes", `${K('jump')} while watching`], ['Watch / fly', K('act')], ['Zoom', '<kbd>Scroll</kbd>']]
+      : !playing ? null : hunter
+      ? [['Move', move], ['Jump', K('jump')], ['Zap', '<kbd>Left click</kbd>'], ['Zoom aim', '<kbd>Right click</kbd>'], ['Scanner', K('ab1')], ['Shockwave', K('ab2')]]
+      : [['Move', move], ['Jump', K('jump')], ['Become object', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
+    h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${ghost ? 'GHOST' : hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
     void ACTIONS;
 
-    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map });
-    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '');
+    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map, rounds: this.lobbyInfo.rounds });
+    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.coinGain, this.coins);
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
     void dt;
   }
