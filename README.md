@@ -38,6 +38,7 @@ its loose props are re-laid out from a new seed every round. Blackout becomes an
 | **Last prop standing** | The final survivor gets Ghost and Decoy recharged; hunters get faster roll calls. |
 | **Great escape** | Survive six seconds after being hit and you bank bonus points. |
 | **Ghost (prop, F) / Dash (Shift)** | Three seconds of invisibility to hunters; a short sprint. |
+| **Caught? Haunt the round** | A caught prop becomes a spectator ghost, attached to the hunter who caught it. Click (or Q / F) to hop between players, Space to look through a hunter's eyes, or push a direction to let go and fly free through walls. Ghosts see every name through walls. Works with the touch stick and buttons too. |
 | **Risky taunts (T or 1-5)** | Taunting scores more the closer a hunter is, and shortens ability cooldowns. |
 | **Chaos meter** | Missed shots, taunts and popped decoys fill it. When full: **Blackout**, **Poltergeist** (objects start hopping), **Prop Shuffle** (everyone becomes a different toy), **Moon Bounce** (low gravity) or **Achoo** (every real prop sneezes into the air). |
 | **Roll call** | Every 22 s all props squeak, positioned in 3D audio. |
@@ -131,6 +132,7 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
 ```bash
 npm test             # protocol: rooms, roles, movement authority, speed-hack clamp, shooting, reconnect
 npm run build && npm run test:e2e   # two real browsers play a full round against each other
+npm run build && npm run test:ghost # a late joiner haunts a round of bots, with mouse and keyboard and with touch
 npm run test:maps        # both maps: deterministic, free spawns, bot-navigable, sane prop counts
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent

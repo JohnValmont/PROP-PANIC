@@ -3,7 +3,7 @@ import { QUICK_CHAT, type Phase, type Team } from '../../shared/constants';
 import type { Results, RosterEntry } from '../../shared/protocol';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
+export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 
 export interface AbilityView { key: string; name: string; icon: string; left: number; total: number; active?: boolean; }
 
@@ -79,7 +79,16 @@ export class Hud {
 
   prompt(html: string | null) { const p = $('prompt'); if (html === null) { if (p.style.display !== 'none') p.style.display = 'none'; return; } p.style.display = 'block'; if (p.innerHTML !== html) p.innerHTML = html; }
   hint(text: string | null) { const h = $('hint'); h.style.display = text ? 'block' : 'none'; if (text && h.textContent !== text) h.textContent = text; }
-  spectate(text: string | null) { const h = $('spectate'); h.style.display = text ? 'block' : 'none'; if (text && h.textContent !== text) h.textContent = text; }
+  /** Ghost strip: who the camera is attached to (or that it is flying free). `hint` is trusted markup. */
+  spectate(v: { head: string; label: string; name: string; team: Team | null; note: string; hint: string } | null) {
+    const h = $('spectate');
+    h.style.display = v ? 'block' : 'none';
+    if (!v) return;
+    const tag = v.team === 'hunter' ? '<span class="tag h">HUNTER</span>' : v.team === 'prop' ? '<span class="tag p">PROP</span>' : '';
+    const html = `<div class="spHead">${esc(v.head)}</div><div class="spWho">${esc(v.label)}${v.name ? ` <b>${esc(v.name)}</b>${tag}` : ''}${v.note ? ` <i>${esc(v.note)}</i>` : ''}</div><div class="spHint">${v.hint}</div>`;
+    if (html !== this.specKey) { this.specKey = html; h.innerHTML = html; }
+  }
+  private specKey = '';
   meter(v: number | null) { const m = $('meter'); m.style.display = v === null ? 'none' : 'block'; if (v !== null) (m.querySelector('i') as HTMLElement).style.width = `${Math.round(v * 100)}%`; }
   objective(text: string) { const o = $('objective'); o.style.display = text ? 'block' : 'none'; if (text && o.textContent !== text) o.textContent = text; }
   help(html: string | null) { const o = $('help'); o.style.display = html ? 'grid' : 'none'; if (html && this.helpKey !== html) { this.helpKey = html; o.innerHTML = html; } }

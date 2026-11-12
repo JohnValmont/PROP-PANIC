@@ -99,7 +99,16 @@ export function initTouch(game: Game, openMenu: () => void) {
     const hunter = game.team === 'hunter';
     root.style.visibility = game.inGame ? 'visible' : 'hidden'; // never show through the main menu
     const set = (id: string, text: string, show = true) => { const el = $(id); if (el.textContent !== text) el.textContent = text; el.style.display = show ? '' : 'none'; };
-    set('tAct', hunter ? 'ZAP' : 'BECOME');
+    if (game.specOn) {
+      // a ghost: the stick flies, the buttons choose who to watch
+      const flying = game.specMode === 'free';
+      set('tAct', flying ? 'WATCH' : 'FLY');
+      set('tQ', 'PREV'); set('tF', 'NEXT');
+      set('tJump', flying ? 'UP' : game.specPov ? 'BACK' : 'EYES', flying || game.specEyes);
+      set('tDash', 'DOWN', flying); set('tTaunt', '', false); set('tAlt', '', false);
+      return;
+    }
+    set('tAct', hunter ? 'ZAP' : 'BECOME'); set('tJump', 'JUMP');
     set('tQ', hunter ? 'SCAN' : 'DECOY'); set('tF', hunter ? 'SHOCK' : 'GHOST');
     set('tDash', 'DASH', !hunter); set('tTaunt', 'TAUNT', !hunter); set('tAlt', hunter ? 'ZOOM' : 'LOCK');
   }, 100);

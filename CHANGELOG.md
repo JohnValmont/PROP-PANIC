@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.3.0
+
+- **Ghost mode for caught props and late joiners.** Being caught used to leave you with a bare fly camera that
+  did not work on touch at all. Now:
+  - You start attached to the hunter who caught you (late joiners: to the first hunter), with a camera that
+    orbits them and stays out of walls.
+  - Left click or F steps to the next player, right click or Q to the previous one. Props and hunters both.
+  - Space looks through a watched hunter's eyes, blaster and recoil included; Space again steps back out.
+  - Pushing a direction lets go and flies you free from where the camera is. Space / Shift climb and descend,
+    the view looks all the way up and down, and E swaps between flying and watching.
+  - While flying, look at a player and click to attach to them (the nearest one if nobody is under the crosshair).
+  - Touch: the stick flies the ghost and the buttons become FLY / WATCH, PREV, NEXT, EYES, UP and DOWN.
+  - Ghosts see every living player's name through walls, scaled to stay readable from across the map, and a strip
+    at the bottom says who is being watched and as what.
+- Fixed: the screen shake from being caught, and the wider view of a dash, no longer linger into the next round.
+- New browser test, `npm run test:ghost` (41 checks, desktop and touch).
+
 ## 2.2.3
 
 - Fixed: players (props and hunters) could still freeze after a reconnect. An input numbered for the old
