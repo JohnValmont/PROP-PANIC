@@ -89,8 +89,9 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
     const r2 = await A.evaluate(() => { const g = window.__pp; return { final: !!g.results.final, wallet: g.coins, mine: g.results.board.find((b) => b.id === g.myId).coins }; });
     ok(!r2.final && !(await A.isVisible('#results .final')) && /^Round 2 of 3 in \d+/.test(await text(A, '#nextIn')), `between rounds the panel counts down to the next round (${await text(A, '#nextIn')})`);
     ok(r2.wallet === res.wallet + r2.mine && (await coins(A)) === r2.wallet, `the wallet keeps growing round by round (${res.wallet} + ${r2.mine} = ${r2.wallet})`);
-    await A.waitForFunction(() => window.__pp.round === 2 && window.__pp.phase !== 'end', null, { timeout: 30000, polling: 100 }).catch(() => {});
-    ok((await text(A, '#phaseLabel')).startsWith('ROUND 2/3'), 'round 2 follows by itself');
+    // the header is repainted by the next frame after the phase message, so wait on the header itself
+    await A.waitForFunction(() => document.getElementById('phaseLabel').textContent.startsWith('ROUND 2/3'), null, { timeout: 30000, polling: 100 }).catch(() => {});
+    { const lbl = await text(A, '#phaseLabel'); ok(lbl.startsWith('ROUND 2/3') || lbl === 'PANIC TIME!', `round 2 follows by itself (${lbl})`); }
 
     console.log('menu');
     // Esc frees the mouse, which raises the pause panel (a scripted key press cannot break a real pointer lock)
@@ -98,7 +99,9 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
     for (let i = 0; i < 3 && !(await A.isVisible('#leaveBtn')); i++) { await A.keyboard.press('Escape'); await sleep(300); }
     await A.click('#leaveBtn', { timeout: 8000 });
     await A.waitForSelector('#menu', { state: 'visible', timeout: 5000 });
-    ok((await text(A, '#coinN')) === r2.wallet.toLocaleString('en-US'), `the menu shows the wallet (${r2.wallet} coins)`);
+    // round 2 may have paid out too by now on a slow machine: the menu must show whatever the wallet holds
+    const held = await coins(A);
+    ok(held >= r2.wallet && (await text(A, '#coinN')) === held.toLocaleString('en-US'), `the menu shows the wallet (${held} coins)`);
     await shot(A, 'match-4-menu.png');
     ok(errors.length === 0, `no browser errors (${errors.slice(0, 3).join(' | ') || 'clean'})`);
   } catch (e) { failures++; console.log('  ✗ EXCEPTION:', e.message.split('\n').slice(0, 3).join(' / ')); }

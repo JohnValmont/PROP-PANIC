@@ -172,6 +172,7 @@ export class WorldView {
   private sets = new Map<number, TypeSet>();
   private gen = 0;
   private anims = new Map<number, number>();
+  private haunts = new Map<number, number>();
   private polter = new Map<number, number>();
   private polterUntil = 0;
   private time = 0;
@@ -289,7 +290,7 @@ export class WorldView {
     // loose props: one instanced mesh per model part, per type, per patch of floor (so off-screen patches are culled)
     this.gen++;
     for (const s of this.sets.values()) for (const m of s.meshes) { this.decorGroup.remove(m); m.dispose(); }
-    this.sets.clear(); this.refs = []; this.anims.clear(); this.polter.clear();
+    this.sets.clear(); this.refs = []; this.anims.clear(); this.haunts.clear(); this.polter.clear();
     for (const d of map.decor) {
       let s = this.sets.get(d.type);
       if (!s) this.sets.set(d.type, (s = { type: d.type, bins: new Map(), meshes: [] }));
@@ -320,18 +321,21 @@ export class WorldView {
     }
   }
 
-  private writeMatrix(id: number, hop: number, tilt: number, squash: number) {
+  private writeMatrix(id: number, hop: number, tilt: number, squash: number, twist = 0) {
     const r = this.refs[id];
     if (!r) return;
     dummy.position.set(r.d.x, r.d.y + hop, r.d.z);
-    dummy.rotation.set(tilt, r.d.yaw, tilt * 0.7, 'YXZ');
+    dummy.rotation.set(tilt, r.d.yaw + twist, tilt * 0.7, 'YXZ');
     dummy.scale.set(1 + squash, 1 - squash, 1 + squash);
     dummy.updateMatrix();
     for (const m of r.meshes) { m.setMatrixAt(r.index, dummy.matrix); m.instanceMatrix.needsUpdate = true; }
   }
 
   /** An innocent object got shot (or bumped): make it flinch. */
-  wobble(id: number) { if (this.refs[id]) this.anims.set(id, 0); }
+  wobble(id: number) { if (this.refs[id]) { this.haunts.delete(id); this.anims.set(id, 0); } }
+
+  /** A ghost rattled it: a small hop and a twist that settles back, like a player who could not sit still. */
+  haunt(id: number) { if (this.refs[id] && !this.anims.has(id)) this.haunts.set(id, 0); }
 
   poltergeist(seed: number, ms: number) {
     const R = rng(seed);
@@ -354,6 +358,14 @@ export class WorldView {
       this.anims.set(id, t);
       const k = 1 - t / 0.55;
       this.writeMatrix(id, Math.abs(Math.sin(t * 14)) * 0.12 * k, Math.sin(t * 34) * 0.16 * k, Math.sin(t * 26) * 0.1 * k);
+    }
+    for (const [id, t0] of this.haunts) {
+      const t = t0 + dt;
+      if (t > 1.2) { this.haunts.delete(id); if (!this.polter.has(id)) this.writeMatrix(id, 0, 0, 0); continue; }
+      this.haunts.set(id, t);
+      const k = 1 - t / 1.2, dir = id % 2 ? 1 : -1;
+      const hop = t < 0.28 ? Math.sin((t / 0.28) * Math.PI) * 0.13 : 0;
+      this.writeMatrix(id, hop, Math.sin(t * 24) * 0.06 * k, 0, Math.sin(Math.min(1, t / 0.22) * Math.PI * 0.5) * 0.42 * k * k * dir);
     }
     if (this.polter.size) {
       if (this.time > this.polterUntil) this.stopPoltergeist();

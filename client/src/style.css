@@ -296,3 +296,31 @@ body.touch #abilities { opacity: 0.85; transform: scale(0.8); transform-origin: 
   .btn.big { padding: 10px !important; font-size: 20px !important; }
 }
 #tAlt { right: 30px; bottom: 284px; width: 58px !important; height: 58px !important; }
+
+/* ---------- 2.5: role card, countdown, room preview, ghost tint ---------- */
+#roleCard { position: absolute; left: 0; right: 0; top: 24%; padding: 18px 20px 20px; text-align: center; pointer-events: none; display: none; background: linear-gradient(90deg, transparent, rgba(20, 22, 60, 0.9) 22%, rgba(20, 22, 60, 0.9) 78%, transparent); border-top: 4px solid var(--yellow); border-bottom: 4px solid var(--yellow); }
+#roleCard.show { display: block; animation: rcIn 0.4s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+#roleCard.out { display: block; animation: fadeOut 0.35s forwards; }
+@keyframes rcIn { from { opacity: 0; transform: scaleY(0.2); } to { opacity: 1; transform: scaleY(1); } }
+#roleCard.hunter { border-color: #ff8fa3; } #roleCard.ghost { border-color: #a8dcff; }
+.rcTop { font-size: 13px; font-weight: 700; letter-spacing: 0.2em; opacity: 0.85; }
+.rcTitle { font-size: clamp(40px, 6.6vw, 88px); font-weight: 700; line-height: 1.02; color: var(--yellow); text-shadow: 0 5px 0 var(--ink); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; }
+#roleCard.hunter .rcTitle { color: #ff8fa3; } #roleCard.ghost .rcTitle { color: #a8dcff; }
+.rcSub { font-size: clamp(16px, 1.9vw, 24px); font-weight: 600; margin-top: 4px; }
+#bigCount { position: absolute; left: 0; right: 0; top: 30%; text-align: center; font-size: 190px; font-weight: 700; line-height: 1; color: #fff; text-shadow: 0 8px 0 var(--ink), 0 0 40px rgba(0, 0, 0, 0.5); -webkit-text-stroke: 4px var(--ink); paint-order: stroke fill; pointer-events: none; display: none; }
+#bigCount.tick { display: block; animation: cnt 0.9s ease-out both; }
+@keyframes cnt { 0% { opacity: 0; transform: scale(1.7); } 18% { opacity: 1; transform: scale(1); } 80% { opacity: 0.9; } 100% { opacity: 0; transform: scale(0.85); } }
+/* the hunter's wait: a look round the room as it was stocked, framed so it reads as "not started yet" */
+#blindfold.preview { background: radial-gradient(ellipse at center, transparent 48%, rgba(14, 16, 48, 0.78) 100%); justify-content: flex-start; padding-top: 150px; gap: 2px; box-shadow: inset 0 0 0 6px rgba(255, 143, 163, 0.55); }
+#blindfold.preview .bfTitle { font-size: 44px; color: #ff8fa3; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; }
+#blindfold.preview .bfCount { display: none; } /* the header timer and the final 3 · 2 · 1 say it */
+#blindfold.preview .bfSub { font-size: 20px; font-weight: 600; background: rgba(20, 22, 60, 0.8); border-radius: 12px; padding: 5px 16px; }
+#blindfold.preview .bfTips { position: absolute; left: 50%; bottom: 112px; transform: translateX(-50%); width: min(720px, 86vw); max-width: none; min-height: 0; background: rgba(20, 22, 60, 0.8); border-radius: 12px; padding: 6px 16px; font-weight: 600; opacity: 1; }
+#ghostTint { position: absolute; inset: 0; box-shadow: inset 0 0 200px 50px rgba(120, 170, 255, 0.4); opacity: 0; transition: opacity 0.6s; }
+#ghostTint.on { opacity: 1; }
+#abilities.lift { bottom: 118px; }
+.ab.haunt { border-color: #c8a8ff; } .ab.haunt.ready { border-color: #e2d1ff; box-shadow: 0 5px 0 rgba(0, 0, 0, 0.25), 0 0 18px rgba(200, 168, 255, 0.7); }
+#prompt.haunt { border-color: #c8a8ff; } #prompt.haunt b { color: #d9c2ff; }
+.howGhost { background: rgba(168, 220, 255, 0.14); border: 2px solid rgba(168, 220, 255, 0.5); border-radius: 14px; padding: 8px 14px; font-size: 15px; text-align: left; } .howGhost b { color: #a8dcff; }
+.howMore { font-size: 13px; opacity: 0.75; }
+body.touch #blindfold.preview { padding-top: 96px; } body.touch #blindfold.preview .bfTips { bottom: 12px; }

@@ -22,7 +22,7 @@ const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, name), tim
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 // one ghost per run: three software-rendered browsers at once starve each other on a machine with no GPU
 async function run(touch) {
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '3000', PP_HUNT_MS: '70000', PP_END_MS: '4000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '3000', PP_HUNT_MS: '110000', PP_END_MS: '4000', PP_JOIN_MS: '100000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   const browsers = [], errors = [];
   const open = async (name, extra = {}) => {
@@ -55,8 +55,8 @@ async function run(touch) {
       await B.evaluate(() => { window.__pp.renderEvery = 6; });
       await B.fill('#nameInput', touch ? 'Tess' : 'Bob');
     }
-    // the server seats a newcomer as a spectator only in the last 45 seconds of a hunt
-    await A.waitForFunction(() => window.__pp.phase === 'hunt' && window.__pp.phaseEnds - window.__pp.serverNow() < 44000, null, { timeout: 190000, polling: 250 });
+    // the server seats a newcomer as a spectator only late in a hunt (the last 100 seconds here, PP_JOIN_MS)
+    await A.waitForFunction(() => window.__pp.phase === 'hunt' && window.__pp.phaseEnds - window.__pp.serverNow() < 99000, null, { timeout: 190000, polling: 250 });
     if (touch) await B.tap('#joinBtn'); else await B.click('#joinBtn');
     {
       await B.waitForFunction(() => window.__pp.inGame && window.__pp.roster.size > 2, null, { timeout: 8000 });
@@ -80,10 +80,30 @@ async function run(touch) {
         ok(g.target !== first && g.list.includes(g.target) && g.mode === 'follow', `F moves to the next player (${g.tname})`);
         await B.keyboard.press('KeyQ'); await sleep(200); g = await G(B);
         ok(g.target === first, 'Q goes back to the previous player');
-        await B.mouse.down(); await B.mouse.up(); await sleep(200); g = await G(B);
-        ok(g.target !== first, 'left click also steps to the next player');
+        // during a hunt a ghost haunts: look at an object, click, and the server puts haunting on cooldown
+        // the orbit camera follows a moving player, so the object under the crosshair can drift away: aim, click, retry
+        let aimedAt = -1, cooled = false, promptText = '';
+        for (let attempt = 0; attempt < 3 && !cooled; attempt++) {
+          aimedAt = await B.evaluate(async () => {
+            const g = window.__pp;
+            for (const pitch of [-0.4, -0.6, -0.2]) for (let yaw = 0; yaw < 6.3; yaw += 0.5) {
+              g.yaw = yaw; g.pitch = pitch;
+              await new Promise((r) => requestAnimationFrame(r));
+              if (g.hauntTarget >= 0) return g.hauntTarget;
+            }
+            return -1;
+          });
+          promptText = (await G(B)).prompt;
+          await B.mouse.down(); await B.mouse.up();
+          cooled = await B.waitForFunction(() => window.__pp.cd.haunt > window.__pp.serverNow(), null, { timeout: 2500 }).then(() => true).catch(() => false);
+        }
+        g = await G(B);
+        ok(aimedAt >= 0 && promptText.includes('Haunt'), `aiming at an object offers to haunt it: ${JSON.stringify(promptText)}`);
+        ok(cooled && g.mode === 'follow', 'left click haunts it (the server starts the cooldown), and the ghost keeps watching');
+        await shot(B, 'ghost-1b-haunt.png');
         await B.mouse.down({ button: 'right' }); await B.mouse.up({ button: 'right' }); await sleep(200); g = await G(B);
-        ok(g.target === first, 'right click steps back');
+        ok(g.target !== first, 'right click steps to the next player while haunting is on');
+        await B.keyboard.press('KeyQ'); await sleep(200); g = await G(B);
         // cycle all the way to a prop
         for (let i = 0; i < g.list.length && (await G(B)).tteam !== 'prop'; i++) { await B.keyboard.press('KeyF'); await sleep(120); }
         await sleep(700); g = await G(B);
@@ -120,10 +140,11 @@ async function run(touch) {
           tick();
         }));
         g = await G(B);
-        ok(g.prompt.includes('Watch'), `looking at a player while flying offers to watch them: ${JSON.stringify(g.prompt)}`);
+        ok(g.prompt.includes('Watch'), `looking at a player while flying offers to watch them: ${JSON.stringify(g.prompt)} (${g.phase}, ${Math.round(g.left / 1000)} s left)`);
         await shot(B, 'ghost-4-flying.png');
-        await B.mouse.down(); await B.mouse.up(); await sleep(300); g = await G(B);
-        ok(g.mode === 'follow' && g.list.includes(g.target), `clicking attaches to a player again (${g.tname}${g.target === want ? ', the one under the crosshair' : ''})`);
+        await B.mouse.down({ button: 'right' }); await B.mouse.up({ button: 'right' }); await sleep(300); g = await G(B);
+        if (g.mode !== 'follow') console.log('  (attach debug)', JSON.stringify(await B.evaluate(() => { const g = window.__pp, now = g.serverNow(); return { mode: g.specMode, locked: g.locked, list: g.specList(), canHaunt: g.canHaunt(), ages: [...g.ents.values()].map((e) => [e.id, Math.round(now - e.lastSeen), e.buf.length, !!e.model]), roster: [...g.roster.values()].map((r) => [r.id, r.team, r.alive]) }; })));
+        ok(g.mode === 'follow' && g.list.includes(g.target), `right clicking attaches to a player again (${g.tname}${g.target === want ? ', the one under the crosshair' : ''})`);
         await B.keyboard.press('KeyE'); await sleep(200);
         ok((await G(B)).mode === 'free', 'E lets go');
         await B.keyboard.press('KeyE'); await sleep(200);
@@ -132,14 +153,14 @@ async function run(touch) {
         ok(await B.isVisible('#chatMenu'), 'quick chat still opens for ghosts');
         await B.keyboard.press('Escape');
       } else {
-        ok(g.btn === 'FLY,PREV,NEXT,EYES,-,-,-', `touch buttons relabel for a ghost watching a hunter: ${g.btn}`);
+        ok(g.btn === 'HAUNT,PREV,NEXT,EYES,-,-,FLY', `touch buttons relabel for a ghost watching a hunter: ${g.btn}`);
         const first = g.target;
         await B.tap('#tF'); await sleep(250); g = await G(B);
         ok(g.target !== first, 'NEXT button steps to the next player');
         await B.tap('#tQ'); await sleep(250); g = await G(B);
         ok(g.target === first, 'PREV button steps back');
         await B.tap('#tJump'); await sleep(900); g = await G(B);
-        ok(g.pov && g.btn.startsWith('FLY,PREV,NEXT,BACK'), `EYES button looks through the hunter's eyes (${g.btn})`);
+        ok(g.pov && g.btn.startsWith('HAUNT,PREV,NEXT,BACK'), `EYES button looks through the hunter's eyes (${g.btn})`);
         await B.tap('#tJump'); await sleep(500);
         // drag the left stick forward
         const c0 = (await G(B)).cam;
@@ -148,16 +169,19 @@ async function run(touch) {
         await tp('touchStart', [{ x: 150, y: 250, id: 1 }]); await tp('touchMove', [{ x: 150, y: 190, id: 1 }]);
         await sleep(800); g = await G(B);
         ok(g.mode === 'free' && dist(g.cam, c0) > 2, `pushing the stick lets go and flies the ghost (moved ${dist(g.cam, c0).toFixed(1)} m)`);
-        ok(g.btn === 'WATCH,PREV,NEXT,UP,DOWN,-,-', `flying buttons: ${g.btn}`);
+        ok(g.btn === 'HAUNT,PREV,NEXT,UP,DOWN,-,WATCH', `flying buttons: ${g.btn}`);
         await tp('touchEnd', []);
         const y0 = (await G(B)).cam[1];
         await tp('touchStart', [{ x: 844 - 132 - 32, y: 390 - 70 - 32, id: 2 }]); await sleep(400); await tp('touchEnd', []); await sleep(200); g = await G(B);
         ok(g.cam[1] > y0 + 0.5 || g.cam[1] >= 4.19, `UP button climbs (${y0.toFixed(2)} → ${g.cam[1].toFixed(2)})`);
         await shot(B, 'ghost-6-touch-flying.png');
-        await B.tap('#tAct'); await sleep(300); g = await G(B);
+        await B.tap('#tAlt'); await sleep(300); g = await G(B);
         ok(g.mode === 'follow', 'WATCH button attaches to the nearest / aimed player');
-        await B.tap('#tAct'); await sleep(300);
+        await B.tap('#tAlt'); await sleep(300);
         ok((await G(B)).mode === 'free', 'FLY button lets go');
+        const cd0 = await B.evaluate(() => window.__pp.cd.haunt);
+        await B.tap('#tAct'); await sleep(600);
+        ok((await G(B)).mode === 'free' && (await B.evaluate(() => window.__pp.cd.haunt)) >= cd0, 'HAUNT button haunts (or says why not) without changing the view');
       }
     }
     ok(errors.length === 0, `no browser errors (${errors.slice(0, 3).join(' | ') || 'clean'})`);

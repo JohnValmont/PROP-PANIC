@@ -35,17 +35,21 @@ its loose props are re-laid out from a new seed every round. Blackout becomes an
 | **Panic burst** | A prop that gets hit is not dead: it gets a short speed boost and one chance to escape. Three hits to catch. |
 | **Head bonk** | A prop that drops onto a hunter's head leaves them dizzy and unable to fire for a moment, and bounces away. |
 | **Googly eyes** | Whenever a prop taunts, panics, sneezes or is scanned, a pair of googly eyes pops out of it. |
-| **Last prop standing** | The final survivor gets Ghost and Decoy recharged; hunters get faster roll calls. |
+| **Last prop standing** | The final survivor gets Vanish and Decoy recharged; hunters get faster roll calls. |
 | **Great escape** | Survive six seconds after being hit and you bank bonus points. |
-| **Ghost (prop, F) / Dash (Shift)** | Three seconds of invisibility to hunters; a short sprint. |
-| **Caught? Haunt the round** | A caught prop becomes a spectator ghost, attached to the hunter who caught it. Click (or Q / F) to hop between players, Space to look through a hunter's eyes, or push a direction to let go and fly free through walls. Ghosts see every name through walls. Works with the touch stick and buttons too. |
+| **Vanish (prop, F) / Dash (Shift)** | Three seconds of invisibility to hunters; a short sprint. |
+| **Caught? Haunt the round** | A caught prop (or a late joiner sitting a round out) becomes a ghost. Aim at any real object and click to **haunt** it: it hops and twists like a nervous prop. A hunter who shoots it within 9 s is *spooked* (extra Focus loss) and the ghost scores. Right click (or Q / F) hops between players, Space looks through a hunter's eyes, a direction key flies free through walls. Caught bots haunt too. |
+| **Study the room (hunters)** | While the props hide, hunters fly a camera round the room as it was stocked, with no props in it, instead of staring at a blindfold. Anything that turns up later is a fake. |
+| **Hunter stand-in** | A hunter who drops out for 12 s, or idles for 45 s in a public room, hands the blaster to a bot instead of handing the props a free round. |
 | **Risky taunts (T or 1-5)** | Taunting scores more the closer a hunter is, and shortens ability cooldowns. |
 | **Chaos meter** | Missed shots, taunts and popped decoys fill it. When full: **Blackout**, **Poltergeist** (objects start hopping), **Prop Shuffle** (everyone becomes a different toy), **Moon Bounce** (low gravity) or **Achoo** (every real prop sneezes into the air). |
 | **Roll call** | Every 22 s all props squeak, positioned in 3D audio. |
 | **PANIC TIME** | Final 30 s: props squeak every 7 s but move faster. |
 | **Restocked every round** | Each map's ~240 loose props are laid out from a new seed each round. |
 
-Roles rotate automatically and the next round starts by itself. Rounds are 25 s hiding + 3 min hunting.
+Roles rotate automatically and the next round starts by itself. Rounds are 25 s hiding + 3 min hunting. Each round opens with
+a role card (which side you are on and the one thing to do), counts 3 · 2 · 1 before the hunters are let loose, and closes
+with a three-second reveal in which a pillar of light marks every prop that got away before the board comes up.
 
 ## Run it
 
@@ -165,5 +169,7 @@ CI (`.github/workflows/ci.yml`) runs the typecheck, build, map, mechanics, secur
 
 ## Tuning
 
-All gameplay numbers (speeds, damage, cooldowns, chaos rates, phase lengths) live in
-`shared/constants.ts`. They are first-pass values that have only been played against bots.
+All gameplay numbers (speeds, damage, cooldowns, chaos rates, phase lengths, every score in `SCORE`, the odds of each
+chaos event in `CHAOS_WEIGHTS`) live in `shared/constants.ts`. The 2.5 systems each have a switch there: `HAUNT_ON`,
+`PREVIEW_ON`, and the stand-in timers `HUNTER_DC_MS` / `HUNTER_AFK_MS`. All of it has only been played against bots:
+`docs/PLAYTEST.md` is the checklist for the first sessions with real people.

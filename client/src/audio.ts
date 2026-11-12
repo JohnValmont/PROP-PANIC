@@ -163,6 +163,13 @@ export class Sfx {
       case 'ready': T({ type: 'triangle', f0: 880, f1: 1320, dur: 0.1, gain: 0.1 }); break;
       case 'dash': N({ dur: 0.25, freq: 800, f1: 3500, kind: 'bandpass', gain: 0.25 }); break;
       case 'points': T({ type: 'triangle', f0: 1175, dur: 0.06, gain: 0.12 }); T({ type: 'triangle', f0: 1568, dur: 0.1, gain: 0.12, at: 0.06 }); break;
+      // a knock from nowhere: something on the shelf just moved by itself
+      case 'haunt': N({ dur: 0.06, freq: 520, gain: 0.3 }); T({ type: 'sine', f0: 170, f1: 95, dur: 0.1, gain: 0.32 }); N({ dur: 0.05, freq: 420, gain: 0.2, at: 0.13 }); T({ type: 'sine', f0: 150, f1: 90, dur: 0.08, gain: 0.2, at: 0.13 }); break;
+      case 'spook': T({ type: 'sine', f0: 380, f1: 760, f2: 300, dur: 0.75, gain: 0.3, vib: 26, vibHz: 7 }); for (let i = 0; i < 4; i++) T({ type: 'triangle', f0: 880 - i * 110, dur: 0.08, gain: 0.16, at: 0.55 + i * 0.09 }); break;
+      case 'roleProp': [523, 659, 784, 1047].forEach((f, i) => T({ type: 'triangle', f0: f, dur: 0.16, gain: 0.24, at: i * 0.09 })); T({ type: 'sine', f0: 1568, dur: 0.3, gain: 0.12, at: 0.36 }); break;
+      case 'roleHunter': T({ type: 'sawtooth', f0: 110, dur: 0.22, gain: 0.26 }); T({ type: 'sawtooth', f0: 110, dur: 0.16, gain: 0.26, at: 0.26 }); T({ type: 'sawtooth', f0: 165, dur: 0.5, gain: 0.28, at: 0.44 }); N({ dur: 0.12, freq: 300, gain: 0.3 }); N({ dur: 0.2, freq: 300, gain: 0.3, at: 0.44 }); break;
+      case 'count': T({ type: 'triangle', f0: 660, dur: 0.12, gain: 0.26 }); break;
+      case 'reveal': [784, 988, 1175, 1568, 1976].forEach((f, i) => T({ type: 'sine', f0: f, dur: 0.5, gain: 0.13, at: i * 0.07 })); N({ dur: 0.5, freq: 6000, kind: 'highpass', gain: 0.05 }); break;
       case 'freeze': T({ type: 'square', f0: 1400, dur: 0.06, gain: 0.14 }); T({ type: 'square', f0: 1400, dur: 0.06, gain: 0.14, at: 0.1 }); T({ type: 'square', f0: 1400, dur: 0.06, gain: 0.14, at: 0.2 }); break;
     }
   }

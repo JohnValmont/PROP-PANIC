@@ -1,5 +1,41 @@
 # Changelog
 
+## 2.5.0
+
+The two dead stretches of a round, and a few things hunters were told that they should not have been.
+
+- **Haunting.** Being caught used to mean watching for up to three minutes. A caught prop (and a late joiner sitting
+  a round out) is now a ghost that can aim at any real object and click to haunt it: it hops and twists like a nervous
+  prop, with a knock from nowhere. A hunter who shoots it within 9 seconds is *spooked*: an extra Focus hit (10 instead
+  of 6), a "BOO!" for everyone, and 35 points for the ghost. One haunt every 7 seconds, faster during a Poltergeist.
+  Caught bots haunt objects near the hunters, and bot hunters sometimes take the bait, so the mechanic exists in a room
+  of bots too. New award: Poltergeist. Switch: `HAUNT_ON`.
+- **Hunters study the room.** The 25-second blindfold is replaced by a free-flying camera round the room as it was
+  stocked, with no props in it (the server sends none, as before). Whatever turns up later is a fake. Switch:
+  `PREVIEW_ON` (off restores the blindfold).
+- **A hunter who leaves no longer hands the props the round.** A hunter disconnected for 12 seconds, or idle for 45 in a
+  public room, is stood down and a bot takes over (one that has already been caught, if there is one; never the last
+  prop hiding). Previously a dropped hunter's seat ended the round after the 30-second grace, or idled for three minutes.
+- **Round start and end.** A role card says which side you are on, who the hunters are and the one thing to do;
+  a mid-round joiner is told what they are. A big 3 · 2 · 1 before the hunters are released. When a round ends, three
+  seconds pass before the board, with a pillar of light over every prop that survived, so hunters see where they were.
+- **Hits read at a glance.** A hit prop shows how many hits it has left ("2 MORE", "ONE MORE!"); a prop changing
+  disguise pops into its new shape.
+- **Clearer words.** The prop ability *Ghost* is now *Vanish* (ghosts are what caught players are). How to play is
+  three steps a side plus one line about haunting.
+- **Hidden information, fixed:**
+  - A decoy was announced to every client at once, owner included, so a modified hunter client saw every decoy (and so
+    roughly where props had been) through walls. Hunters now hear of a decoy only when it comes into view, and never
+    whose it is.
+  - The puff of smoke when a prop changed disguise, vanished or was shuffled went to every client with its position.
+    Hunters now get it only when they can see that prop.
+  - Taunts during the hiding phase were sent to the blindfolded hunter.
+- Scores are in one table (`SCORE`), chaos events have weights (`CHAOS_WEIGHTS`), the late-join cutoff is a constant
+  (`LATE_JOIN_MS`). A hunter who is stood down earns no win bonus.
+- Tests: 18 new server checks (haunting, what hunters are told, the stand-in), a browser check of the room preview, and
+  the ghost test drives haunting with mouse and touch.
+- Protocol: new `haunt` message and events, `cd` carries `haunt`; a 2.4 client should be reloaded.
+
 ## 2.4.1
 
 - **Changing graphics no longer reloads the page.** Switching to or from Fast used to reload the whole site,

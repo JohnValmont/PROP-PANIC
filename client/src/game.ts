@@ -15,7 +15,7 @@ import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physic
 import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
 import type { Results, RosterEntry } from '../../shared/protocol';
 import { Sfx } from './audio';
-import { Fx, textSprite } from './fx';
+import { Fx, makeBeacon, textSprite } from './fx';
 import { Hud, esc, type AbilityView } from './hud';
 import { Net } from './net';
 import { assets } from './assets';
@@ -39,6 +39,10 @@ interface Ent {
   eyes: THREE.Object3D | null; stars: THREE.Sprite | null; eyeK: number;
   buf: Sample[]; flags: number; lastSeen: number; label: THREE.Sprite | null; labelKey: string; marker: THREE.Sprite | null;
   hitT: number; hopT: number; x: number; y: number; z: number; f: number; speed: number; stepT: number; h: number;
+  /** Counts down after a change of disguise: the new shape pops into place. */
+  popT: number;
+  /** Pillar of light over a survivor once the round is over. */
+  beam: THREE.Mesh | null;
 }
 interface DecoyView { mesh: THREE.Object3D; type: number; x: number; y: number; z: number; yaw: number; hopT: number; owner: number; }
 interface Pending { seq: number; cmd: Cmd; }
@@ -82,7 +86,14 @@ export class Game {
   private speed = CFG.PROP_SPEED; private jumpV = CFG.PROP_JUMP; private canMove = true;
   hp = 100; focus = 100;
   yaw = 0; pitch = -0.22; private facing = 0; private camDist = 3.4; private camY = 0;
-  private cd = { decoy: 0, ghost: 0, taunt: 0, pulse: 0, shock: 0 };
+  private cd = { decoy: 0, ghost: 0, taunt: 0, pulse: 0, shock: 0, haunt: 0 };
+  // a hunter looks round the room (with no props in it) while the props hide: see CFG.PREVIEW_ON
+  previewOn = false;
+  private glideFrom = new THREE.Vector3(); private glide = 1;
+  /** When the results panel may come up: the survivors are shown off first. */
+  private resultsAt = 0;
+  /** Set by the welcome: the first roster after it decides whether a mid-round joiner needs telling what they are. */
+  private joinCard = false;
   private nextFire = 0; private recoil = 0; private shake = 0; private bob = 0;
   private dashQueued = false; private wasMoving = false;
   // ghost (caught props and late joiners): attached to a player, looking through a hunter's eyes, or flying free
@@ -260,6 +271,7 @@ export class Game {
     this.net.close();
     this.inGame = false; this.hasMe = false; this.alive = false;
     this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow';
+    this.previewOn = false; this.glide = 1; this.resultsAt = 0; this.hud.count(null); this.hud.ghostTint(false);
     for (const e of this.ents.values()) this.scene.remove(e.group);
     this.ents.clear();
     for (const d of this.decoys.values()) this.scene.remove(d.mesh);
@@ -302,9 +314,11 @@ export class Game {
   touchAlt(on: boolean) { this.mouseR = on; }
   touchFire(down: boolean) {
     if (!this.locked) return;
-    if (this.specOn) { if (down) this.specSwitch(); return; }
+    if (this.specOn) { if (down) { if (this.canHaunt()) this.ghostAct(); else this.specSwitch(); } return; }
     this.mouseL = down; if (down && this.team === 'prop') this.tryTransform();
   }
+  /** Touch: swap a ghost between flying free and watching a player. */
+  ghostSwitch() { if (this.specOn && this.locked) this.specSwitch(); }
   requestLock() { if (this.touch) return; if (!this.locked && this.inGame) { try { const p: any = this.canvas.requestPointerLock(); if (p && p.catch) p.catch(() => {}); } catch { /* ignore */ } } }
 
   // ================================================================ input
@@ -325,7 +339,8 @@ export class Game {
     document.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
       // a ghost's mouse buttons pick who to watch
-      if (this.specOn) { if (e.button === 0) this.specClick(); else if (e.button === 2) this.specCycle(-1); return; }
+      // (while haunting is possible, left click haunts and right click takes over choosing who to watch)
+      if (this.specOn) { if (e.button === 0) this.ghostAct(); else if (e.button === 2) { if (!this.canHaunt()) this.specCycle(-1); else if (this.specMode === 'free') this.specClick(); else this.specCycle(1); } return; }
       if (e.button === 0) { this.mouseL = true; if (this.team === 'prop') this.tryTransform(); }
       if (e.button === 2) this.mouseR = true;
     });
@@ -385,6 +400,7 @@ export class Game {
       case 'welcome':
         this.myId = m.id; this.code = m.code; this.pub = m.pub; this.inGame = true;
         this.haveOffset = false; this.seq = 0; this.pending.length = 0; this.outbox.length = 0;
+        this.joinCard = true;
         this.hud.show(true);
         // private lobbies need the mouse for Start / bots / invite, so only public games grab it straight away
         if (m.pub) this.requestLock();
@@ -393,7 +409,7 @@ export class Game {
       case 'roster': this.onRoster(m.p); break;
       case 's': this.onSnap(m); break;
       case 'ev': this.onEvent(m); break;
-      case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock }; break;
+      case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock, haunt: m.haunt ?? 0 }; break;
       case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0, rounds: m.rounds | 0 || ROUNDS_DEFAULT }; break;
       case 'decoys': {
         for (const d of this.decoys.values()) this.scene.remove(d.mesh);
@@ -415,20 +431,28 @@ export class Game {
     if (m.phase === 'hiding') {
       // new round: forget where everyone was, so nobody is drawn at a stale lobby position
       for (const e of this.ents.values()) { e.buf.length = 0; e.lastSeen = -1e9; }
-      this.sfx.play('hide'); this.sfx.music('sneak');
-      this.hud.feed(['Now playing on ', { b: MAP_NAMES[this.mapId] ?? 'the map' }], 'good');
-      // team is confirmed by the roster that follows; banner is shown from there
+      this.sfx.music('sneak');
+      // which side we are on is confirmed by the roster that follows: the role card is shown from there
       this.bannerPending = 'hiding';
     } else if (m.phase === 'hunt') {
       this.sfx.music('hunt'); this.sfx.play('go');
+      this.hud.count(null);
       if (prevPhase === 'hiding') {
         if (this.team === 'hunter') this.hud.banner('GO HUNT!', 'Zap the fakes. Innocent objects cost you FOCUS.', 'pink');
-        else if (this.alive) this.hud.banner('HUNTERS RELEASED!', 'Hold your nerve. Taunt (T) near them for big points.', '');
+        else if (this.alive) this.hud.banner('HUNTERS RELEASED!', `Hold your nerve. Taunt [${keyLabel(B.taunt)}] near them for big points.`, '');
       }
     } else if (m.phase === 'end' && m.results) {
       this.sfx.music('lobby');
       this.world.darkTarget = 0; this.world.stopPoltergeist();
       const res: Results = m.results;
+      // straight from a hunt: first a beat in which everyone sees who survived and as what, then the board
+      const beat = prevPhase === 'hunt' && CFG.REVEAL_BEAT_MS > 0;
+      this.resultsAt = beat ? performance.now() + CFG.REVEAL_BEAT_MS : 0;
+      if (beat) {
+        const left = res.board.filter((r) => r.survived).length;
+        this.hud.banner(res.winner === 'props' ? 'PROPS WIN!' : 'HUNTERS WIN!', res.winner === 'hunters' ? 'Every last prop was found.' : left === 1 ? 'One prop made it. There it is!' : `${left} props made it. There they are!`, res.winner === 'props' ? '' : 'pink', CFG.REVEAL_BEAT_MS);
+        if (left) this.sfx.play('reveal');
+      }
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
       const mine = res.board.find((r) => r.id === this.myId);
@@ -443,7 +467,8 @@ export class Game {
         try { localStorage.setItem('pp_xp', String(this.xp)); localStorage.setItem('pp_coins', String(this.coins)); localStorage.setItem('pp_paid', key); } catch { /* ignore */ }
         this.hud.popup(`+${gain} XP`);
         if (this.coinGain) this.hud.popup(`+${this.coinGain} coins`);
-        if (xpLevel(this.xp) > before) { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${xpLevel(this.xp)}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }
+        // after the reveal beat, so it does not cover who won
+        if (xpLevel(this.xp) > before) { const lvl = xpLevel(this.xp); window.setTimeout(() => { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${lvl}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }, Math.max(0, this.resultsAt - performance.now())); }
       } else if (!mine) this.coinGain = 0;
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
@@ -477,7 +502,7 @@ export class Game {
       if (wantKind === '?') wantKind = e && e.kind.startsWith('prop:') ? e.kind : 'prop:' + (PROPS[e?.netType ?? -1] ? e!.netType : -1);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
-        e = { id: r.id, group: new THREE.Group(), model: null, rig: null, pitch: 0, kick: 0, vy: 0, netType: -1, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1 };
+        e = { id: r.id, group: new THREE.Group(), model: null, rig: null, pitch: 0, kick: 0, vy: 0, netType: -1, eyes: null, stars: null, eyeK: 0, kind: '', buf: [], flags: 0, lastSeen: -1e9, label: null, labelKey: '', marker: null, hitT: 0, hopT: 0, x: 0, y: -50, z: 0, f: 0, speed: 0, stepT: 0, h: 1, popT: 0, beam: null };
         e.group.visible = false;
         this.scene.add(e.group);
         this.ents.set(r.id, e);
@@ -491,14 +516,39 @@ export class Game {
       if (e) { this.scene.remove(e.group); this.ents.delete(id); }
     }
     if (this.bannerPending === 'hiding') {
-      this.bannerPending = '';
-      if (this.team === 'prop' && this.alive) this.hud.banner('HIDE!', 'Aim at an object and press E to become it. Hunters are coming!', 'teal', 3200);
+      this.bannerPending = ''; this.joinCard = false;
+      this.showRole(false);
+    } else if (this.joinCard && this.roster.has(this.myId)) {
+      // dropped into a hunt that is already running: say what we are, there was no round start to say it
+      this.joinCard = false;
+      if (this.phase === 'hunt') this.showRole(true);
+    }
+  }
+
+  /** The role card: which side you are on this round, who is on the other one, and the one thing to do next. */
+  private showRole(late: boolean) {
+    const all = [...this.roster.values()];
+    const hunters = all.filter((r) => r.team === 'hunter').map((r) => r.name);
+    const props = all.filter((r) => r.team === 'prop' && r.alive).length;
+    const where = `${this.rounds > 1 ? `ROUND ${this.round} OF ${this.rounds} · ` : ''}${(MAP_NAMES[this.mapId] ?? '').toUpperCase()}`;
+    const who = hunters.length > 2 ? `${hunters.slice(0, -1).join(', ')} and ${hunters[hunters.length - 1]}` : hunters.join(' and ');
+    const act = this.touch ? 'BECOME' : keyLabel(B.act);
+    if (this.team === 'hunter') {
+      this.hud.roleCard('hunter', where, hunters.length > 1 ? 'YOU ARE A HUNTER' : 'YOU ARE THE HUNTER', `${props} ${props === 1 ? 'prop is' : 'props are'} hiding among the objects. Find the fakes and zap them.`, CFG.ROLE_CARD_MS);
+      this.sfx.play('roleHunter');
+    } else if (this.team === 'prop' && this.alive) {
+      this.hud.roleCard('prop', where, 'YOU ARE A PROP', late ? `The hunt is already on! Become an object [${act}] and blend in, quick.` : `${who || 'A hunter'} ${hunters.length > 1 ? 'are' : 'is'} coming. Become an object [${act}] and blend in.`, CFG.ROLE_CARD_MS);
+      this.sfx.play('roleProp');
+    } else if (late) {
+      this.hud.roleCard('ghost', where, 'ROUND IN PROGRESS', CFG.HAUNT_ON ? 'You play in the next one. Until then you are a ghost: aim at an object and haunt it.' : 'You play in the next one. Until then, have a look around.', CFG.ROLE_CARD_MS + 800);
     }
   }
 
   private buildModel(e: Ent, kind: string) {
     if (e.model) e.group.remove(e.model);
     if (e.eyes) { e.group.remove(e.eyes); e.eyes = null; }
+    const real = (k: string) => k.startsWith('prop:') && k !== 'prop:-1';
+    if (real(e.kind) && real(kind) && e.kind !== kind) e.popT = 0.4; // a new disguise pops into shape
     e.kind = kind; e.rig = null; e.model = null;
     if (kind === 'prop:-1') { e.labelKey = ''; return; } // an unseen prop: nothing to draw yet
     if (kind.startsWith('hunter')) {
@@ -558,6 +608,7 @@ export class Game {
   }
 
   private addDecoy(d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }) {
+    if (this.decoys.has(d.id)) return;
     const mesh = assets.propObject(d.type);
     mesh.position.set(d.x, d.y, d.z);
     mesh.rotation.y = d.yaw + Math.PI;
@@ -594,12 +645,15 @@ export class Game {
           this.world.wobble(m.tg);
           this.fx.burst(m.x, m.y, m.z, 9, [0xffffff, 0xffd166, 0xbbbbbb], 2.2, 2.4, 0.7, 0.6);
           this.sfx.play('bonk', [m.x, m.y, m.z]);
-          if (mine) { this.hud.hitmark('#b8c0cc'); this.hud.popup(`Innocent object!  −${CFG.FOCUS_MISS} focus`, true); }
+          if (mine) { this.hud.hitmark('#b8c0cc'); if (!m.sp) this.hud.popup(`Innocent object!  −${CFG.FOCUS_MISS} focus`, true); }
         } else if (m.hit === 3) {
+          // a hit reads at a glance: confetti, a squash, and how many hits the prop has left
           this.fx.burst(m.x, m.y, m.z, 16, CONFETTI, 3.5, 3.5, 0.9, 0.8);
           this.sfx.play('hit', mine ? undefined : [m.x, m.y, m.z]);
           const e = this.ents.get(m.tg);
           if (e) e.hitT = 0.3;
+          const left = typeof m.hp === 'number' ? Math.ceil(m.hp / CFG.DMG) : -1;
+          if (left > 0) this.fx.floater(m.x, m.y + 0.5, m.z, left === 1 ? 'ONE MORE!' : `${left} MORE`, '#ffd166', 0.42, false, 0.9);
           if (mine) this.hud.hitmark('#ffd166');
         }
         break;
@@ -607,6 +661,7 @@ export class Game {
       case 'kill': {
         this.fx.burst(m.x, m.y + 0.4, m.z, 70, CONFETTI, 6, 7, 1.3, 1.7);
         this.fx.floater(m.x, m.y + 1.2, m.z, 'CAUGHT!', '#ff8fa3', 0.6, false, 1.6);
+        if (CFG.HAUNT_ON) this.fx.ghost(m.x, m.y + 0.6, m.z, 0.8);
         this.sfx.play('kill', m.who === me || m.by === me ? undefined : [m.x, m.y, m.z]);
         const r = this.roster.get(m.who);
         this.hud.feed([{ b: this.nameOf(m.by) }, ' caught ', { b: this.nameOf(m.who) }, PROPS[m.ty ?? r?.disguise ?? -1] ? ` (the ${PROPS[m.ty ?? r!.disguise].name})` : ''], 'kill');
@@ -614,7 +669,8 @@ export class Game {
         if (m.by === me) this.fovPunch = 9;
         if (m.who === me) {
           // the ghost starts out attached to whoever caught it (see enterSpectator)
-          this.hud.banner('CAUGHT!', this.touch ? 'You are a ghost now. Watch anyone, or push the stick to fly.' : 'You are a ghost now. Click to watch other players, or move to fly free.', 'pink', 3600);
+          this.hud.banner('CAUGHT!', !CFG.HAUNT_ON ? (this.touch ? 'You are a ghost now. Watch anyone, or push the stick to fly.' : 'You are a ghost now. Click to watch other players, or move to fly free.')
+            : this.touch ? 'You are a ghost! Aim at an object and tap HAUNT to bait the hunters.' : 'You are a ghost! Aim at an object and click to haunt it. If a hunter shoots it, you score.', 'pink', 3800);
           this.specPos.set(m.x, m.y + 2.5, m.z); this.specTarget = m.by; this.shake = 0.5;
         }
         else if (m.by === me) this.hud.banner('GOT ONE!', `${this.nameOf(m.who)} was the ${PROPS[m.ty ?? r?.disguise ?? -1]?.name ?? 'prop'}`, '', 1800);
@@ -655,7 +711,14 @@ export class Game {
         if (this.hasMe && Math.hypot(m.x - this.body.x, m.z - this.body.z) < 9) this.shake = Math.max(this.shake, 0.35);
         break;
       }
-      case 'decoy': this.addDecoy(m); if (m.owner === me) this.hud.popup('Decoy placed. Now walk away casually.'); this.sfx.play('poof', [m.x, m.y, m.z], 0.4); break;
+      case 'decoy': {
+        // hunters hear of a decoy only when it comes into view: no sound for that, it just sits there like an object
+        const fresh = !this.decoys.has(m.id);
+        this.addDecoy(m);
+        if (m.owner === me) this.hud.popup('Decoy placed. Now walk away casually.');
+        if (fresh && m.owner) this.sfx.play('poof', [m.x, m.y, m.z], 0.4);
+        break;
+      }
       case 'decoyHop': { const d = this.decoys.get(m.id); if (d) d.hopT = 0.6; break; }
       case 'decoyPop': {
         const d = this.decoys.get(m.id);
@@ -665,7 +728,7 @@ export class Game {
         this.sfx.play('pop', [d.x, d.y + 0.4, d.z], 1.4);
         if (m.by) {
           this.fx.floater(d.x, d.y + 1.1, d.z, 'DECOY!', '#c8a8ff', 0.6, false, 1.5);
-          this.hud.feed([{ b: this.nameOf(m.by) }, ' shot a decoy planted by ', { b: this.nameOf(d.owner) }], 'chaos');
+          this.hud.feed(d.owner ? [{ b: this.nameOf(m.by) }, ' shot a decoy planted by ', { b: this.nameOf(d.owner) }] : [{ b: this.nameOf(m.by) }, ' shot a decoy'], 'chaos');
         }
         break;
       }
@@ -689,7 +752,7 @@ export class Game {
       }
       case 'last': {
         this.sfx.play('alarm');
-        if (m.who === me) this.hud.banner('LAST PROP STANDING', 'Ghost and Decoy recharged. Make it count!', 'teal', 3000);
+        if (m.who === me) this.hud.banner('LAST PROP STANDING', 'Vanish and Decoy recharged. Make it count!', 'teal', 3000);
         else this.hud.banner('ONE LEFT!', `${this.nameOf(m.who)} is the last prop. Roll calls come faster now.`, 'pink', 2600);
         break;
       }
@@ -721,6 +784,31 @@ export class Game {
         else if (this.team !== 'prop' || !this.alive) { this.fx.floater(m.x, m.y + 1.2, m.z, 'MOVED!', '#33e1ff', 0.55, false, 1.6); this.sfx.play('beep'); }
         break;
       case 'hurt': this.hud.hurt(); this.sfx.play('hurt'); this.shake = 0.3; if (m.hp > 0) this.hud.popup('HIT! Panic speed boost — RUN!', true); break;
+      case 'haunt': {
+        this.world.haunt(m.d);
+        const info = this.world.decorDef(m.d);
+        if (!info) break;
+        const { d, def } = info;
+        this.sfx.play('haunt', [d.x, d.y + def.h / 2, d.z], 1.2);
+        // the props' side sees who did it; to a hunter it is just an object that moved
+        if (this.team !== 'hunter' || !this.alive) { this.fx.ghost(d.x, d.y + def.h + 0.2, d.z, 0.45); if (m.by === me) this.hud.popup('Haunted! Now wait for a hunter to take the bait.'); }
+        break;
+      }
+      case 'spook': {
+        this.sfx.play('spook', m.by === me ? undefined : [m.x, m.y, m.z], 1.3);
+        this.fx.ghost(m.x, m.y + 0.3, m.z, 1.1);
+        this.fx.floater(m.x, m.y + 1.0, m.z, 'BOO!', '#a8dcff', 0.7, false, 1.5);
+        this.hud.feed([{ b: this.nameOf(m.ghost) }, '\'s ghost spooked ', { b: this.nameOf(m.by) }], 'chaos');
+        if (m.by === me) { this.hud.banner('SPOOKED!', `A ghost rattled that one. Real objects that move are bait.  −${CFG.FOCUS_SPOOK} focus`, 'purple', 2400); this.shake = 0.45; }
+        else if (m.ghost === me) this.hud.banner('BOO!', `${this.nameOf(m.by)} fell for it.`, 'teal', 1800);
+        break;
+      }
+      case 'sub': {
+        const to = m.to ? this.nameOf(m.to) : '';
+        this.hud.feed(to ? [{ b: this.nameOf(m.from) }, ' left the hunt. ', { b: to }, ' (bot) takes over'] : [{ b: this.nameOf(m.from) }, ' left the hunt'], 'chaos');
+        if (m.to === me) this.hud.banner('YOU ARE THE HUNTER NOW', 'A hunter left, so you take over. Zap the fakes!', 'pink', 2600);
+        break;
+      }
       case 'chat': this.hud.feed([{ b: this.nameOf(m.who) }, ': ' + (QUICK_CHAT[m.i] ?? '')], 'chat'); break;
       case 'pts': if (m.why) { this.hud.popup(`${m.n > 0 ? '+' : ''}${m.n}  ${m.why}`, m.n < 0); if (m.n > 0) this.sfx.play('points'); } break;
       case 'toast': this.hud.popup(m.msg, true); this.sfx.play('deny'); break;
@@ -826,6 +914,8 @@ export class Game {
       if (e.hopT > 0) { e.hopT -= dt; hop += Math.sin((1 - e.hopT / 0.45) * Math.PI) * 0.3; sq += Math.sin(e.hopT * 30) * 0.1; }
       if (e.hitT > 0) { e.hitT -= dt; sq += Math.sin(e.hitT * 40) * 0.22 * (e.hitT / 0.3); }
       if (e.kind === 'duck') tilt += Math.sin(this.time * 9) * 0.15;
+      let pop = 1;
+      if (e.popT > 0) { e.popT = Math.max(0, e.popT - dt); const k = 1 - e.popT / 0.4; pop = 0.55 + 0.45 * k + Math.sin(k * Math.PI) * 0.22; }
       const dizzy = (e.flags & F.DIZZY) !== 0;
       if (e.rig) {
         e.kick = Math.max(0, e.kick - dt * 6);
@@ -841,7 +931,11 @@ export class Game {
       }
       m.position.y = hop; m.rotation.z = tilt;
       const base = e.kind === 'duck' ? 1.5 : 1;
-      m.scale.set(base * (1 + sq), base * (1 - sq), base * (1 + sq));
+      m.scale.set(base * pop * (1 + sq), base * pop * (1 - sq), base * pop * (1 + sq));
+      // once the round is over, a pillar of light over every prop that made it, so everyone sees where they were
+      const survivor = this.phase === 'end' && isProp && !!r?.alive && r.team === 'prop';
+      if (survivor && !e.beam) { e.beam = makeBeacon(); e.group.add(e.beam); }
+      if (e.beam) e.beam.visible = survivor;
       // ghosted props are see-through for friends, absent for hunters
       const ghost = (e.flags & F.GHOST) !== 0;
       if (isProp) for (const c of m.children) { const want = ghost ? this.ghostMat : c.userData.mat; if ((c as THREE.Mesh).material !== want) (c as THREE.Mesh).material = want; }
@@ -940,8 +1034,19 @@ export class Game {
     this.preview.visible = false;
     const ghost = !this.alive || this.team === 'spec';
     if (ghost !== this.specOn) { if (ghost) this.enterSpectator(); else { this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow'; } }
+    // hunters: while the props hide, a free look round the room as it was stocked (it holds no props: the server sends none)
+    const preview = CFG.PREVIEW_ON && !ghost && this.hasMe && this.team === 'hunter' && this.phase === 'hiding';
+    if (preview !== this.previewOn) {
+      this.previewOn = preview;
+      if (preview) { this.specPos.set(this.rpos.x, this.rpos.y + CFG.HUNTER_EYE, this.rpos.z); this.specVel.set(0, 0, 0); }
+      else { this.glideFrom.copy(cam.position); this.glide = 0; } // and back into the hunter's own head, smoothly
+    }
     let firstPerson = false, dashing = false;
-    if (ghost || !this.hasMe) {
+    if (preview) {
+      this.viewmodel.visible = false;
+      cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
+      this.fly(dt);
+    } else if (ghost || !this.hasMe) {
       this.updateSpectator(dt); // may steer yaw and pitch (through a hunter's eyes), so the rotation is applied after
       cam.rotation.set(this.pitch, this.yaw, 0, 'YXZ');
     } else {
@@ -954,6 +1059,7 @@ export class Game {
       if (firstPerson) {
         const bobY = this.poseViewmodel(dt, Math.hypot(this.body.vx, this.body.vz), this.body.ground);
         cam.position.set(this.rpos.x, this.camY + CFG.HUNTER_EYE + bobY, this.rpos.z);
+        if (this.glide < 1) { this.glide = Math.min(1, this.glide + dt * 2.2); const k = this.glide * this.glide * (3 - 2 * this.glide); cam.position.lerpVectors(this.glideFrom, cam.position.clone(), k); }
         if (this.myFlags & F.DIZZY) { cam.rotation.z = Math.sin(this.time * 9) * 0.07; cam.rotation.x += Math.sin(this.time * 6) * 0.03; }
       } else {
         this.viewmodel.visible = false;
@@ -1136,14 +1242,26 @@ export class Game {
       }
     }
 
-    // free flight: forward follows the look direction, so looking up and pushing forward climbs
+    // free flight
     this.viewmodel.visible = false;
     if (this.specOn && this.specSeek) {
       if (moving || this.time > this.specSeek) this.specSeek = 0;
       else { const list = this.specList(); if (list.length) { this.specAttach(list[0], true); this.updateSpectator(dt); return; } }
     }
+    void u;
+    this.fly(dt);
+  }
+
+  /** Free flight through walls (ghosts, and hunters looking round during the hiding phase). Forward follows the look, so looking up climbs. */
+  private fly(dt: number) {
+    const k = this.keys;
+    let f = (k.has(B.fwd) || k.has('ArrowUp') ? 1 : 0) - (k.has(B.back) || k.has('ArrowDown') ? 1 : 0);
+    let s = (k.has(B.right) || k.has('ArrowRight') ? 1 : 0) - (k.has(B.left) || k.has('ArrowLeft') ? 1 : 0);
+    let u = (k.has(B.jump) ? 1 : 0) - (k.has(B.dash) ? 1 : 0);
+    if (this.touch) { s = this.stick.x; f = -this.stick.y; } // UP / DOWN replay the jump and dash keys
+    if (!this.locked) f = s = u = 0;
     const [dx, dy, dz] = aimDir(this.yaw, this.pitch);
-    const len = Math.max(1, Math.hypot(f, s)), sp = 10;
+    const len = Math.max(1, Math.hypot(f, s)), sp = CFG.FLY_SPEED;
     const v = this.specVel, ease = 1 - Math.exp(-dt * 12);
     v.x += ((dx * f + Math.cos(this.yaw) * s) / len * sp - v.x) * ease;
     v.y += ((dy * f / len + u) * sp - v.y) * ease;
@@ -1152,7 +1270,27 @@ export class Game {
     p.x = Math.max(BOUNDS.x0 + 0.5, Math.min(BOUNDS.x1 - 0.5, p.x + v.x * dt));
     p.z = Math.max(BOUNDS.z0 + 0.5, Math.min(BOUNDS.z1 - 0.5, p.z + v.z * dt));
     p.y = Math.max(0.4, Math.min(this.mapId === 1 ? 10 : 4.2, p.y + v.y * dt));
-    cam.position.copy(p);
+    this.camera.position.copy(p);
+  }
+
+  // ================================================================ haunting (ghosts)
+  /** Innocent object under a ghost's crosshair, or -1. */
+  private hauntTarget = -1;
+  /** A ghost may haunt right now (the cooldown aside). */
+  canHaunt(): boolean { return CFG.HAUNT_ON && this.specOn && this.phase === 'hunt' && this.team !== 'hunter'; }
+  private pickHaunt(): number {
+    if (!this.canHaunt()) return -1;
+    const o = this.camera.position, [dx, dy, dz] = aimDir(this.yaw, this.pitch);
+    const hit = this.phys.raycast(o.x, o.y, o.z, dx, dy, dz, 30);
+    return hit.decor;
+  }
+  /** A ghost's main button: haunt what is under the crosshair; without haunting, the 2.4 behaviour (watch / next player). */
+  ghostAct() {
+    if (!this.canHaunt()) { this.specClick(); return; }
+    const left = this.cd.haunt - this.serverNow();
+    if (this.hauntTarget < 0) { this.sfx.play('deny'); this.hud.popup('Aim at an object to haunt it', true); return; }
+    if (left > 60) { this.sfx.play('deny'); this.hud.popup(`Haunt ready in ${Math.ceil(left / 1000)}s`, true); return; }
+    this.net.send({ t: 'haunt', d: this.hauntTarget });
   }
 
   private updateHud(dt: number) {
@@ -1171,35 +1309,47 @@ export class Game {
     else h.setRole('prop', false, '', 0, false);
 
     const ab: AbilityView[] = [];
-    if (playing && hunter) {
+    const haunting = this.canHaunt() && this.roster.has(this.myId);
+    if (haunting) {
+      ab.push({ key: this.touch ? 'TAP' : 'Click', name: 'HAUNT', icon: '✧', left: this.cd.haunt - now, total: CFG.CD_HAUNT });
+    } else if (playing && hunter) {
       ab.push({ key: 'Click', name: 'ZAP', icon: '✦', left: 0, total: 1 });
       ab.push({ key: keyLabel(B.ab1), name: 'SCANNER', icon: '◎', left: this.cd.pulse - now, total: CFG.CD_PULSE });
       ab.push({ key: keyLabel(B.ab2), name: 'SHOCKWAVE', icon: '✺', left: this.cd.shock - now, total: CFG.CD_SHOCK });
     } else if (playing) {
       ab.push({ key: keyLabel(B.act), name: 'BECOME', icon: '⇄', left: 0, total: 1 });
       ab.push({ key: keyLabel(B.ab1), name: 'DECOY', icon: '❖', left: this.cd.decoy - now, total: CFG.CD_DECOY });
-      if (!lobby) ab.push({ key: keyLabel(B.ab2), name: 'GHOST', icon: '☁', left: this.cd.ghost - now, total: CFG.CD_GHOST, active: (this.myFlags & F.GHOST) !== 0 });
+      if (!lobby) ab.push({ key: keyLabel(B.ab2), name: 'VANISH', icon: '☁', left: this.cd.ghost - now, total: CFG.CD_GHOST, active: (this.myFlags & F.GHOST) !== 0 });
       ab.push({ key: keyLabel(B.dash), name: 'DASH', icon: '»', left: this.body.dashCd * 1000, total: CFG.DASH_CD * 1000, active: this.body.dashLeft > 0 });
       ab.push({ key: keyLabel(B.taunt), name: 'TAUNT', icon: '♪', left: this.cd.taunt - now, total: CFG.CD_TAUNT });
     }
-    h.setAbilities(ab);
+    h.setAbilities(ab, haunting);
 
     const blindfolded = this.phase === 'hiding' && hunter && this.alive;
-    h.blindfold(blindfolded, left);
+    const flyHint = this.touch ? 'Use the stick to fly around, UP and DOWN to climb.' : `<kbd>Mouse</kbd> look · ${['fwd', 'left', 'back', 'right'].map((id) => `<kbd>${keyLabel(B[id])}</kbd>`).join('')} fly · <kbd>${keyLabel(B.jump)}</kbd> <kbd>${keyLabel(B.dash)}</kbd> up / down`;
+    h.blindfold(blindfolded, left, this.previewOn, flyHint);
+    // 3 · 2 · 1 before the hunters are let loose, for everyone in the round
+    const cnt = this.phase === 'hiding' && left > 0 && left <= 3000 && this.roster.has(this.myId) ? Math.ceil(left / 1000) : null;
+    h.count(cnt);
     // ghost: who (if anyone) the camera is attached to
     const ghost = this.specOn && this.roster.has(this.myId) && this.phase !== 'end';
     const watching = ghost && this.specMode === 'follow' ? this.roster.get(this.specTarget) : undefined;
     const eyes = !!watching && this.specPov;
-    h.crosshair(ghost ? (eyes ? 'hunter' : watching ? 'none' : 'prop') : !playing || blindfolded ? 'none' : hunter && !this.quackedMe ? 'hunter' : 'prop');
+    h.crosshair(ghost ? (eyes ? 'hunter' : watching && !haunting ? 'none' : 'prop') : !playing || (blindfolded && !this.previewOn) ? 'none' : blindfolded ? 'prop' : hunter && !this.quackedMe ? 'hunter' : 'prop');
+    h.ghostTint(ghost && this.phase === 'hunt');
 
     // transform prompt (a flying ghost gets "watch this player" instead)
     if (this.target >= 0 && playing && !hunter) {
       const info = this.world.decorDef(this.target);
       if (info) h.prompt(info.d.type === this.disguise ? `You are already a <b>${info.def.name}</b>` : `<b>[${keyLabel(B.act)}]</b> Become <b>${info.def.name}</b>`);
-    } else if (ghost && !watching) {
-      const r = this.roster.get(this.specAim(false));
-      h.prompt(r ? `<b>[${this.touch ? 'WATCH' : 'Click'}]</b> Watch <b>${esc(r.name)}</b>` : null);
-    } else h.prompt(null);
+    } else {
+      // a flying ghost looking at a player is offered to watch them; otherwise, while haunting, the object under the crosshair
+      const r = ghost && !watching ? this.roster.get(this.specAim(false)) : undefined;
+      const info = haunting && this.hauntTarget >= 0 ? this.world.decorDef(this.hauntTarget) : null, wait = this.cd.haunt - now;
+      if (r) h.prompt(`<b>[${this.touch ? 'WATCH' : haunting ? 'Right click' : 'Click'}]</b> Watch <b>${esc(r.name)}</b>`);
+      else if (info) h.prompt(wait > 60 ? `Haunt the <b>${info.def.name}</b> in ${Math.ceil(wait / 1000)}s` : `<b>[${this.touch ? 'HAUNT' : 'Click'}]</b> Haunt the <b>${info.def.name}</b>`, true);
+      else h.prompt(null);
+    }
 
     h.freeze(pnow < this.freezeUntil && playing);
     h.revealed(pnow < this.revealedUntil && playing);
@@ -1230,7 +1380,7 @@ export class Game {
     if (sec !== this.lastTickSec && left > 0) {
       this.lastTickSec = sec;
       if (this.phase === 'hunt' && sec <= 10) this.sfx.play(sec <= 5 ? 'tock' : 'tick');
-      if (this.phase === 'hiding' && sec <= 5) this.sfx.play('tick');
+      if (this.phase === 'hiding' && sec <= 5) this.sfx.play(sec <= 3 ? 'count' : 'tick');
     }
 
     // contextual hint / spectate strip
@@ -1240,11 +1390,14 @@ export class Game {
     if (ghost) {
       const pov = !!watching && this.canPov(watching.id);
       h.spectate({
-        head: this.team === 'spec' ? 'ROUND IN PROGRESS · YOU JOIN THE NEXT ONE' : 'YOU WERE CAUGHT · GHOST MODE',
+        head: this.team === 'spec' ? 'ROUND IN PROGRESS · YOU JOIN THE NEXT ONE' : haunting ? 'CAUGHT · HAUNT OBJECTS TO BAIT THE HUNTERS' : 'YOU WERE CAUGHT · GHOST MODE',
         label: eyes ? 'THROUGH THE EYES OF' : watching ? 'WATCHING' : 'FLYING FREE',
         name: watching?.name ?? '', team: watching?.team ?? null,
         note: watching && watching.team === 'prop' && PROPS[watching.disguise] ? `the ${PROPS[watching.disguise].name}` : '',
-        hint: !this.locked ? 'Click the game to look around' : watching
+        hint: !this.locked ? 'Click the game to look around' : haunting
+          ? (watching ? `<kbd>Click</kbd> haunt · <kbd>Right click</kbd> next player · ${move} fly free${pov ? ` · ${K('jump')} ${eyes ? 'step back out' : 'their eyes'}` : ''}`
+            : `<kbd>Click</kbd> haunt · <kbd>Right click</kbd> watch a player · ${move} fly · ${K('jump')} ${K('dash')} up / down`)
+          : watching
           ? `<kbd>Click</kbd> next player · ${move} fly free${pov ? ` · ${K('jump')} ${eyes ? 'step back out' : 'their eyes'}` : ''}`
           : `<kbd>Click</kbd> watch a player · ${move} fly · ${K('jump')} ${K('dash')} up / down`,
       });
@@ -1263,17 +1416,20 @@ export class Game {
     else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake objects and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
     else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at an object and press [${keyLabel(B.act)}] to become it, then stand among similar ones.`;
     else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
+    else if (haunting) obj = 'Rattle real objects near the hunters. If one shoots what you haunted, you score and they lose Focus.';
     h.objective(obj);
-    const rows = ghost
+    const rows = ghost && haunting
+      ? [['Haunt object', '<kbd>Left click</kbd>'], ['Next / aimed player', `<kbd>Right click</kbd> ${K('ab2')}`], ['Previous player', K('ab1')], ['Fly free', move], ['Fly up / down', `${K('jump')} ${K('dash')}`], ["Hunter's eyes", `${K('jump')} while watching`], ['Watch / fly', K('act')]]
+      : ghost
       ? [['Next player', `<kbd>Click</kbd> ${K('ab2')}`], ['Previous player', `<kbd>Right click</kbd> ${K('ab1')}`], ['Fly free', move], ['Fly up / down', `${K('jump')} ${K('dash')}`], ["Hunter's eyes", `${K('jump')} while watching`], ['Watch / fly', K('act')], ['Zoom', '<kbd>Scroll</kbd>']]
       : !playing ? null : hunter
       ? [['Move', move], ['Jump', K('jump')], ['Zap', '<kbd>Left click</kbd>'], ['Zoom aim', '<kbd>Right click</kbd>'], ['Scanner', K('ab1')], ['Shockwave', K('ab2')]]
-      : [['Move', move], ['Jump', K('jump')], ['Become object', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Ghost', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
+      : [['Move', move], ['Jump', K('jump')], ['Become object', `${K('act')} <kbd>Click</kbd>`], ['Decoy', K('ab1')], ['Vanish', K('ab2')], ['Dash', K('dash')], ['Taunt', K('taunt')], ['Hold rotation', '<kbd>Right click</kbd>']];
     h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${ghost ? 'GHOST' : hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
     void ACTIONS;
 
     h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map, rounds: this.lobbyInfo.rounds });
-    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.coinGain, this.coins);
+    h.results(this.phase === 'end' && pnow >= this.resultsAt, this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.coinGain, this.coins);
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
     void dt;
   }
@@ -1320,7 +1476,10 @@ export class Game {
     if (this.inGame) {
       this.updateEnts(dt);
       this.target = this.pickTarget();
-      const info = this.target >= 0 ? this.world.decorDef(this.target) : null;
+      this.hauntTarget = this.pickHaunt();
+      const pick = this.target >= 0 ? this.target : this.hauntTarget;
+      const info = pick >= 0 ? this.world.decorDef(pick) : null;
+      (this.highlight.material as THREE.LineBasicMaterial).color.set(this.target >= 0 ? 0xffe14d : this.cd.haunt - this.serverNow() > 60 ? 0x6f6a8a : 0xc8a8ff);
       this.highlight.visible = !!info;
       if (info) {
         this.highlight.position.set(info.d.x, info.d.y + info.def.h / 2, info.d.z);
