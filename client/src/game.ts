@@ -397,7 +397,7 @@ export class Game {
         if (this.team === 'hunter') this.hud.banner('GO HUNT!', 'Zap the fakes. Innocent objects cost you FOCUS.', 'pink');
         else if (this.alive) this.hud.banner('HUNTERS RELEASED!', 'Hold your nerve. Taunt (T) near them for big points.', '');
       }
-    } else if (m.phase === 'end') {
+    } else if (m.phase === 'end' && m.results) {
       this.sfx.music('lobby');
       this.world.darkTarget = 0; this.world.stopPoltergeist();
       const res: Results = m.results;

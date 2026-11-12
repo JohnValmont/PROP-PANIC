@@ -1,5 +1,15 @@
 # Changelog
 
+## 2.2.3
+
+- Fixed: players (props and hunters) could still freeze after a reconnect. An input numbered for the old
+  connection could reach the server on the new one before the game restarted its count, and every later input
+  was then discarded. The client now sends nothing but the hello until it has been welcomed, and the server
+  accepts a restarted count at any time.
+- Fixed: reconnecting during the results screen threw an error in the page.
+- After a page refresh mid-game the "Click to play" panel is shown, since the browser needs a click to recapture
+  the mouse.
+
 ## 2.2.2
 - Fixed players freezing in place after any reconnect or page reload: the server kept the old input count and ignored
   the client's new inputs until it caught up (minutes, in a long session).

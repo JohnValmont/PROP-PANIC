@@ -58,6 +58,14 @@ async function main() {
     const z0 = q.body.z;
     r2.onMessage(q, { t: 'in', c: [[1, 0.03, 0, 1, 0, 0, 0, 0], [2, 0.03, 0, 1, 0, 0, 0, 0]] });
     ok(q.ack === 2 && q.body.z !== z0, 'after a reconnect the first inputs move the player again (not ignored as old)');
+    // the race that froze real players: an input still carrying the old numbering reaches the new socket first
+    r2.reattach(q.token, w2);
+    await sleep(60);
+    r2.onMessage(q, { t: 'in', c: [[950, 0.02, 0, 1, 0, 0, 0, 0]] });
+    await sleep(60);
+    const z1 = q.body.z;
+    r2.onMessage(q, { t: 'in', c: [[1, 0.03, 0, 1, 0, 0, 0, 0], [2, 0.03, 0, 1, 0, 0, 0, 0]] });
+    ok(q.ack === 2 && q.body.z !== z1, 'a stale input arriving after the reconnect cannot freeze the player');
     // wedged inside a wall: the server frees the player by itself
     q.body.x = -24.3; q.body.z = 0; q.body.y = 0;
     for (let i = 0; i < 20; i++) r2.tick();

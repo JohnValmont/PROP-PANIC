@@ -9,6 +9,8 @@ export class Net {
   private ws: WebSocket | null = null;
   private name = '';
   private welcomed = false;
+  /** True once the current socket has been welcomed: nothing but the hello may be sent before that. */
+  private ready = false;
   private wantClose = false;
   private tries = 0;
   private timer = 0;
@@ -41,13 +43,13 @@ export class Net {
   private open(hello: object) {
     let ws: WebSocket;
     try { ws = new WebSocket(this.url()); } catch { this.onState('closed', 'Could not reach the server.'); return; }
-    this.ws = ws;
+    this.ws = ws; this.ready = false;
     ws.onopen = () => ws.send(JSON.stringify(hello));
     ws.onmessage = (e) => {
       let m: any;
       try { m = JSON.parse(e.data); } catch { return; }
       if (m.t === 'welcome') {
-        this.welcomed = true; this.tries = 0; this.token = m.token; this.code = m.code;
+        this.welcomed = true; this.ready = true; this.tries = 0; this.token = m.token; this.code = m.code;
         // remembered per tab so an accidental refresh drops you back into your seat
         try { sessionStorage.setItem('pp_seat', JSON.stringify({ code: m.code, token: m.token, name: this.name })); } catch { /* ignore */ }
         this.onState('open');
@@ -57,7 +59,7 @@ export class Net {
     };
     ws.onclose = () => {
       if (this.ws !== ws) return;
-      this.ws = null;
+      this.ws = null; this.ready = false;
       if (this.wantClose) return;
       if (this.lastErr) { this.onState('closed', this.lastErr); return; }
       if (!this.welcomed) { this.onState('closed', 'Could not reach the server.'); return; }
@@ -68,7 +70,9 @@ export class Net {
     ws.onerror = () => { /* onclose follows */ };
   }
 
-  send(m: object) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); }
+  // Held back until the welcome: an input numbered for the old connection, sent on the new one before the game
+  // has restarted its count, would leave the server waiting for numbers the client will not reach for minutes.
+  send(m: object) { if (this.ws && this.ready && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); }
 
   close() {
     this.wantClose = true;

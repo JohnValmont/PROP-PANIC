@@ -66,6 +66,9 @@ game.net.onState = (s, info) => {
     setBusy(false); err.textContent = '';
     menu.classList.add('hidden'); conn.classList.add('hidden');
     history.replaceState(null, '', `?room=${game.net.code}`);
+    // after a refresh the browser will not hand the mouse back without a click: say so instead of looking frozen
+    // (not in the lobby, where the mouse is needed for the buttons)
+    if (resuming && !isTouchDevice()) setTimeout(() => { if (game.inGame && game.phase !== 'lobby' && !game.locked) showPause(true); }, 50);
   } else if (s === 'reconnecting') {
     conn.classList.remove('hidden');
   } else toMenu(resuming ? '' : info ?? 'Disconnected.');

@@ -171,7 +171,8 @@ async function main() {
       const row = humanHunter.snap.p.find((r: number[]) => r[0] === humanProp.id);
       const hm = humanHunter.snap.me;
       const def = PROPS[humanProp.me().disguise];
-      const dx = row[1] - hm[0], dy = row[2] + def.h / 2 - (hm[1] + 1.58), dz = row[3] - hm[2];
+      // the server only reports a prop the hunter can see: with no line of sight, any direction will do for these checks
+      const dx = row ? row[1] - hm[0] : 0, dy = row ? row[2] + def.h / 2 - (hm[1] + 1.58) : 0, dz = row ? row[3] - hm[2] : -1;
       const yaw = Math.atan2(-dx, -dz), pitch = Math.atan2(dy, Math.hypot(dx, dz));
       humanHunter.send({ t: 'fire', yaw, pitch, rt: humanHunter.snap.st });
       humanHunter.send({ t: 'fire', yaw, pitch, rt: humanHunter.snap.st }); // too fast: must be dropped

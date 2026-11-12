@@ -168,7 +168,7 @@ export class Room {
 
   /** Full state for a client that just (re)connected. */
   private sendState(p: Player) {
-    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap() });
+    this.send(p, { t: 'phase', phase: this.phase, ends: this.phaseEnds, round: this.round, seed: this.seed, map: this.mapId, next: this.nextMap(), results: this.phase === 'end' ? this.lastResults : undefined });
     this.send(p, { t: 'roster', p: this.roster(p) });
     this.send(p, { t: 'decoys', d: this.decoys.map((d) => ({ id: d.id, type: d.type, x: d.x, y: d.y, z: d.z, yaw: d.yaw, owner: d.owner })) });
     if (this.event && this.event.until > this.now) this.send(p, { t: 'ev', k: 'chaos', kind: this.event.kind, ms: this.event.until - this.now, seed: this.round });
@@ -311,7 +311,9 @@ export class Room {
   }
 
   // ================================================================ round flow
+  private lastResults: Results | undefined;
   private setPhase(phase: Phase, ms: number, results?: Results) {
+    this.lastResults = results;
     this.rosterDirty = true; // what a viewer may know about the other team changes with the phase
     this.phase = phase;
     this.phaseEnds = ms ? this.now + ms : 0;
@@ -426,7 +428,10 @@ export class Room {
       if (!Array.isArray(c) || c.length < 8) return;
       for (let i = 0; i < 8; i++) if (!fin(c[i])) return;
       const seq = c[0] | 0;
-      if (seq <= p.ack) continue;
+      // Inputs arrive in order on one socket and are never resent, so a number that goes backwards can only be a
+      // client that started counting again (reconnect, reload). Ignoring those froze the player; the time bank
+      // below already stops anyone gaining movement by replaying inputs.
+      if (seq === p.ack) continue;
       p.ack = seq;
       let dt = Math.min(0.05, Math.max(0, c[1]));
       // a client can never simulate more time than has really passed (speed-hack guard)
