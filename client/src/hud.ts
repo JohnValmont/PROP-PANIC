@@ -15,6 +15,8 @@ const TIPS = [
   'Decoys squeak too. Shoot one and you get flash-blinded.',
   'The PROP-O-METER warms up when any prop is within a few metres.',
   'A vase facing the wrong way on a tidy shelf is probably not a vase.',
+  'Props you have caught come back as ghosts and rattle real objects. Shoot one of those and you lose Focus.',
+  'Three hits catch a prop. After the first one it gets a burst of speed, so make the next two count.',
 ];
 
 export class Hud {
@@ -56,12 +58,14 @@ export class Hud {
     $('roleBar').style.display = lobby ? 'none' : 'block';
   }
 
-  setAbilities(list: AbilityView[]) {
+  /** `lift` raises the row clear of the ghost strip at the bottom of the screen. */
+  setAbilities(list: AbilityView[], lift = false) {
     const el = $('abilities');
+    el.classList.toggle('lift', lift);
     const key = list.map((a) => a.key + a.name).join('|');
     if (key !== this.abKey) {
       this.abKey = key;
-      el.innerHTML = list.map((a) => `<div class="ab"><span class="k">${esc(a.key)}</span><div class="ic">${a.icon}</div><div class="cd"></div><div class="sec"></div><div class="nm">${esc(a.name)}</div></div>`).join('');
+      el.innerHTML = list.map((a) => `<div class="ab${a.name === 'HAUNT' ? ' haunt' : ''}"><span class="k">${esc(a.key)}</span><div class="ic">${a.icon}</div><div class="cd"></div><div class="sec"></div><div class="nm">${esc(a.name)}</div></div>`).join('');
     }
     list.forEach((a, i) => {
       const n = el.children[i] as HTMLElement;
@@ -78,7 +82,8 @@ export class Hud {
   crosshair(mode: 'hunter' | 'prop' | 'none') { const c = $('crosshair'); c.style.display = mode === 'none' ? 'none' : 'block'; c.classList.toggle('prop', mode === 'prop'); }
   hitmark(color: string) { const h = $('hitmark'); h.style.color = color; h.classList.remove('show'); void h.offsetWidth; h.classList.add('show'); }
 
-  prompt(html: string | null) { const p = $('prompt'); if (html === null) { if (p.style.display !== 'none') p.style.display = 'none'; return; } p.style.display = 'block'; if (p.innerHTML !== html) p.innerHTML = html; }
+  prompt(html: string | null, haunt = false) { const p = $('prompt'); if (html === null) { if (p.style.display !== 'none') p.style.display = 'none'; return; } p.style.display = 'block'; p.classList.toggle('haunt', haunt); if (this.promptKey !== html) { this.promptKey = html; p.innerHTML = html; } }
+  private promptKey = '';
   hint(text: string | null) { const h = $('hint'); h.style.display = text ? 'block' : 'none'; if (text && h.textContent !== text) h.textContent = text; }
   /** Ghost strip: who the camera is attached to (or that it is flying free). `hint` is trusted markup. */
   spectate(v: { head: string; label: string; name: string; team: Team | null; note: string; hint: string } | null) {
@@ -135,14 +140,57 @@ export class Hud {
     setTimeout(() => { b.style.transition = `opacity ${ms * 0.5}ms ease-in`; b.style.opacity = '0'; }, ms * 0.5);
   }
 
-  blindfold(show: boolean, msLeft = 0) {
+  /**
+   * The hunter's wait while the props hide. `preview` swaps the solid blindfold for a frame around a live look at
+   * the room (no props in it): `fly` then says how to move the camera.
+   */
+  blindfold(show: boolean, msLeft = 0, preview = false, fly = '') {
     const b = $('blindfold');
     b.style.display = show ? 'flex' : 'none';
     if (!show) return;
     $('bfCount').textContent = String(Math.max(0, Math.ceil(msLeft / 1000)));
+    const mode = preview ? 'p' + fly : 'b';
+    if (b.dataset.mode !== mode) {
+      b.dataset.mode = mode; this.lastTipAt = 0;
+      b.classList.toggle('preview', preview);
+      $('bfTitle').textContent = preview ? 'MEMORISE THE ROOM' : 'NO PEEKING!';
+      $('bfSub').innerHTML = preview ? 'The props are hiding in it right now, and you cannot see them yet. Whatever turns up later is a <b>FAKE</b>.' : 'The props are hiding. You are the <b>HUNTER</b>.';
+    }
     const now = performance.now();
-    if (now - this.lastTipAt > 4500) { this.lastTipAt = now; $('bfTip').textContent = 'TIP: ' + TIPS[this.tipI++ % TIPS.length]; }
+    if (now - this.lastTipAt > 4500) {
+      // the first line of a preview says how to look around; after that, the usual hunting tips
+      const first = preview && !this.lastTipAt;
+      this.lastTipAt = now;
+      if (first) $('bfTip').innerHTML = fly; else $('bfTip').textContent = 'TIP: ' + TIPS[this.tipI++ % TIPS.length];
+    }
   }
+
+  /** The start-of-round card: which side you are on, and the one thing to do about it. `sub` is plain text. */
+  roleCard(cls: 'prop' | 'hunter' | 'ghost', top: string, title: string, sub: string, ms = 2800) {
+    const c = $('roleCard');
+    $('rcTop').textContent = top; $('rcTitle').textContent = title; $('rcSub').textContent = sub;
+    c.className = '';
+    void c.offsetWidth;
+    c.className = `show ${cls}`;
+    clearTimeout(this.roleTimer);
+    this.roleTimer = window.setTimeout(() => { c.className = `out ${cls}`; this.roleTimer = window.setTimeout(() => (c.className = ''), 380); }, ms);
+  }
+  private roleTimer = 0;
+
+  /** The big 3 · 2 · 1 before the hunters are let loose. null clears it. */
+  count(n: number | null) {
+    if (n === this.lastCount) return;
+    this.lastCount = n;
+    const c = $('bigCount');
+    c.className = '';
+    if (n === null) return;
+    c.textContent = String(n);
+    void c.offsetWidth;
+    c.className = 'tick';
+  }
+  private lastCount: number | null = null;
+
+  ghostTint(on: boolean) { $('ghostTint').classList.toggle('on', on); }
 
   private tags(r: { team: Team; bot?: boolean }, alive = true): string {
     return (r.team === 'hunter' ? '<span class="tag h">HUNTER</span>' : r.team === 'prop' ? (alive ? '<span class="tag p">PROP</span>' : '<span class="tag b">CAUGHT</span>') : '<span class="tag s">WATCHING</span>') + (r.bot ? '<span class="tag b">BOT</span>' : '');

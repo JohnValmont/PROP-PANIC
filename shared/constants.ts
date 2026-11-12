@@ -10,6 +10,8 @@ export const CFG = {
   FINAL_MS: 20_000,
   PANIC_MS: 30_000,
   LOBBY_COUNTDOWN_MS: 8_000,
+  /** Someone joining a hunt with less than this left sits it out as a ghost; with more, they play it as a prop. */
+  LATE_JOIN_MS: 45_000,
 
   GRAVITY: 22,
   STEP: 0.36,
@@ -75,7 +77,72 @@ export const CFG = {
   BLACKOUT_MS: 14_000,
   POLTERGEIST_MS: 12_000,
   MOON_MS: 12_000,
+
+  // ---- 2.5: haunting. Caught props (and late joiners sitting a round out) rattle innocent objects to bait hunters.
+  /** Master switch. Off: caught props only watch, exactly as in 2.4. */
+  HAUNT_ON: true,
+  /** Time between one ghost's haunts. */
+  CD_HAUNT: 7_000,
+  /** How long a haunted object stays "hot": a hunter who shoots it in this window has been spooked. */
+  HAUNT_BAIT_MS: 9_000,
+  /** Chaos added by every haunt, and by a hunter falling for one. */
+  CHAOS_HAUNT: 3,
+  CHAOS_SPOOK: 8,
+  /** Focus a spooked hunter loses (an ordinary innocent object costs FOCUS_MISS). */
+  FOCUS_SPOOK: 10,
+  /** While the Poltergeist chaos event runs, ghosts haunt this much faster. */
+  HAUNT_FRENZY: 0.35,
+  /** Bots that have been caught haunt something near a hunter this often (ms, min and max). */
+  HAUNT_BOT_MS: [14_000, 30_000],
+  /** Chance that a bot hunter who sees an object being haunted shoots it. */
+  HAUNT_BOT_FOOLED: 0.35,
+
+  // ---- 2.5: room preview. While the props hide, hunters fly a camera around the room as it was stocked,
+  // with no props in it, instead of staring at a blindfold. Anything that appears later is a fake.
+  /** Master switch. Off: the 2.4 blindfold. */
+  PREVIEW_ON: true,
+  /** How fast the preview camera (and a ghost) flies, m/s. */
+  FLY_SPEED: 10,
+
+  // ---- 2.5: a hunter who drops out or goes idle hands the job to a bot, so one absent player cannot waste a round
+  HUNTER_DC_MS: 12_000,
+  HUNTER_AFK_MS: 45_000,
+
+  // ---- 2.5: presentation timings (client only)
+  /** The beat between the last second of a round and the results panel, while the survivors are shown off. */
+  REVEAL_BEAT_MS: 3_000,
+  ROLE_CARD_MS: 2_800,
 };
+
+/**
+ * Every score in the game, in one place. Points decide the round board, the game standings and the coin payout,
+ * so these are the first numbers to tune once real players have been watched (see docs/PLAYTEST.md).
+ */
+export const SCORE = {
+  // hunters
+  hit: 20,
+  catch: 150,
+  innocent: -5,
+  sweep: 100, // every prop caught
+  // props
+  survivePerSec: 1,
+  nearPerSec: 4, // extra, while within NEAR_RANGE of a hunter
+  survived: 150,
+  teamWin: 40, // caught, but the props still won
+  tauntMin: 10,
+  tauntMax: 50, // right next to a hunter; falls off to tauntMin at TAUNT_RANGE
+  escape: 40,
+  bonk: 50,
+  bamboozle: 60, // a hunter shot your decoy
+  lastProp: 50,
+  // ghosts
+  spook: 35, // a hunter shot an object you haunted
+};
+export const NEAR_RANGE = 4;
+export const TAUNT_RANGE = 14;
+
+/** Relative odds of each chaos event; 0 removes one from the draw. The same event never runs twice in a row. */
+export const CHAOS_WEIGHTS: Record<string, number> = { blackout: 1, poltergeist: 1, shuffle: 1, moon: 1, sneeze: 1 };
 
 /** A game is a set of rounds; scores run for the whole game. Private hosts choose from ROUND_CHOICES. */
 export const ROUNDS_DEFAULT = 3;

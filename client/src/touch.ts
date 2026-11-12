@@ -73,10 +73,15 @@ export function initTouch(game: Game, openMenu: () => void) {
     el.addEventListener('touchend', up); el.addEventListener('touchcancel', up);
   }
   // zoom (hunter) / hold rotation (prop): tap to switch on, tap again to switch off
+  // (a ghost who can haunt uses it to swap between flying and watching instead)
   {
     const el = $('tAlt');
     let on = false;
-    el.addEventListener('touchstart', (e) => { e.preventDefault(); e.stopPropagation(); on = !on; el.classList.toggle('down', on); game.touchAlt(on); }, { passive: false });
+    el.addEventListener('touchstart', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (game.specOn) { game.ghostSwitch(); return; }
+      on = !on; el.classList.toggle('down', on); game.touchAlt(on);
+    }, { passive: false });
   }
   // phones: go full screen and sideways on the first tap of a button (browsers only allow it from a tap)
   document.addEventListener('touchend', (e) => {
@@ -100,16 +105,22 @@ export function initTouch(game: Game, openMenu: () => void) {
     root.style.visibility = game.inGame ? 'visible' : 'hidden'; // never show through the main menu
     const set = (id: string, text: string, show = true) => { const el = $(id); if (el.textContent !== text) el.textContent = text; el.style.display = show ? '' : 'none'; };
     if (game.specOn) {
-      // a ghost: the stick flies, the buttons choose who to watch
-      const flying = game.specMode === 'free';
-      set('tAct', flying ? 'WATCH' : 'FLY');
+      // a ghost: the stick flies, the buttons choose who to watch (and, during a hunt, the big one haunts)
+      const flying = game.specMode === 'free', haunt = game.canHaunt();
+      set('tAct', haunt ? 'HAUNT' : flying ? 'WATCH' : 'FLY');
       set('tQ', 'PREV'); set('tF', 'NEXT');
       set('tJump', flying ? 'UP' : game.specPov ? 'BACK' : 'EYES', flying || game.specEyes);
-      set('tDash', 'DOWN', flying); set('tTaunt', '', false); set('tAlt', '', false);
+      set('tDash', 'DOWN', flying); set('tTaunt', '', false); set('tAlt', flying ? 'WATCH' : 'FLY', haunt);
+      return;
+    }
+    if (game.previewOn) {
+      // a hunter looking round while the props hide: fly, nothing to fire yet
+      set('tAct', 'ZAP', false); set('tQ', '', false); set('tF', '', false); set('tTaunt', '', false); set('tAlt', '', false);
+      set('tJump', 'UP'); set('tDash', 'DOWN');
       return;
     }
     set('tAct', hunter ? 'ZAP' : 'BECOME'); set('tJump', 'JUMP');
-    set('tQ', hunter ? 'SCAN' : 'DECOY'); set('tF', hunter ? 'SHOCK' : 'GHOST');
+    set('tQ', hunter ? 'SCAN' : 'DECOY'); set('tF', hunter ? 'SHOCK' : 'VANISH');
     set('tDash', 'DASH', !hunter); set('tTaunt', 'TAUNT', !hunter); set('tAlt', hunter ? 'ZOOM' : 'LOCK');
   }, 100);
 }

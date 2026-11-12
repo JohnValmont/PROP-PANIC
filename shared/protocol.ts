@@ -13,6 +13,8 @@ export type ClientMsg =
   | { t: 'fire'; yaw: number; pitch: number; rt: number }
   | { t: 'tf'; d: number } // transform into decor id
   | { t: 'ab'; k: 'decoy' | 'ghost' | 'pulse' | 'shock' }
+  /** A ghost (caught prop, or a late joiner sitting the round out) rattles innocent object `d`. */
+  | { t: 'haunt'; d: number }
   | { t: 'taunt'; i: number }
   | { t: 'chat'; i: number }
   | { t: 'start' }
@@ -71,13 +73,15 @@ export interface SnapMsg {
 
 /** One-shot game events. */
 export type EvMsg =
-  | { t: 'ev'; k: 'shot'; by: number; x: number; y: number; z: number; hit: 0 | 1 | 2 | 3 | 4; tg: number }
-  | { t: 'ev'; k: 'kill'; by: number; who: number; x: number; y: number; z: number }
+  /** hit: 0 nothing, 1 wall, 2 innocent object, 3 prop, 4 decoy. `hp` is what a hit prop has left; `sp` marks a haunted object. */
+  | { t: 'ev'; k: 'shot'; by: number; x: number; y: number; z: number; hit: 0 | 1 | 2 | 3 | 4; tg: number; hp?: number; sp?: 1 }
+  | { t: 'ev'; k: 'kill'; by: number; who: number; ty: number; x: number; y: number; z: number }
   | { t: 'ev'; k: 'taunt'; who: number; i: number; x: number; y: number; z: number; pts: number }
   | { t: 'ev'; k: 'roll'; pts: number[][] }
   | { t: 'ev'; k: 'poof'; x: number; y: number; z: number }
   | { t: 'ev'; k: 'pulse'; by: number; x: number; z: number }
   | { t: 'ev'; k: 'shock'; by: number; x: number; y: number; z: number }
+  /** `owner` is 0 for hunters: who planted a decoy is the props' business. */
   | { t: 'ev'; k: 'decoy'; id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }
   | { t: 'ev'; k: 'decoyHop'; id: number }
   | { t: 'ev'; k: 'decoyPop'; id: number; by: number }
@@ -86,7 +90,16 @@ export type EvMsg =
   | { t: 'ev'; k: 'chaos'; kind: 'blackout' | 'poltergeist' | 'shuffle' | 'moon'; ms: number; seed: number }
   | { t: 'ev'; k: 'chaosEnd'; kind: string }
   | { t: 'ev'; k: 'panic' }
-  | { t: 'ev'; k: 'reveal'; who: number; ms: number; decoy?: boolean; x: number; y: number; z: number }
+  | { t: 'ev'; k: 'reveal'; who: number; ms: number; x: number; y: number; z: number }
+  | { t: 'ev'; k: 'bonk'; who: number; on: number; x: number; y: number; z: number }
+  | { t: 'ev'; k: 'last'; who: number }
+  | { t: 'ev'; k: 'sneeze'; pts: number[][] }
+  /** Ghost `by` rattled innocent object `d`. */
+  | { t: 'ev'; k: 'haunt'; d: number; by: number }
+  /** Hunter `by` shot object `d` while it was haunted by `ghost`. */
+  | { t: 'ev'; k: 'spook'; d: number; by: number; ghost: number; x: number; y: number; z: number }
+  /** A hunter dropped out or went idle: bot `to` (0 if there was none) has taken over from `from`. */
+  | { t: 'ev'; k: 'sub'; from: number; to: number }
   | { t: 'ev'; k: 'hurt'; hp: number }
   | { t: 'ev'; k: 'chat'; who: number; i: number }
   | { t: 'ev'; k: 'pts'; n: number; why: string }
@@ -98,7 +111,7 @@ export type ServerMsg =
   | SnapMsg
   | EvMsg
   | { t: 'roster'; p: RosterEntry[] }
-  | { t: 'cd'; decoy: number; ghost: number; taunt: number; pulse: number; shock: number }
+  | { t: 'cd'; decoy: number; ghost: number; taunt: number; pulse: number; shock: number; haunt: number }
   | { t: 'decoys'; d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }[] }
   | { t: 'lobby'; bots: number; countdown: number; canStart: boolean; map: number; rounds: number }
   | { t: 'pong'; c: number; now: number }

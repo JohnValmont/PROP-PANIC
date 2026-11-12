@@ -38,6 +38,7 @@ const LIMITS = {
 if (process.env.PP_FAST) {
   CFG.HIDE_MS = Number(process.env.PP_HIDE_MS ?? 2500); CFG.HUNT_MS = Number(process.env.PP_HUNT_MS ?? 14_000); CFG.END_MS = Number(process.env.PP_END_MS ?? 2500); CFG.FINAL_MS = Number(process.env.PP_FINAL_MS ?? CFG.END_MS);
   CFG.PANIC_MS = 6000; CFG.LOBBY_COUNTDOWN_MS = 1500; CFG.ROLLCALL_MS = 4000; CFG.ROLLCALL_PANIC_MS = 2000;
+  if (process.env.PP_JOIN_MS) CFG.LATE_JOIN_MS = Number(process.env.PP_JOIN_MS);
 }
 if (process.env.PP_CHAOS) CFG.CHAOS_PASSIVE = Number(process.env.PP_CHAOS); // test-only: fill the chaos meter fast
 

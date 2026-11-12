@@ -34,6 +34,37 @@ export function textSprite(text: string, color = '#ffffff', height = 0.3, depthT
   return s;
 }
 
+/** A little cartoon ghost, drawn once. Rises from the spot where a prop was caught, or from a haunted object. */
+let ghostTex: THREE.CanvasTexture | null = null;
+function ghostTexture(): THREE.CanvasTexture {
+  if (ghostTex) return ghostTex;
+  const c = document.createElement('canvas');
+  c.width = 96; c.height = 112;
+  const g = c.getContext('2d')!;
+  g.beginPath();
+  g.moveTo(10, 100); g.lineTo(10, 46); g.arc(48, 46, 38, Math.PI, 0); g.lineTo(86, 100);
+  for (let i = 0; i < 4; i++) { const x = 86 - i * 19; g.quadraticCurveTo(x - 4.75, 84, x - 9.5, 100); g.quadraticCurveTo(x - 14.25, 112, x - 19, 100); }
+  g.closePath();
+  g.fillStyle = 'rgba(236, 244, 255, 0.92)'; g.fill();
+  g.lineWidth = 5; g.strokeStyle = '#1b2a4a'; g.lineJoin = 'round'; g.stroke();
+  g.fillStyle = '#1b2a4a';
+  g.beginPath(); g.ellipse(35, 48, 7, 10, 0, 0, Math.PI * 2); g.ellipse(61, 48, 7, 10, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.ellipse(48, 72, 6, 8, 0, 0, Math.PI * 2); g.fill();
+  ghostTex = new THREE.CanvasTexture(c);
+  ghostTex.colorSpace = THREE.SRGBColorSpace;
+  return ghostTex;
+}
+
+/** A soft pillar of light over a prop that survived the round, visible through walls. One shared geometry and material. */
+let beaconGeo: THREE.BufferGeometry | null = null, beaconMat: THREE.MeshBasicMaterial | null = null;
+export function makeBeacon(): THREE.Mesh {
+  beaconGeo ??= new THREE.CylinderGeometry(0.55, 0.16, 9, 20, 1, true).translate(0, 4.5, 0);
+  beaconMat ??= new THREE.MeshBasicMaterial({ color: new THREE.Color(1.5, 1.2, 0.45), transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false, depthTest: false, blending: THREE.AdditiveBlending, fog: false });
+  const m = new THREE.Mesh(beaconGeo, beaconMat);
+  m.renderOrder = 4; m.frustumCulled = false;
+  return m;
+}
+
 const CAP = 600;
 const dummy = new THREE.Object3D();
 const col = new THREE.Color();
@@ -120,6 +151,15 @@ export class Fx {
     s.position.set(x, y, z);
     this.scene.add(s);
     this.floaters.push({ s, t: 0, life, vy: 0.9 });
+  }
+
+  /** A ghost drifting up and fading out. */
+  ghost(x: number, y: number, z: number, height = 0.7) {
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ghostTexture(), transparent: true, depthWrite: false }));
+    s.scale.set(height * (96 / 112), height, 1);
+    s.position.set(x, y, z);
+    this.scene.add(s);
+    this.floaters.push({ s, t: 0, life: 1.9, vy: 1.1 });
   }
 
   update(dt: number) {

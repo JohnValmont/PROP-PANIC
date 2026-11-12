@@ -26,6 +26,7 @@
   <!-- ============================== in-game HUD ============================== -->
   <div id="hud" class="hidden">
     <div id="vignette"></div>
+    <div id="ghostTint"></div>
     <div id="panicFrame"></div>
     <div id="blind"></div>
 
@@ -41,6 +42,7 @@
     <div id="dirs"></div>
     <div id="prompt"></div>
     <div id="banner"><div id="bannerTitle"></div><div id="bannerSub"></div></div>
+    <div id="bigCount"></div>
     <div id="popups"></div>
     <div id="freeze">SCANNER — FREEZE!</div>
     <div id="revealed">YOU'RE REVEALED — RUN!</div>
@@ -54,11 +56,12 @@
     <div id="spectate"></div>
 
     <div id="blindfold">
-      <div class="bfTitle">NO PEEKING!</div>
+      <div class="bfTitle" id="bfTitle">NO PEEKING!</div>
       <div class="bfCount" id="bfCount">25</div>
-      <div class="bfSub">The props are hiding. You are the <b>HUNTER</b>.</div>
+      <div class="bfSub" id="bfSub">The props are hiding. You are the <b>HUNTER</b>.</div>
       <div class="bfTips" id="bfTip"></div>
     </div>
+    <div id="roleCard"><div class="rcTop" id="rcTop"></div><div class="rcTitle" id="rcTitle"></div><div class="rcSub" id="rcSub"></div></div>
 
     <div id="lobby" class="panel">
       <div class="lobbyHead"><div><div class="tiny">ROOM CODE</div><div id="lobbyCode">----</div></div><button id="copyLink" class="btn small teal">Copy invite link</button></div>
@@ -85,7 +88,7 @@
       <div class="feats">
         <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 66 real-world objects, indoors and out. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
         <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent objects and you turn into a duck.</span></div></div>
-        <div class="feat"><i class="fi f3"></i><div><b>Two worlds, endless chaos</b><span>A packed emporium and a wide-open meadow, with blackouts, haunted furniture and a frantic final 30 seconds.</span></div></div>
+        <div class="feat"><i class="fi f3"></i><div><b>Caught? You are not out</b><span>Come back as a ghost and rattle the furniture until a hunter shoots the wrong thing.</span></div></div>
       </div>
       <div id="online"></div>
     </div>
@@ -124,7 +127,7 @@
       <div id="binds"></div>
       <button id="leaveBtn" class="btn pink">Leave game</button>
       <button id="closeSettings" class="btn yellow">Done</button>
-      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> ghost / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation (prop) / zoom (hunter) · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
+      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> vanish / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation (prop) / zoom (hunter) · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
     </div>
   </div>
 
@@ -135,26 +138,24 @@
         <div class="howCol prop">
           <h3>If you are a PROP</h3>
           <ol>
-            <li><b>Become an object.</b> Aim at any object and press the Become key (E).</li>
-            <li><b>Hide in plain sight.</b> Stand among objects like you and stop moving.</li>
-            <li><b>Don't flinch.</b> Freeze when the blue scanner ring passes. Moving reveals you.</li>
-            <li><b>Got hit?</b> You get a speed burst. Run, drop a decoy (Q), turn ghost (F).</li>
-            <li><b>Feeling brave?</b> Taunt (T) near hunters for points, or jump on a hunter's head to stun them.</li>
+            <li><b>Become an object.</b> Aim at one and press <kbd>E</kbd>.</li>
+            <li><b>Blend in.</b> Stand among objects like you and keep still.</li>
+            <li><b>Got hit? Run.</b> Three hits and you are caught.</li>
           </ol>
           <p>Survive until the timer hits zero.</p>
         </div>
         <div class="howCol hunter">
           <h3>If you are a HUNTER</h3>
           <ol>
-            <li><b>Wait blindfolded</b> while the props hide.</li>
-            <li><b>Zap the fakes.</b> Left click fires. Three hits catch a prop.</li>
-            <li><b>Don't guess.</b> Every innocent object you shoot drains Focus. At zero you become a duck.</li>
-            <li><b>Use your tools.</b> Scanner (Q) pings props that move. Shockwave (F) throws nearby fakes into the air.</li>
-            <li><b>Listen.</b> All props squeak every 22 seconds, and the meter warms up when one is close.</li>
+            <li><b>Study the room</b> while the props hide. Whatever appears later is a fake.</li>
+            <li><b>Zap the fakes.</b> Three hits catch a prop.</li>
+            <li><b>Do not guess.</b> Real objects drain your Focus. At zero you turn into a duck.</li>
           </ol>
           <p>Catch every prop before time runs out.</p>
         </div>
       </div>
+      <div class="howGhost"><b>Caught?</b> You come back as a ghost. Aim at any object and click to rattle it: if a hunter shoots it, you score.</div>
+      <div class="howMore">Everything else (decoys, taunts, the scanner, chaos events) is explained on screen when it matters.</div>
       <button id="howClose" class="btn big yellow">Got it</button>
     </div>
   </div>

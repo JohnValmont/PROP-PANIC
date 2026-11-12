@@ -2,7 +2,7 @@
 export const ACTIONS: [id: string, label: string, def: string][] = [
   ['fwd', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'], ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['jump', 'Jump', 'Space'], ['dash', 'Dash (prop)', 'ShiftLeft'], ['act', 'Become toy (prop)', 'KeyE'],
-  ['ab1', 'Decoy / Scanner', 'KeyQ'], ['ab2', 'Ghost / Shockwave', 'KeyF'], ['taunt', 'Taunt (prop)', 'KeyT'], ['help', 'Show / hide controls', 'KeyH'],
+  ['ab1', 'Decoy / Scanner', 'KeyQ'], ['ab2', 'Vanish / Shockwave', 'KeyF'], ['taunt', 'Taunt (prop)', 'KeyT'], ['help', 'Show / hide controls', 'KeyH'],
 ];
 
 export const B: Record<string, string> = {};

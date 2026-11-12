@@ -10,7 +10,7 @@ server defends against, how, and what it does not.
 | Crash the server for everyone | Every request and message handler is guarded; malformed URLs, NUL bytes, oversized or garbage messages are rejected. A bug in one handler closes one connection instead of the process. |
 | Exhaust memory or CPU | 4 KB message cap, per-connection message and byte rate limits, per-address socket and open-rate limits, a global socket cap, a room cap, heartbeats that drop dead sockets, and a send path that skips then disconnects clients that stop reading. |
 | Move faster, teleport, fire faster, shoot through walls | The server simulates all movement from inputs with a time bank, and decides every hit, cooldown, transform and score itself. Clients only send intent. |
-| See props through walls or read who is disguised as what | Hunters are sent a prop only while they have line of sight to it, and its disguise travels with that position update rather than in the player list. Nothing is sent while hunters are blindfolded or a prop is ghosted. |
+| See props through walls or read who is disguised as what | Hunters are sent a prop only while they have line of sight to it, and its disguise travels with that position update rather than in the player list. Nothing is sent while the props hide or a prop has vanished. Decoys reach a hunter only once in view and never say whose they are; the puff of a prop changing shape reaches a hunter only if that prop is in view; taunts are not sent during the hiding phase. |
 | Take over someone's seat | Seat tokens are 144 random bits from the OS, compared in constant time, and only valid for a short grace period after a disconnect. |
 | Guess private room codes | Wrong codes are limited to 12 a minute per address. |
 | Inject script or markup through a name | Names are normalised and stripped of markup, control and invisible characters on the server, and escaped again when drawn. Chat is a fixed list of phrases, not free text. A content security policy forbids inline script. |
@@ -25,6 +25,11 @@ server defends against, how, and what it does not.
   of the real objects is derived from a seed the client also knows, so a modified client can compare the two and
   highlight the player. Line-of-sight culling removes wall-hacks and radar, not this. Closing it would mean
   keeping the layout secret from hunters and merging still players into it, which changes how collisions work.
+  Since 2.5 the game hands every hunter the same knowledge legitimately: they study the empty room while the props
+  hide. That levels the field between modified and honest clients rather than widening it.
+- **Roll calls and haunting.** Roll calls send every prop's (and decoy's) position to everyone by design, so a modified
+  client can draw them on a map for the half second they squeak. Which ghost haunted an object is sent to hunters too;
+  it tells them nothing about living props.
 - **Aim assistance.** A modified client can aim perfectly at whatever it has identified.
 - **Teammates sharing information** over voice chat or a second screen (spectators and props see everything).
 - **Cosmetic unlocks and coins.** Level, hat unlocks and the coin wallet live in the browser's storage; there are

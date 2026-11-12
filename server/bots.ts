@@ -172,6 +172,9 @@ export class Bot {
   private nextShot = 0;
   private known = new Map<number, number>();
   private repathAt = 0;
+  // ghost brain (a caught bot) and what a hunting bot has already made of each haunting
+  private nextHaunt = 0;
+  private judged = new Map<number, number>();
 
   private setPath(room: Room, p: Player, x: number, z: number): boolean {
     const path = room.nav().path(p.body.x, p.body.z, x, z);
@@ -205,13 +208,13 @@ export class Bot {
     if (this.round !== room.round || this.phase !== room.phase) {
       const newRound = this.round !== room.round;
       this.round = room.round; this.phase = room.phase;
-      this.path = []; this.targetId = -1; this.known.clear();
+      this.path = []; this.targetId = -1; this.known.clear(); this.judged.clear(); this.nextHaunt = 0;
       if (newRound || room.phase === 'lobby') this.state = 'idle';
       if (room.phase === 'hunt' && p.team === 'hunter') this.state = 'patrol';
       this.nextTaunt = t + rand(12_000, 40_000); this.nextRelocate = t + rand(35_000, 80_000);
       this.lastHp = p.hp; this.pauseUntil = t + rand(200, 1200);
     }
-    if (!p.alive) return;
+    if (!p.alive) { this.ghostBrain(room, p, t); return; }
     let mz = 0;
     if (room.phase === 'lobby' || room.phase === 'end') mz = this.lobby(room, p, t, dt);
     else if (p.team === 'prop') mz = this.propBrain(room, p, t, dt);
@@ -243,6 +246,21 @@ export class Bot {
     }
     if (Math.random() < 0.004) this.wantJump = true;
     return mz;
+  }
+
+  // ---------------------------------------------------------------- caught: haunt something a hunter might notice
+  // Keeps the mechanic alive in a room of bots: a human hunter meets haunted objects, and has to learn to leave them be.
+  private ghostBrain(room: Room, p: Player, t: number) {
+    if (!CFG.HAUNT_ON || room.phase !== 'hunt' || p.team !== 'prop') return;
+    if (!this.nextHaunt) { this.nextHaunt = t + rand(3000, 9000); return; }
+    if (t < this.nextHaunt) return;
+    this.nextHaunt = t + rand(CFG.HAUNT_BOT_MS[0], CFG.HAUNT_BOT_MS[1]);
+    const hunters = [...room.players.values()].filter((h) => h.team === 'hunter' && h.alive);
+    const h = hunters[Math.floor(Math.random() * hunters.length)];
+    if (!h) return;
+    const near = room.map.decor.filter((d) => { const dist = Math.hypot(d.x - h.body.x, d.z - h.body.z); return dist > 2.5 && dist < 9; });
+    const d = near[Math.floor(Math.random() * near.length)];
+    if (d) room.haunt(p, d.id);
   }
 
   private nearDecor(room: Room, p: Player, r: number): number {
@@ -388,6 +406,16 @@ export class Bot {
         const near = room.map.decor.filter((d) => Math.abs(d.x - b.x) < 6 && Math.abs(d.z - b.z) < 6);
         const d = near[Math.floor(Math.random() * near.length)];
         if (d && this.los(room, p, d.x, d.y + PROPS[d.type].h / 2, d.z)) this.shootAt(room, p, d.x, d.y + PROPS[d.type].h / 2, d.z, t, 0.01);
+      }
+      // an object that rattles in plain view is hard to ignore: now and then the bot takes the bait (once per haunting)
+      if (this.state !== 'chase') for (const [id, h] of room.haunted) {
+        if (h.until <= t || this.judged.get(id) === h.until) continue;
+        const d = room.map.decor[id];
+        if (!d) continue;
+        const cy = d.y + PROPS[d.type].h / 2;
+        if (Math.hypot(d.x - b.x, d.z - b.z) > 12 || !this.los(room, p, d.x, cy, d.z)) continue; // not seen (yet)
+        this.judged.set(id, h.until);
+        if (p.focus > 40 && Math.random() < CFG.HAUNT_BOT_FOOLED) { this.shootAt(room, p, d.x, cy, d.z, t, 0.01); break; }
       }
       if (Math.random() < 0.03) room.ability(p, 'pulse');
       let close = false;

@@ -133,6 +133,14 @@ async function main() {
     ok(await H.isVisible('#blindfold') && !(await P.isVisible('#blindfold')), 'hunter is blindfolded during hiding, prop is not');
     await sleep(800);
     ok((await H.evaluate(() => { const g = window.__pp; return [...g.ents.values()].filter((e) => e.id !== g.myId && e.group.visible).length; })) === 0, 'hunter client renders no props while blindfolded');
+    // the hunter's wait is a free look round the empty room: the camera flies, the hunter's body stays put
+    {
+      const before = await H.evaluate(() => { const g = window.__pp; return [g.camera.position.x, g.camera.position.z, g.body.x, g.body.z]; });
+      await H.keyboard.down('KeyW'); await sleep(900); await H.keyboard.up('KeyW'); await sleep(200);
+      const after = await H.evaluate(() => { const g = window.__pp; return [g.camera.position.x, g.camera.position.z, g.body.x, g.body.z, g.previewOn, document.getElementById('blindfold').classList.contains('preview')]; });
+      const flew = Math.hypot(after[0] - before[0], after[1] - before[1]), walked = Math.hypot(after[2] - before[2], after[3] - before[3]);
+      ok(after[4] && after[5] && flew > 1 && walked < 0.05, `the hunter looks round the room while the props hide (camera flew ${flew.toFixed(1)} m, body moved ${walked.toFixed(2)} m)`);
+    }
 
     // prop: disguise as a toy from the shelves beside the spawn aisle, using the real aim + E path
     const aimed = await P.evaluate(async () => {
@@ -219,8 +227,8 @@ async function main() {
       console.log('  (decoy debug)', JSON.stringify(await H.evaluate(() => { const g = window.__pp; return { log: window.__log.slice(-6), team: g.team, alive: g.alive, hasMe: g.hasMe, phase: g.phase, cd: g.cd, now: g.serverNow(), chat: g.chatOpen, active: document.activeElement && document.activeElement.id, decoys: g.decoys.size }; })));
       throw new Error('decoy did not appear');
     });
-    await P.waitForFunction(() => window.__pp.decoys.size === 1, null, { timeout: 4000 }).catch(() => {});
-    ok((await P.evaluate(() => window.__pp.decoys.size)) === 1, 'a decoy placed by the prop appears on the other client');
+    await sleep(1500);
+    ok((await P.evaluate(() => window.__pp.decoys.size)) === 0, 'a decoy planted while the props hide is not sent to the hunter\'s client');
     await H.keyboard.down('ShiftLeft'); await sleep(120); await H.keyboard.up('ShiftLeft');
     await H.keyboard.down('KeyW'); await sleep(500); await H.keyboard.up('KeyW');
     ok((await H.evaluate(() => window.__pp.body.dashCd)) > 0, 'dash triggers and goes on cooldown');
