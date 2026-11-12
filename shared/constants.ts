@@ -6,6 +6,8 @@ export const CFG = {
   HIDE_MS: 25_000,
   HUNT_MS: 180_000,
   END_MS: 13_000,
+  /** The final standings after the last round of a game stay up a little longer. */
+  FINAL_MS: 20_000,
   PANIC_MS: 30_000,
   LOBBY_COUNTDOWN_MS: 8_000,
 
@@ -74,6 +76,18 @@ export const CFG = {
   POLTERGEIST_MS: 12_000,
   MOON_MS: 12_000,
 };
+
+/** A game is a set of rounds; scores run for the whole game. Private hosts choose from ROUND_CHOICES. */
+export const ROUNDS_DEFAULT = 3;
+export const ROUND_CHOICES = [1, 3, 5, 7, 10];
+
+/**
+ * Coins: the soft currency for cosmetics. The server works out every award and sends it with the results.
+ * A round pays `round` for taking part, plus 1 per `perPoints` points scored (up to `roundCap` in all),
+ * plus `win` for being on the winning side. The last round of a game adds `game` for seeing it through
+ * and `place` for the podium (never for last place).
+ */
+export const COINS = { round: 5, perPoints: 20, roundCap: 40, win: 10, game: 15, place: [30, 20, 10] };
 
 export type Phase = 'lobby' | 'hiding' | 'hunt' | 'end';
 export type Team = 'prop' | 'hunter' | 'spec';

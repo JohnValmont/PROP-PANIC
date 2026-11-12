@@ -1,5 +1,5 @@
 /** Direct server-side checks of round mechanics that are awkward to stage over the network.  Run: npm run test:mechanics */
-import { CFG } from '../shared/constants';
+import { CFG, COINS } from '../shared/constants';
 import { Room } from '../server/room';
 
 let failures = 0;
@@ -70,6 +70,60 @@ async function main() {
     q.body.x = -24.3; q.body.z = 0; q.body.y = 0;
     for (let i = 0; i < 20; i++) r2.tick();
     ok((r2 as any).world.fits(q.body.x, q.body.y + 0.02, q.body.z, q.body.hw - 0.02, q.body.h - 0.04), 'a player stuck inside a wall is moved to free space');
+  }
+
+  // a game is a fixed number of rounds: scores run across it, the last round settles it, then it is back to the lobby
+  {
+    CFG.HIDE_MS = 15; CFG.HUNT_MS = 30; CFG.END_MS = 15; CFG.FINAL_MS = 15;
+    const g = new Room('GAME', false);
+    const ends: any[] = [], lobbies: any[] = [];
+    const w = { readyState: 1, send: (s: string) => { const m = JSON.parse(s); if (m.t === 'phase' && m.phase === 'end') ends.push(m); if (m.t === 'lobby') lobbies.push(m); }, close() {} } as any;
+    const quiet = { readyState: 1, send() {}, close() {} } as any; // only the host's socket records, or every message would be counted three times
+    const host = g.addPlayer('H', w, false, 0), guest = g.addPlayer('I', quiet, false, 0);
+    g.addPlayer('J', quiet, false, 0);
+    ok(g.roundsPref === 3, 'a game is three rounds unless the host says otherwise');
+    g.onMessage(host, { t: 'rounds', n: 4 }); g.onMessage(host, { t: 'rounds', n: 'x' }); g.onMessage(host, { t: 'rounds', n: 1e9 });
+    ok(g.roundsPref === 3, 'a game length that is not on offer is refused');
+    g.onMessage(guest, { t: 'rounds', n: 5 });
+    ok(g.roundsPref === 3, 'only the host chooses the game length');
+    g.onMessage(host, { t: 'rounds', n: 5 }); g.onMessage(host, { t: 'rounds', n: 3 });
+    ok(g.roundsPref === 3 && lobbies.at(-1)?.rounds === 3 && lobbies.some((m) => m.rounds === 5), 'the host can change it, and the lobby is told');
+    const pub = new Room('PUBL', true);
+    const ph = pub.addPlayer('P', quiet, false, 0);
+    pub.onMessage(ph, { t: 'rounds', n: 10 });
+    ok(pub.roundsPref === 3, 'public games are always three rounds');
+
+    const play = async () => {
+      const first = ends.length, hunters = new Set<number>();
+      g.startRound();
+      for (let i = 0; i < 400 && g.phase !== 'lobby'; i++) {
+        await sleep(5); g.tick();
+        for (const p of g.players.values()) if (p.team === 'hunter') hunters.add(p.id);
+      }
+      return { ends: ends.slice(first), hunters };
+    };
+    const g1 = await play();
+    // changing the length mid-game must not cut the game in progress short (checked on game 2 below)
+    ok(g1.ends.length === 3 && g1.ends.map((m) => m.round).join() === '1,2,3' && g1.ends.every((m) => m.rounds === 3 && m.results.rounds === 3), 'a three-round game plays rounds 1, 2 and 3');
+    ok(g.phase === 'lobby' && g.round === 0, 'after the last round everybody is back in the lobby');
+    ok(g1.hunters.size === 3, 'with three players and three rounds, everyone hunts once');
+    ok(!g1.ends[0].results.final && !g1.ends[1].results.final && g1.ends[2].results.final?.length === 3, 'only the last round carries the final standings');
+    const fin = g1.ends[2].results.final;
+    ok(fin[0].total >= fin[1].total && fin[1].total >= fin[2].total, 'final standings are ordered by total score');
+    ok(fin.map((r: any) => r.coins).join() === [COINS.game + COINS.place[0], COINS.game + COINS.place[1], COINS.game].join(), `finishing pays everyone, the podium pays extra, last place gets no podium bonus (${fin.map((r: any) => r.coins).join(' / ')})`);
+    const b0 = g1.ends[0].results;
+    const expect = (r: any) => Math.max(COINS.round, Math.min(COINS.roundCap, COINS.round + Math.floor(r.round / COINS.perPoints))) + ((r.team === 'hunter') === (b0.winner === 'hunters') ? COINS.win : 0);
+    ok(b0.board.length === 3 && b0.board.every((r: any) => Number.isInteger(r.coins) && r.coins === expect(r) && r.coins <= COINS.roundCap + COINS.win), `each round pays coins from the points scored, capped, plus a win bonus (${b0.board.map((r: any) => `${r.round} pts → ${r.coins}`).join(', ')})`);
+    ok(g1.ends.map((m) => m.results.n).join() === '1,2,3', 'rounds are numbered across the room, so a reward is banked once');
+    ok(fin.some((r: any) => r.total > 0), 'scores run across the rounds of a game');
+
+    g.onMessage(host, { t: 'rounds', n: 1 });
+    g.startRound();
+    ok([...g.players.values()].every((p) => p.score === 0) && g.rounds === 1, 'a new game starts everyone on zero, at the length the host picked');
+    g.onMessage(host, { t: 'rounds', n: 10 });
+    for (let i = 0; i < 200 && g.phase !== 'lobby'; i++) { await sleep(5); g.tick(); }
+    ok(ends.length === 4 && ends[3].results.final && ends[3].results.n === 4 && ends[3].rounds === 1 && g.phase === 'lobby', 'a one-round game ends after its only round, even if the host changes the length while it runs');
+    ok(g.roundsPref === 10, 'the change applies to the next game');
   }
 
   console.log(failures ? `\n${failures} FAILED` : '\nAll mechanics checks passed.');

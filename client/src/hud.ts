@@ -27,8 +27,9 @@ export class Hud {
 
   show(v: boolean) { this.root.classList.toggle('hidden', !v); }
 
-  setPhase(phase: Phase, round: number, panic: boolean) {
-    const label = phase === 'lobby' ? 'LOBBY' : phase === 'hiding' ? `ROUND ${round} · HIDE!` : phase === 'hunt' ? (panic ? 'PANIC TIME!' : `ROUND ${round} · HUNT`) : 'ROUND OVER';
+  setPhase(phase: Phase, round: number, panic: boolean, rounds: number) {
+    const of = rounds > 1 ? `ROUND ${round}/${rounds}` : 'ROUND';
+    const label = phase === 'lobby' ? 'LOBBY' : phase === 'hiding' ? `${of} · HIDE!` : phase === 'hunt' ? (panic ? 'PANIC TIME!' : `${of} · HUNT`) : round >= rounds ? 'GAME OVER' : 'ROUND OVER';
     $('phaseLabel').textContent = label;
     $('phaseBox').classList.toggle('panic', panic && phase === 'hunt');
     $('panicFrame').classList.toggle('on', panic && phase === 'hunt');
@@ -147,7 +148,7 @@ export class Hud {
     return (r.team === 'hunter' ? '<span class="tag h">HUNTER</span>' : r.team === 'prop' ? (alive ? '<span class="tag p">PROP</span>' : '<span class="tag b">CAUGHT</span>') : '<span class="tag s">WATCHING</span>') + (r.bot ? '<span class="tag b">BOT</span>' : '');
   }
 
-  lobby(show: boolean, o?: { code: string; pub: boolean; roster: RosterEntry[]; me: number; host: boolean; bots: number; countdown: number; canStart: boolean; map: number }) {
+  lobby(show: boolean, o?: { code: string; pub: boolean; roster: RosterEntry[]; me: number; host: boolean; bots: number; countdown: number; canStart: boolean; map: number; rounds: number }) {
     const el = $('lobby');
     el.style.display = show ? 'flex' : 'none';
     if (!show || !o) return;
@@ -156,6 +157,11 @@ export class Hud {
     mb.style.display = !o.pub && o.host ? 'block' : 'none';
     const mt = `Map: ${['Alternate', 'Emporium', 'Sunny Meadow'][o.map] ?? 'Alternate'}`;
     if (mb.textContent !== mt) mb.textContent = mt;
+    const rb = $('roundsBtn');
+    rb.style.display = !o.pub && o.host ? 'block' : 'none';
+    const games = o.rounds === 1 ? 'a single round' : `${o.rounds} rounds`;
+    const rt = `Game length: ${o.rounds === 1 ? '1 round' : games}`;
+    if (rb.textContent !== rt) rb.textContent = rt;
     const html = o.roster.map((r) => `<div class="pl${r.id === o.me ? ' me' : ''}"><span>${esc(r.name)}${r.bot ? ' <span class="tag b">BOT</span>' : ''}${r.host ? ' <span class="tag s">HOST</span>' : ''}</span><small>${r.score || ''}</small></div>`).join('');
     const lp = $('lobbyPlayers');
     if (lp.innerHTML !== html) lp.innerHTML = html;
@@ -165,8 +171,8 @@ export class Hud {
     sb.style.display = !o.pub && o.host ? 'block' : 'none';
     sb.disabled = !o.canStart;
     $('lobbyStatus').textContent = o.pub
-      ? o.countdown > 0 ? `Round starts in ${Math.ceil(o.countdown / 1000)}…` : 'Finding players…'
-      : o.host ? (o.canStart ? 'Ready when you are!' : 'Invite a friend or add bots to start.') : 'Waiting for the host to start…';
+      ? o.countdown > 0 ? `A game of ${games} starts in ${Math.ceil(o.countdown / 1000)}…` : 'Finding players…'
+      : o.host ? (o.canStart ? 'Ready when you are!' : 'Invite a friend or add bots to start.') : `Waiting for the host to start a game of ${games}…`;
   }
 
   scoreboard(show: boolean, roster?: RosterEntry[], me?: number) {
@@ -178,22 +184,28 @@ export class Hud {
     el.innerHTML = `<h2>Scoreboard</h2><table class="board"><tr><th>PLAYER</th><th style="text-align:right">PING</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>`;
   }
 
-  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '') {
+  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '', coinGain = 0, wallet = 0) {
     const el = $('results');
     el.style.display = show ? 'flex' : 'none';
     if (!show || !res) return;
-    const key = JSON.stringify(res.board.map((b) => b.id)) + res.winner;
+    const key = JSON.stringify(res.board.map((b) => b.id)) + res.winner + res.n + '|' + coinGain;
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       const won = (res.winner === 'props' && myTeam === 'prop') || (res.winner === 'hunters' && myTeam === 'hunter');
       const title = res.winner === 'props' ? 'PROPS WIN!' : 'HUNTERS WIN!';
-      const sub = myTeam === 'spec' ? 'You watched this one. You are in next round!' : won ? 'Nicely done.' : res.winner === 'props' ? 'The props got away this time.' : 'Every last prop was found.';
+      const sub = myTeam === 'spec' ? (res.final ? 'You watched this one. You are in the next game!' : 'You watched this one. You are in next round!') : won ? 'Nicely done.' : res.winner === 'props' ? 'The props got away this time.' : 'Every last prop was found.';
       const awards = res.awards.map((a) => `<div class="award"><div class="at">${esc(a.title.toUpperCase())}</div><div class="an">${esc(a.name)}</div><div class="ad">${esc(a.detail)}</div></div>`).join('');
       const rows = res.board.map((r) => `<tr class="${r.id === me ? 'me' : ''}"><td>${esc(r.name)}${this.tags(r, r.survived || r.team !== 'prop')}</td><td class="n">${r.round >= 0 ? '+' : ''}${r.round}</td><td class="n">${r.total}</td></tr>`).join('');
-      el.innerHTML = `<h2 class="${res.winner}">${title}</h2><div class="resSub">${sub}</div>${awards ? `<div class="awards">${awards}</div>` : ''}<table class="board"><tr><th>PLAYER</th><th style="text-align:right">ROUND</th><th style="text-align:right">TOTAL</th></tr>${rows}</table><div class="nextIn" id="nextIn"></div>`;
+      // after the last round the game is settled too: who won it, and the final standings
+      const f = res.final;
+      const podium = f ? `<div class="final"><div class="finalT">GAME OVER · ${res.rounds === 1 ? '1 ROUND' : `${res.rounds} ROUNDS`}</div><div class="champ">${esc(f[0]?.name ?? '')} wins the game</div><div class="places">${f.slice(0, 3).map((r, i) => `<div class="place p${i}${r.id === me ? ' me' : ''}"><b>${i + 1}</b><span>${esc(r.name)}</span><small>${r.total}</small></div>`).join('')}</div></div>` : '';
+      const mine = f?.find((r) => r.id === me), rank = f && mine ? f.indexOf(mine) + 1 : 0;
+      const pay = coinGain > 0 ? `<div class="coinRow"><i class="coin"></i><b>+${coinGain} coins</b>${mine ? ` <span>round ${coinGain - mine.coins} + game bonus ${mine.coins}${rank ? ` (place ${rank})` : ''}</span>` : ''}<em>Wallet: ${wallet.toLocaleString('en-US')}</em></div>` : '';
+      el.innerHTML = `<h2 class="${res.winner}">${title}</h2><div class="resSub">${sub}</div>${podium}${awards && (!f || res.board.length <= 6) ? `<div class="awards">${awards}</div>` : ''}<table class="board"><tr><th>PLAYER</th><th style="text-align:right">ROUND</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>${pay}<div class="nextIn" id="nextIn"></div>`;
     }
     const n = document.getElementById('nextIn');
-    if (n) n.textContent = `Next round in ${Math.max(0, Math.ceil(msLeft / 1000))}…${nextMap ? ` on ${nextMap}.` : ''} Roles rotate!`;
+    const secs = Math.max(0, Math.ceil(msLeft / 1000));
+    if (n) n.textContent = res.final ? `Back to the lobby in ${secs}…` : `Round ${res.round + 1} of ${res.rounds} in ${secs}…${nextMap ? ` on ${nextMap}.` : ''} Roles rotate!`;
   }
 
   chatMenu(show: boolean) {

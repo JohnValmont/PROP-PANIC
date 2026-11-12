@@ -9,7 +9,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
-import { CFG, F, QUICK_CHAT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
+import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
@@ -56,12 +56,14 @@ export class Game {
   // session
   inGame = false;
   myId = 0; code = ''; pub = false;
-  phase: Phase = 'lobby'; phaseEnds = 0; round = 0; seed = -1; panic = false;
+  phase: Phase = 'lobby'; phaseEnds = 0; round = 0; rounds = ROUNDS_DEFAULT; seed = -1; panic = false;
   results: Results | undefined;
   roster = new Map<number, RosterEntry>();
-  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0, map: 0 };
+  lobbyInfo = { bots: 0, countdown: 0, canStart: false, at: 0, map: 0, rounds: ROUNDS_DEFAULT };
   chaos = 0;
   onLeave: (reason?: string) => void = () => {};
+  /** A game has finished and everyone is back in the lobby. */
+  onLobby: () => void = () => {};
 
   // world state
   private map!: GameMap;
@@ -110,9 +112,11 @@ export class Game {
   helpOn = true;
   private slowSecs = 0;
   look = 0; baseFov = 78; xp = 0;
+  /** Wallet for cosmetics. Kept in the browser, like XP: there are no accounts for the server to keep it against. */
+  coins = 0; private coinGain = 0; private paid = '';
   private composer!: EffectComposer; private bloom!: UnrealBloomPass; private gtao!: GTAOPass;
   private muzzle!: THREE.Mesh; private previewRig: HunterRig | null = null;
-  private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0; private xpRound = -1;
+  private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0;
   private hitch = 0;
   private frameN = 0;
 
@@ -166,6 +170,8 @@ export class Game {
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
     this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
+    this.coins = Math.max(0, Math.floor(Number(localStorage.getItem('pp_coins')) || 0));
+    this.paid = localStorage.getItem('pp_paid') ?? '';
     this.invertY = localStorage.getItem('pp_invy') === '1';
     const mv = localStorage.getItem('pp_mus'); if (mv !== null && Number(mv) >= 0 && Number(mv) <= 1) this.sfx.musicVol = Number(mv);
     const hp = localStorage.getItem('pp_help');
@@ -381,7 +387,7 @@ export class Game {
       case 's': this.onSnap(m); break;
       case 'ev': this.onEvent(m); break;
       case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock }; break;
-      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0 }; break;
+      case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0, rounds: m.rounds | 0 || ROUNDS_DEFAULT }; break;
       case 'decoys': {
         for (const d of this.decoys.values()) this.scene.remove(d.mesh);
         this.decoys.clear();
@@ -393,7 +399,7 @@ export class Game {
 
   private onPhase(m: any) {
     const prevPhase = this.phase;
-    this.phase = m.phase; this.phaseEnds = m.ends; this.round = m.round; this.results = m.results;
+    this.phase = m.phase; this.phaseEnds = m.ends; this.round = m.round; this.rounds = m.rounds | 0 || ROUNDS_DEFAULT; this.results = m.results;
     this.loadMap(m.seed, m.map | 0);
     this.nextMap = m.next | 0;
     this.lastTickSec = -1;
@@ -419,18 +425,28 @@ export class Game {
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
       const mine = res.board.find((r) => r.id === this.myId);
-      if (mine && this.xpRound !== m.round) {
-        this.xpRound = m.round;
+      // bank this round's rewards once: results are sent again to a client that reconnects or reloads during them
+      const key = `${this.code}:${res.n}:${m.seed}`;
+      if (mine && this.paid !== key) {
+        this.paid = key;
         const gain = Math.max(10, mine.round), before = xpLevel(this.xp);
         this.xp += gain;
-        try { localStorage.setItem('pp_xp', String(this.xp)); } catch { /* ignore */ }
+        this.coinGain = Math.max(0, (mine.coins | 0) + ((res.final?.find((r) => r.id === this.myId)?.coins ?? 0) | 0));
+        this.coins += this.coinGain;
+        try { localStorage.setItem('pp_xp', String(this.xp)); localStorage.setItem('pp_coins', String(this.coins)); localStorage.setItem('pp_paid', key); } catch { /* ignore */ }
         this.hud.popup(`+${gain} XP`);
+        if (this.coinGain) this.hud.popup(`+${this.coinGain} coins`);
         if (xpLevel(this.xp) > before) { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${xpLevel(this.xp)}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }
-      }
+      } else if (!mine) this.coinGain = 0;
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
     } else {
       this.sfx.music('lobby');
+      if (prevPhase !== 'lobby' && this.inGame) {
+        // back from a game: the host of a private room needs the mouse for Start, bots and the game length
+        if (!this.pub && this.roster.get(this.myId)?.host && document.pointerLockElement) document.exitPointerLock();
+        this.onLobby();
+      }
     }
   }
   private bannerPending = '';
@@ -1135,7 +1151,7 @@ export class Game {
   private updateHud(dt: number) {
     const h = this.hud, now = this.serverNow(), pnow = performance.now();
     const left = this.phaseEnds - now;
-    h.setPhase(this.phase, this.round, this.panic);
+    h.setPhase(this.phase, this.round, this.panic, this.rounds);
     h.setTimer(left, this.phase !== 'lobby');
     h.setChaos(this.chaos);
     let props = 0;
@@ -1236,7 +1252,7 @@ export class Game {
 
     // always-on objective line and a controls card, so a first-time player is never left guessing
     let obj = '';
-    if (lobby) obj = 'Warm-up. The round starts soon — try becoming an object.';
+    if (lobby) obj = 'Warm-up. The game starts soon — try becoming an object.';
     else if (playing && hunter && this.phase === 'hunt') obj = this.quackedMe ? 'You are a duck! Too many innocent objects. Wait it out.' : (this.myFlags & F.DIZZY) ? 'Bonked! Your blaster is jammed for a moment.' : `Find the fake objects and zap them. Fakes squeak on roll calls, move when unwatched, and fly up when you Shockwave [${keyLabel(B.ab2)}].`;
     else if (playing && !hunter && this.phase === 'hiding') obj = `Aim at an object and press [${keyLabel(B.act)}] to become it, then stand among similar ones.`;
     else if (playing && !hunter && this.phase === 'hunt') obj = 'Survive until the timer runs out. Freeze when a hunter or the blue scanner ring is near.';
@@ -1249,8 +1265,8 @@ export class Game {
     h.help(this.helpOn && rows && this.phase !== 'end' ? `<div class="helpT">${ghost ? 'GHOST' : hunter ? 'HUNTER' : 'PROP'} CONTROLS</div>${rows.map((r) => `<div><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}<div class="helpF">${K('help')} hides this · <kbd>Esc</kbd> settings &amp; key bindings</div>` : null);
     void ACTIONS;
 
-    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map });
-    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '');
+    h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map, rounds: this.lobbyInfo.rounds });
+    h.results(this.phase === 'end', this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.coinGain, this.coins);
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
     void dt;
   }

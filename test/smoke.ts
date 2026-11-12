@@ -187,6 +187,8 @@ async function main() {
     const end = await a.wait((m) => m.t === 'phase' && m.phase === 'end', 14000, 'end');
     ok(end.results && ['props', 'hunters'].includes(end.results.winner) && end.results.board.length === 4, `round ended: ${end.results.winner} win, scoreboard has 4 rows`);
     ok(end.results.board.some((r: any) => r.round > 0), 'points were awarded');
+    ok(end.round === 1 && end.rounds === 3 && end.results.rounds === 3 && !end.results.final, 'round 1 of a three-round game: no final standings yet');
+    ok(end.results.board.every((r: any) => Number.isInteger(r.coins) && r.coins >= 5 && r.coins <= 50), `every player is paid coins for the round (${end.results.board.map((r: any) => r.coins).join(', ')})`);
     console.log('  awards:', end.results.awards.map((w: any) => `${w.title} → ${w.name}`).join(', ') || '(none)');
     a.msgs.length = 0;
     const next = await a.wait((m) => m.t === 'phase' && m.phase === 'hiding', 6000, 'next round');

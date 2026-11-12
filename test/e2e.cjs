@@ -111,7 +111,7 @@ async function main() {
     await B.waitForFunction(() => window.__pp.inGame && window.__pp.roster.size === 2, null, { timeout: 8000 });
     await A.waitForFunction(() => window.__pp.roster.size === 2, null, { timeout: 8000 });
     ok(true, 'second browser joined through the invite link');
-    ok(!(await B.isVisible('#startBtn')), 'only the host sees the Start button');
+    ok(!(await B.isVisible('#startBtn')) && !(await B.isVisible('#roundsBtn')) && await A.isVisible('#roundsBtn'), 'only the host sees the Start button and the game length');
     await shot(A, '02-lobby.png');
 
     console.log('refresh keeps your seat');
@@ -203,6 +203,8 @@ async function main() {
     ok(((await H.textContent('#results h2').catch(() => '')) ?? '').includes('HUNTERS WIN') && await P.isVisible('#results'), 'both clients show the results screen: hunters win');
     const hs = await state(H);
     ok(hs.roster.find((r) => r.id === hs.id).score >= 250 || (await H.textContent('#results')).includes('+'), 'hunter was awarded points for the catch');
+    const paid = [await H.evaluate(() => window.__pp.coins), await P.evaluate(() => window.__pp.coins)];
+    ok(paid[0] > paid[1] && paid[1] >= 5 && await H.isVisible('#results .coinRow') && !(await H.isVisible('#results .final')), `both players are paid coins for round 1 of 3, the winning hunter more (${paid.join(' vs ')})`);
     await shot(H, '06-results.png');
 
     console.log('round 2');

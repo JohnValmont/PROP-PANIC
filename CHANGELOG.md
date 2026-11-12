@@ -1,5 +1,24 @@
 # Changelog
 
+## 2.4.0
+
+- **Games.** Rounds used to chain forever with one running score. A game is now a set of rounds, three by
+  default: scores start at zero, the hunter role rotates each round, and the last round ends with the final
+  standings and the winner of the game before everyone returns to the lobby. The header counts the rounds
+  ("ROUND 2/3"), and the results panel says which round is next.
+- **Game length for private rooms.** The host picks 1, 3, 5, 7 or 10 rounds in the lobby. The choice is fixed
+  once a game starts; changing it mid-game applies to the next one. Public games are always three rounds.
+- **Coins.** Every round pays coins: 5 for taking part, 1 per 20 points scored (capped at 40), 10 for being on the
+  winning side. The last round adds 15 for finishing the game and 30 / 20 / 10 for the podium. The server works
+  out each payout; the results panel shows it and the menu shows the wallet. There is nothing to buy yet. The
+  wallet is stored in the browser like XP, so it is not tamper-proof (see `SECURITY.md`).
+- Rewards are banked once per round, including XP: reloading during the results no longer pays XP a second time.
+- Maps alternate across games too, so a three-round game no longer always opens on the Emporium.
+- Fixed: a pause panel left open when a game ended would have covered the lobby. It closes, and the host of a
+  private room gets the mouse back for the lobby buttons.
+- New tests: `npm run test:match` (17 browser checks) and 19 server checks for game flow and payouts.
+- Protocol: the phase, lobby and results messages carry new fields, so a 2.3 client should be reloaded.
+
 ## 2.3.0
 
 - **Ghost mode for caught props and late joiners.** Being caught used to leave you with a bare fly camera that

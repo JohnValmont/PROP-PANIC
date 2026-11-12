@@ -200,6 +200,19 @@ table.board tr.dead td { opacity: 0.55; }
 .tag { font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; margin-left: 6px; }
 .tag.h { background: var(--pink); } .tag.p { background: #c99a1c; } .tag.b { background: #5c677d; } .tag.s { background: var(--teal); }
 .nextIn { text-align: center; font-weight: 600; color: #7ff5e6; }
+/* coins: wallet in the menu, payout and final standings on the results panel */
+.coin { display: inline-block; width: 0.95em; height: 0.95em; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffd166 45%, #e09f1f); border: 2px solid #9a6a0b; vertical-align: -0.12em; box-sizing: border-box; }
+.wallet { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; background: rgba(0, 0, 0, 0.35); border-radius: 12px; padding: 6px 10px; font-size: 18px; }
+.coinRow { display: flex; align-items: center; gap: 8px; justify-content: center; background: rgba(255, 209, 102, 0.14); border: 2px solid rgba(255, 209, 102, 0.5); border-radius: 12px; padding: 5px 12px; font-size: 16px; }
+.coinRow b { color: var(--yellow); } .coinRow span { opacity: 0.8; font-size: 13px; } .coinRow em { font-style: normal; margin-left: auto; opacity: 0.9; font-size: 14px; }
+.final { text-align: center; }
+.finalT { font-size: 11px; letter-spacing: 0.16em; color: #a8dcff; font-weight: 700; }
+.champ { font-size: 24px; font-weight: 700; color: var(--yellow); margin: 2px 0 6px; }
+.places { display: flex; gap: 6px; justify-content: center; }
+.place { flex: 1; max-width: 180px; background: rgba(0, 0, 0, 0.3); border-radius: 12px; padding: 5px 8px; display: flex; align-items: center; gap: 8px; font-weight: 600; border: 2px solid transparent; }
+.place b { flex: 0 0 24px; height: 24px; border-radius: 50%; background: #5c677d; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+.place.p0 b { background: var(--yellow); color: var(--ink); } .place.p1 b { background: #cfd8e3; color: var(--ink); } .place.p2 b { background: #c9824a; color: var(--ink); }
+.place span { flex: 1; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .place small { opacity: 0.8; } .place.me { border-color: #fff; }
 #chatMenu { left: 16px; bottom: 120px; flex-direction: column; gap: 3px; font-size: 15px; }
 #chatMenu div b { color: var(--yellow); margin-right: 6px; }
 
@@ -237,7 +250,7 @@ table.board tr.dead td { opacity: 0.55; }
 #role.prop #roleBar::after { content: ''; position: absolute; inset: 0; background: linear-gradient(90deg, transparent 32.3%, rgba(27, 42, 74, 0.95) 32.3%, rgba(27, 42, 74, 0.95) 34.3%, transparent 34.3%, transparent 65.6%, rgba(27, 42, 74, 0.95) 65.6%, rgba(27, 42, 74, 0.95) 67.6%, transparent 67.6%); }
 #role.prop #roleBar i { background: linear-gradient(90deg, #ef476f, #ff8fa3); }
 .sliders input[type='checkbox'] { width: 22px; height: 22px; justify-self: start; }
-#mapBtn { width: 100%; }
+#mapBtn, #roundsBtn { width: 100%; }
 .ab { transition: transform 0.08s, border-color 0.15s; }
 .ab.ready { animation: abReady 0.35s ease-out; }
 @keyframes abReady { 0% { transform: scale(1.14); } 100% { transform: scale(1); } }

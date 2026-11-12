@@ -69,13 +69,33 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
 - **Play now** drops you into a public room. Empty seats are filled with clearly labelled bots, and
   humans replace them as they join. You can join mid-round.
 - **Create private room** gives a 4-letter code and an invite link (`?room=CODE`). The host can add
-  bots and starts the round.
+  bots, picks the game length and starts the game.
+- **A game is a set of rounds**, three by default. Scores run across the game, the hunter role rotates each
+  round, and the last round ends with the final standings before everyone returns to the lobby. Public games
+  are always three rounds; the host of a private room can pick 1, 3, 5, 7 or 10.
 - Refreshing the page or a short network drop puts you back in your seat.
 
 ## Progression and looks
 
 Points earned each round become XP (stored in the browser). Levels unlock hunter hats; vest colour is
 free to choose. Both are cosmetic only and visible to everyone in the match.
+
+### Coins
+
+Coins are the currency for cosmetics. Nothing is on sale yet: this release adds the earning side and the wallet.
+The server works out every payout (`COINS` in `shared/constants.ts`) and sends it with the results:
+
+| When | Coins |
+| --- | --- |
+| Each round, for taking part | 5 |
+| Each round, per 20 points scored | +1 (round total capped at 40) |
+| Each round, on the winning side | +10 |
+| Last round, for finishing the game | +15 |
+| Last round, 1st / 2nd / 3rd in the game | +30 / +20 / +10 (last place never gets one) |
+
+The wallet is kept in the browser, like XP, because there are no accounts. Anyone can edit their own balance
+with the browser's developer tools. That is harmless while coins buy nothing; before they buy anything other
+players can see, or anything sold for real money, the wallet has to move to the server behind a login.
 
 ## Controls
 
@@ -139,7 +159,7 @@ npm run test:security    # attacks a real server: crashes, floods, traversal, hi
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
-`PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS` override them).
+`PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
 CI (`.github/workflows/ci.yml`) runs the typecheck, build, map, mechanics, security and protocol tests on every push.
 
