@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.4.1
+
+- **Changing graphics no longer reloads the page.** Switching to or from Fast used to reload the whole site,
+  because Fast uses its own models and materials. They are now swapped in place: the old set is released, the
+  map and everyone on it are rebuilt, and the new set streams in. Ultra and High never reloaded, but two of the
+  three steps of the Graphics button did. The automatic step-down to Fast on a slow machine no longer reloads
+  either.
+- Known difference: anti-aliasing of the Fast picture is decided when the page loads. A session that started on
+  High or Ultra and switches to Fast keeps it (slightly smoother edges, slightly more work for the graphics
+  chip); one that started on Fast has none, as before.
+
 ## 2.4.0
 
 - **Games.** Rounds used to chain forever with one running score. A game is now a set of rounds, three by

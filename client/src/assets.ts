@@ -46,8 +46,28 @@ const placeholderMat = new THREE.MeshStandardMaterial({ color: 0xb9a98e, roughne
 class AssetStore {
   manifest: Manifest | null = null;
   maxAniso = 4;
-  /** Fast graphics: low-detail models, colour textures only, simple shading. Fixed for the life of the page. */
+  /** Fast graphics: low-detail models, colour textures only, simple shading. Change it with setLite(). */
   lite = false;
+  /** Bumped on every switch, so a download started for the other tier is thrown away when it lands. */
+  private tier = 0;
+
+  /**
+   * Switch between the fast and the full asset set without reloading the page. Everything built from the
+   * old set is released here; the caller then rebuilds the scene, which requests the new set as usual.
+   */
+  setLite(v: boolean) {
+    if (v === this.lite) return;
+    this.lite = v; this.tier++;
+    const maps = ['map', 'normalMap', 'roughnessMap', 'metalnessMap', 'aoMap', 'emissiveMap'] as const;
+    for (const parts of this.models.values()) for (const p of parts) {
+      p.geo.dispose();
+      for (const k of maps) (p.mat as any)[k]?.dispose?.(); // scans carry their own textures: free the video memory
+      p.mat.dispose();
+    }
+    this.models.clear(); this.waiting.clear();
+    for (const m of this.matCache.values()) m.dispose(); // surface textures are shared by both tiers and stay
+    this.matCache.clear();
+  }
   /** Fraction of requested downloads that have finished (for the loading bar). */
   progress = 1;
   private requested = 0; private finished = 0;
@@ -111,8 +131,11 @@ class AssetStore {
     if (list) { list.push(cb); return; }
     this.waiting.set(id, [cb]);
     if (!this.manifest?.models[id]) return; // unknown or manifest missing: keep the placeholder
+    const tier = this.tier;
     this.enqueue(async () => {
+      if (tier !== this.tier) return; // the graphics setting changed while this waited in the queue
       const gltf = await this.gltf.loadAsync(this.url(`${this.lite ? 'lite' : 'models'}/${id}.glb`));
+      if (tier !== this.tier) return;
       const parts = this.normalise(gltf.scene, size);
       this.models.set(id, parts);
       for (const f of this.waiting.get(id) ?? []) f(parts);

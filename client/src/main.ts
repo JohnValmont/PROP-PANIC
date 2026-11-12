@@ -98,8 +98,8 @@ const gfx = $('gfxBtn'), mute = $('muteBtn');
 const label = () => { gfx.textContent = `Graphics: ${game.quality === 'ultra' ? 'Ultra' : game.quality === 'high' ? 'High' : 'Fast'}`; mute.textContent = `Sound: ${game.sfx.muted ? 'Off' : 'On'}`; };
 gfx.onclick = () => {
   const next = game.quality === 'ultra' ? 'high' : game.quality === 'high' ? 'low' : 'ultra';
-  // say so first, then apply on the next frame: rebuilding shadows (or reloading for Fast) takes a moment
-  gfx.textContent = next === 'low' || game.quality === 'low' ? 'Reloading…' : 'Applying…';
+  // say so first, then apply on the next frame: rebuilding shadows (or the whole scene, for Fast) takes a moment
+  gfx.textContent = 'Applying…';
   setTimeout(() => { game.setQuality(next); label(); }, 60);
 };
 if (isTouchDevice()) initTouch(game, () => showPause(true));

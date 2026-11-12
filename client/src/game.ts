@@ -207,10 +207,17 @@ export class Game {
 
   setQuality(q: Quality) {
     try { localStorage.setItem('pp_quality', q); } catch { /* ignore */ }
-    // fast graphics uses different models and materials, chosen at load: switching to or from it reloads (the seat is kept)
-    if ((q === 'low') !== assets.lite) { location.reload(); return; }
     this.quality = q;
     this.world.setQuality(q === 'ultra' ? 2 : q === 'high' ? 1 : 0);
+    // fast graphics uses different models and materials: swap them in place and rebuild what is on screen
+    if ((q === 'low') !== assets.lite) {
+      assets.setLite(q === 'low');
+      if (this.map) {
+        this.world.rebuild(this.map);
+        for (const e of this.ents.values()) if (e.kind) this.buildModel(e, e.kind);
+        for (const d of this.decoys.values()) { this.scene.remove(d.mesh); d.mesh = assets.propObject(d.type); d.mesh.position.set(d.x, d.y, d.z); d.mesh.rotation.y = d.yaw + Math.PI; this.scene.add(d.mesh); }
+      }
+    }
     this.gtao.enabled = q === 'ultra';
     this.resize();
   }

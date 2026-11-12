@@ -222,13 +222,38 @@ export class WorldView {
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.fallbackEnv = this.pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
     this.scene.environment = this.fallbackEnv;
+    this.loadEnvs();
+  }
+  /** The HDR panoramas (full graphics only). Safe to call again: only missing ones are fetched. */
+  private loadEnvs() {
     LOOK.forEach((L, i) => {
+      if (this.envs[i] || this.envWanted[i]) return;
+      this.envWanted[i] = true;
       assets.hdr(L.env).then((hdr) => {
         this.envs[i] = this.pmrem!.fromEquirectangular(hdr).texture;
         hdr.dispose();
-        if (this.mapId === i) this.scene.environment = this.envs[i];
-      }).catch(() => { /* keep the fallback */ });
+        if (this.mapId === i && !assets.lite) this.scene.environment = this.envs[i];
+      }).catch(() => { this.envWanted[i] = false; /* keep the fallback */ });
     });
+  }
+  private envWanted = [false, false];
+
+  /**
+   * The asset tier changed (fast <-> full graphics): throw away everything built from the old models and
+   * materials and build the current map again. Used instead of reloading the page.
+   */
+  rebuild(map: GameMap) {
+    for (const g of this.dressed.values()) {
+      this.root.remove(g);
+      g.traverse((o) => { (o as THREE.Mesh).geometry?.dispose(); });
+    }
+    this.dressed.clear();
+    for (const l of [this.fireLight, ...this.lampLights]) if (l) { this.scene.remove(l); l.dispose(); }
+    this.fireLight = null; this.lampLights = []; this.fire = null; this.blades = null; this.water = null;
+    this.motes = []; this.grass = null; this.sunGlow = null; this.flag = null;
+    for (const l of this.warm) l.visible = !assets.lite;
+    if (!assets.lite) this.loadEnvs();
+    this.load(map);
   }
 
   /** 0 = fast (no shadows, no grass), 1 = high, 2 = ultra. */
@@ -258,7 +283,7 @@ export class WorldView {
     this.hemi.color.set(L.sky); this.hemi.groundColor.set(L.ground);
     const fog = this.scene.fog as THREE.Fog;
     fog.near = L.fogNear; fog.far = L.fogFar;
-    this.scene.environment = this.envs[map.id] ?? this.fallbackEnv;
+    this.scene.environment = (assets.lite ? null : this.envs[map.id]) ?? this.fallbackEnv; // fast graphics: the plain room light
     this.scene.background = map.id === 1 && this.skyTex ? this.skyTex : this.bgColor;
 
     // loose props: one instanced mesh per model part, per type, per patch of floor (so off-screen patches are culled)
