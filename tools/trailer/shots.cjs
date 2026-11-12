@@ -38,7 +38,8 @@ const ready = `for (const p of H.all()) { p.cd = { decoy: 0, ghost: 0, taunt: 0,
 
 // ---------------------------------------------------------------- the opening: a shelf in Tumbleton's Emporium
 // Seed 309 stocks the shelf row at z=4.4 (its south face is z=4.025) with cats, alarm clocks, lanterns and
-// brass vases. One bot sits on the middle board as a second cat, beside the real one at x=-5.5.
+// brass vases. One bot stands on the top board as a third brass vase, beside the real ones at x=-5.47 and -4.60
+// (the top board has nothing above it, so its hop and googly eyes stay in view).
 const SHELF_Z = 4.025;
 async function stageShelf(D) {
   await round(D, {
@@ -46,7 +47,7 @@ async function stageShelf(D) {
       const [hunter, cat] = BOTS;
       H.place(ME, 22.5, -15.5, 0);
       H.freeze(hunter); H.place(hunter, 21, 15, 0);
-      H.freeze(cat); H.disguise(cat, 'cat'); H.place(cat, -4.62, ${SHELF_Z}, 0, 0.95);
+      H.freeze(cat); H.disguise(cat, 'brassvase'); H.place(cat, -3.72, ${SHELF_Z}, 0.8, 1.65);
       globalThis.CAT = cat;`,
   });
   await D.srv(`H.phaseLeft(60000)`);
@@ -65,15 +66,17 @@ const SHOTS = [
   {
     name: 'open_shelf', seconds: 5.2,
     async setup(D) { await stageShelf(D); },
-    frame(D, i, t) { return cam(D, move({ p: [-9.4, 1.36, 2.0], l: [-7.6, 1.12, SHELF_Z], fov: 44 }, { p: [-6.3, 1.3, 2.15], l: [-5.0, 1.12, SHELF_Z], fov: 40 }, t / 5.2, linear)); },
+    frame(D, i, t) { return cam(D, move({ p: [-9.6, 1.55, 1.95], l: [-7.9, 1.42, SHELF_Z], fov: 46 }, { p: [-6.0, 1.6, 2.05], l: [-4.5, 1.5, SHELF_Z], fov: 44 }, t / 5.2, linear)); },
   },
   {
     name: 'open_cat', seconds: 5.2,
     async setup(D) { await stageShelf(D); },
     async frame(D, i, t) {
-      const A = { p: [-5.06, 1.24, 2.35], l: [-5.06, 1.17, SHELF_Z], fov: 36 };
-      await cam(D, t < 2.3 ? move(A, { p: [-5.06, 1.235, 2.45], l: [-5.06, 1.17, SHELF_Z], fov: 36 }, t / 2.3, linear)
-        : move({ p: [-5.06, 1.235, 2.45], l: [-5.06, 1.17, SHELF_Z], fov: 36 }, { p: [-4.72, 1.24, 2.95], l: [-4.66, 1.2, SHELF_Z], fov: 34 }, (t - 2.3) / 2.0, ease));
+      // three brass vases; the camera closes in on one just before it gives itself away (a real taunt: the hop
+      // and the googly eyes last under half a second, so the camera has to be there already)
+      // framed with headroom: vase top 2.55 m, plus the hop and the eyes, stays in shot
+      const A = { p: [-4.6, 2.1, 1.75], l: [-4.6, 2.22, SHELF_Z], fov: 36 }, C = { p: [-4.05, 2.2, 1.95], l: [-3.95, 2.32, SHELF_Z], fov: 34 };
+      await cam(D, t < 2.1 ? move(A, C, t / 2.1, ease) : move(C, { p: [-3.98, 2.22, 2.12], l: [-3.85, 2.34, SHELF_Z], fov: 34 }, (t - 2.1) / 2.5, linear));
       if (at(D, 2.2)) await D.srv(`H.R().taunt(CAT, 0)`);
     },
   },
