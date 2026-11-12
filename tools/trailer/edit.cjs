@@ -64,7 +64,9 @@ t += end.dur;
 music.push({ t: +(t - 0.4).toFixed(4), mode: 'none' });
 
 const title_card = { start: title.start, dur: title.dur };
-module.exports = { seconds: +t.toFixed(3), fps: 30, clips, captions, music, stingers, title: title_card, end, BAR };
+/** Where to play, on the end card (TRAILER_URL overrides it). */
+const url = 'prop-panic-1.onrender.com';
+module.exports = { seconds: +t.toFixed(3), fps: 30, clips, captions, music, stingers, title: title_card, end, url, BAR };
 if (require.main === module) {
   console.log(JSON.stringify(module.exports, null, 1));
   console.error('total', t.toFixed(2), 's');

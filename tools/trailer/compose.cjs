@@ -76,7 +76,7 @@ async function video() {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: L.W, height: L.H }, deviceScaleFactor: scale });
   page.on('pageerror', (e) => console.error('page:', e.message));
-  const edit = { ...EDIT, flashes: [EDIT.title.start, EDIT.clips.find((c) => c.shot === 'chaos_blackout').start, EDIT.end.start], url: process.env.TRAILER_URL || '' };
+  const edit = { ...EDIT, flashes: [EDIT.title.start, EDIT.clips.find((c) => c.shot === 'chaos_blackout').start, EDIT.end.start], url: process.env.TRAILER_URL ?? EDIT.url };
   await page.addInitScript(([E, F, L]) => { window.EDIT = E; window.FRAMES = F; window.LAYOUT = L; }, [edit, frameIndex(), L]);
   await page.goto(`http://localhost:${server.address().port}/`);
   await page.evaluate(async () => { window.setupCompose(); await document.fonts.load('700 60px Fredoka'); await document.fonts.load('600 60px Fredoka'); await document.fonts.ready; });

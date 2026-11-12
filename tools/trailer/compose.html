@@ -32,7 +32,7 @@
   .tagline2 { font-weight: 700; font-size: 58px; color: var(--cream); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink), 0 0 22px rgba(0,0,0,0.5); margin-top: 46px; }
   .sub { font-weight: 600; font-size: 32px; color: #fff; opacity: 0.92; margin-top: 14px; text-shadow: 0 2px 0 var(--ink), 0 0 14px rgba(0,0,0,0.8); letter-spacing: 0.02em; }
   .cta { margin-top: 44px; font-weight: 700; font-size: 52px; color: var(--ink); background: var(--yellow); padding: 16px 44px 12px; border-radius: 26px; box-shadow: 0 8px 0 var(--ink); }
-  .url { margin-top: 30px; font-weight: 700; font-size: 40px; color: #fff; text-shadow: 0 3px 0 var(--ink); }
+  .url { margin-top: 30px; font-weight: 700; font-size: 46px; color: #fff; -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink), 0 0 18px rgba(0,0,0,0.6); letter-spacing: 0.01em; }
 
   #miniLogo { position: absolute; left: 0; right: 0; top: 150px; display: none; justify-content: center; }
   #miniLogo .logo { font-size: 92px; align-items: center; }
@@ -43,7 +43,9 @@
   .v .card .logo { font-size: 190px; }
   .v .tagline2 { font-size: 52px; max-width: 920px; }
   .v .sub { font-size: 32px; max-width: 920px; }
-  .v .cta { font-size: 46px; }
+  .v .cta { font-size: 60px; padding: 20px 48px 16px; }
+  .v #endCard .sub { font-size: 36px; margin-top: 22px; }
+  .v .url { font-size: 54px; margin-top: 40px; }
 </style>
 </head>
 <body>
@@ -128,6 +130,11 @@ async function renderFrame(T) {
   if (inTitle) dim = 0.42 * Math.min(1, (tc.start + tc.dur - T) / 0.35);
   if (inEnd) dim = 0.5 * ease((T - ec.start) / 0.5);
   $('dim').style.opacity = dim;
+  // vertical: the title and end cards take the whole frame (the switch hides under the white flash on their first frame)
+  if (L.vertical) {
+    const full = inTitle || inEnd, fb = $('frameBox'), b = full ? { x: 0, y: 0, w: L.W, h: L.H } : L.box;
+    Object.assign(fb.style, { left: b.x + 'px', top: b.y + 'px', width: b.w + 'px', height: b.h + 'px' });
+  }
   card($('titleCard'), inTitle ? T - tc.start : -1, tc.dur, false);
   // vertical: a small logo rides along between the title and the end card
   if (L.vertical) {
@@ -190,8 +197,8 @@ function card(el, local, dur, isEnd) {
   const l1 = el.querySelector('.l1'), l2 = el.querySelector('.l2'), goo = el.querySelector('.goo b');
   const s = pop(local / 0.45);
   const L = window.LAYOUT;
-  const lift = isEnd ? (L.vertical ? -40 : -20) : 0;
-  logo.style.transform = `translateY(${lift}px) scale(${s * (isEnd ? 0.72 : 1)})`;
+  const lift = isEnd ? (L.vertical ? -90 : -20) : 0;
+  logo.style.transform = `translateY(${lift}px) scale(${s * (isEnd ? (L.vertical ? 1.05 : 0.72) : 1)})`;
   // the game's own logo wobble, in step with the edit instead of the wall clock
   l1.style.transform = `rotate(${-4 + Math.sin(local * 2.1) * 1.6}deg)`;
   l2.style.transform = `rotate(${-2 - Math.sin(local * 2.1) * 1.6}deg)`;
