@@ -1,0 +1,214 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=block" rel="stylesheet" />
+<link href="/game.css" rel="stylesheet" />
+<style>
+  html, body { margin: 0; overflow: hidden; background: #000; width: var(--W); height: var(--H); }
+  #stage { position: absolute; inset: 0; overflow: hidden; background: #0d1426; font-family: var(--font); }
+  .layer { position: absolute; inset: 0; }
+  #bg { position: absolute; inset: -60px; background-size: cover; background-position: center; filter: blur(34px) brightness(0.45) saturate(1.2); display: none; }
+  #frameBox { position: absolute; overflow: hidden; }
+  #frame { width: 100%; height: 100%; object-fit: cover; display: block; transform-origin: 50% 50%; filter: saturate(1.07) contrast(1.04) brightness(1.03); }
+  #vgn { position: absolute; inset: 0; pointer-events: none; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 55%, rgba(0,0,0,0.35) 100%); }
+  #dim { position: absolute; inset: 0; background: #0d1426; opacity: 0; }
+  #flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+  #black { position: absolute; inset: 0; background: #000; opacity: 0; }
+
+  /* captions */
+  .cap { position: absolute; display: flex; flex-direction: column; gap: 14px; }
+  .cap .kick { align-self: flex-start; font-weight: 700; font-size: 30px; letter-spacing: 0.12em; color: var(--ink); background: var(--c); padding: 8px 20px 6px; border-radius: 14px; box-shadow: 0 5px 0 var(--ink); transform-origin: 0 50%; }
+  .cap .txt { font-weight: 700; font-size: 64px; line-height: 1.04; color: #fff; -webkit-text-stroke: 2.5px var(--ink); paint-order: stroke fill; text-shadow: 0 5px 0 var(--ink), 0 0 26px rgba(0,0,0,0.55); max-width: 1250px; transform-origin: 0 50%; }
+  .cap.mid { left: 0; right: 0; align-items: center; text-align: center; }
+  .cap.mid .txt { font-weight: 600; font-size: 66px; color: var(--cream); max-width: none; transform-origin: 50% 50%; }
+  .cap.mid .kick { align-self: center; }
+
+  /* title and end cards */
+  .card { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; opacity: 0; }
+  .card .logo { font-size: 200px; align-items: center; }
+  .card .logo .l1, .card .logo .l2 { animation: none; }
+  .card .logo .goo b { animation: none; }
+  .tagline2 { font-weight: 700; font-size: 58px; color: var(--cream); -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 0 4px 0 var(--ink), 0 0 22px rgba(0,0,0,0.5); margin-top: 46px; }
+  .sub { font-weight: 600; font-size: 32px; color: #fff; opacity: 0.92; margin-top: 14px; text-shadow: 0 2px 0 var(--ink), 0 0 14px rgba(0,0,0,0.8); letter-spacing: 0.02em; }
+  .cta { margin-top: 44px; font-weight: 700; font-size: 52px; color: var(--ink); background: var(--yellow); padding: 16px 44px 12px; border-radius: 26px; box-shadow: 0 8px 0 var(--ink); }
+  .url { margin-top: 30px; font-weight: 700; font-size: 40px; color: #fff; text-shadow: 0 3px 0 var(--ink); }
+
+  #miniLogo { position: absolute; left: 0; right: 0; top: 150px; display: none; justify-content: center; }
+  #miniLogo .logo { font-size: 92px; align-items: center; }
+  #miniLogo .logo .l1, #miniLogo .logo .l2, #miniLogo .goo b { animation: none; }
+  /* vertical (9:16) layout tweaks */
+  .v .cap .txt { font-size: 66px; max-width: 960px; }
+  .v .cap.mid .txt { font-size: 64px; }
+  .v .card .logo { font-size: 190px; }
+  .v .tagline2 { font-size: 52px; max-width: 920px; }
+  .v .sub { font-size: 32px; max-width: 920px; }
+  .v .cta { font-size: 46px; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="frameBox"><img id="frame" /></div>
+  <div id="vgn"></div>
+  <div id="dim"></div>
+  <div id="caps" class="layer"></div>
+  <div id="miniLogo"><h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1></div>
+  <div id="titleCard" class="card">
+    <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
+    <div class="tagline2">Blend in. Don't get caught.</div>
+    <div class="sub">A multiplayer prop-hunt party game</div>
+  </div>
+  <div id="endCard" class="card">
+    <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
+    <div class="cta">Play free in your browser</div>
+    <div class="sub" id="endSub">No download · Mouse &amp; keyboard or touch</div>
+    <div class="url" id="endUrl"></div>
+  </div>
+  <div id="flash"></div>
+  <div id="black"></div>
+</div>
+<script>
+// The edit (window.EDIT), the frames each shot has (window.FRAMES) and the layout (window.LAYOUT) are set by compose.cjs.
+const $ = (id) => document.getElementById(id);
+const clamp01 = (k) => Math.min(1, Math.max(0, k));
+const ease = (k) => { k = clamp01(k); return k * k * (3 - 2 * k); };
+const easeOut = (k) => 1 - Math.pow(1 - clamp01(k), 3);
+/** A spring-ish pop: overshoots to ~1.08 and settles at 1. */
+const pop = (k) => { k = clamp01(k); return 1 + Math.sin(k * Math.PI * 1.25) * (1 - k) * 0.35 - (1 - k) * (1 - k) * 0.6; };
+
+let lastSrc = '';
+function setup() {
+  const L = window.LAYOUT;
+  document.documentElement.style.setProperty('--W', L.W + 'px');
+  document.documentElement.style.setProperty('--H', L.H + 'px');
+  if (L.vertical) document.body.classList.add('v');
+  const fb = $('frameBox');
+  Object.assign(fb.style, { left: L.box.x + 'px', top: L.box.y + 'px', width: L.box.w + 'px', height: L.box.h + 'px', borderRadius: (L.box.r || 0) + 'px' });
+  if (L.vertical) { $('bg').style.display = 'block'; fb.style.boxShadow = '0 18px 60px rgba(0,0,0,0.55)'; $('miniLogo').style.display = 'flex'; }
+  if (window.EDIT.url) $('endUrl').textContent = window.EDIT.url;
+}
+
+function frameFor(shot, sec) {
+  const list = window.FRAMES[shot];
+  if (!list || !list.length) return null;
+  const want = Math.round(sec * 30);
+  let best = list[0];
+  for (const f of list) { if (f <= want) best = f; else break; }
+  return `/shots/${shot}/${String(best).padStart(5, '0')}.jpg`;
+}
+
+async function renderFrame(T) {
+  const E = window.EDIT, L = window.LAYOUT;
+  // ---- footage
+  let clip = E.clips.find((c) => T >= c.start && T < c.start + c.dur);
+  let src = null, zoom = 1;
+  if (clip) {
+    const local = T - clip.start;
+    src = frameFor(clip.shot, clip.in + local);
+    zoom = 1 + (clip.zoom || 0) * (local / clip.dur);
+  } else if (T >= E.end.start) {
+    // end card: the meadow again, slowed down
+    src = frameFor(E.end.shot, (T - E.end.start) * 0.7);
+    zoom = 1.04 + 0.03 * ((T - E.end.start) / E.end.dur);
+  }
+  if (src && src !== lastSrc) {
+    const img = $('frame');
+    img.src = src;
+    await img.decode().catch(() => {});
+    if (L.vertical) $('bg').style.backgroundImage = `url(${src})`;
+    lastSrc = src;
+  }
+  $('frame').style.transform = `scale(${zoom})`;
+
+  // ---- title and end cards over dimmed footage
+  const tc = E.title, ec = E.end;
+  const inTitle = T >= tc.start && T < tc.start + tc.dur, inEnd = T >= ec.start;
+  let dim = 0;
+  if (inTitle) dim = 0.42 * Math.min(1, (tc.start + tc.dur - T) / 0.35);
+  if (inEnd) dim = 0.5 * ease((T - ec.start) / 0.5);
+  $('dim').style.opacity = dim;
+  card($('titleCard'), inTitle ? T - tc.start : -1, tc.dur, false);
+  // vertical: a small logo rides along between the title and the end card
+  if (L.vertical) {
+    const vis = !inTitle && !inEnd && T > tc.start;
+    const k = vis ? clamp01(Math.min((T - tc.start - tc.dur) / 0.3, (ec.start - T) / 0.3)) : 0;
+    $('miniLogo').style.opacity = k;
+    const ml = $('miniLogo');
+    ml.querySelector('.l1').style.transform = `rotate(${-4 + Math.sin(T * 2.1) * 1.2}deg)`;
+    ml.querySelector('.l2').style.transform = `rotate(${-2 - Math.sin(T * 2.1) * 1.2}deg)`;
+  }
+  card($('endCard'), inEnd ? T - ec.start : -1, ec.dur, true);
+
+  // ---- captions
+  const box = $('caps');
+  const live = E.captions.filter((c) => T >= c.start && T < c.start + c.dur);
+  box.innerHTML = '';
+  for (const c of live) box.append(caption(c, T - c.start, L));
+
+  // ---- flashes on the big cuts, fade in from and out to black
+  let flash = 0;
+  for (const f of E.flashes || []) { const d = T - f; if (d >= 0 && d < 0.22) flash = Math.max(flash, (1 - d / 0.22) * 0.85); }
+  $('flash').style.opacity = flash;
+  const black = Math.max(1 - T / 0.7, (T - (E.seconds - 1.2)) / 1.0);
+  $('black').style.opacity = clamp01(black);
+}
+
+function caption(c, local, L) {
+  const el = document.createElement('div');
+  el.className = 'cap ' + (c.pos === 'mid' ? 'mid' : '');
+  el.style.setProperty('--c', `var(--${c.color})`);
+  const out = clamp01((local - (c.dur - 0.22)) / 0.22);
+  if (L.vertical) {
+    Object.assign(el.style, { left: '60px', right: '60px', top: (c.pos === 'top' ? L.capTopV : L.capV) + 'px', alignItems: 'center', textAlign: 'center' });
+  } else if (c.pos === 'mid') el.style.top = '41%';
+  else if (c.pos === 'top') Object.assign(el.style, { left: '96px', top: '150px' });
+  else if (c.pos === 'right') Object.assign(el.style, { right: '96px', bottom: '190px', alignItems: 'flex-end', textAlign: 'right' });
+  else Object.assign(el.style, { left: '96px', bottom: '190px' });
+  if (c.kicker) {
+    const k = document.createElement('div'); k.className = 'kick'; k.textContent = c.kicker;
+    if (L.vertical) k.style.alignSelf = 'center'; else if (c.pos === 'right') k.style.alignSelf = 'flex-end';
+    const s = pop(local / 0.32);
+    k.style.transform = `scale(${s}) translateY(${out * 24}px)`; k.style.opacity = clamp01(local / 0.08) * (1 - out);
+    el.append(k);
+  }
+  const x = document.createElement('div'); x.className = 'txt'; x.textContent = c.text;
+  if (L.vertical) x.style.transformOrigin = '50% 50%'; else if (c.pos === 'right') x.style.transformOrigin = '100% 50%';
+  const lt = local - (c.kicker ? 0.09 : 0);
+  const s = c.pos === 'mid' ? 0.96 + 0.04 * easeOut(lt / 0.5) : pop(lt / 0.34);
+  x.style.transform = `scale(${s}) translateY(${out * 24}px)`;
+  x.style.opacity = clamp01(lt / (c.pos === 'mid' ? 0.3 : 0.1)) * (1 - out);
+  el.append(x);
+  return el;
+}
+
+function card(el, local, dur, isEnd) {
+  if (local < 0) { el.style.opacity = 0; return; }
+  const out = isEnd ? 0 : clamp01((local - (dur - 0.3)) / 0.3);
+  el.style.opacity = 1 - out;
+  const logo = el.querySelector('.logo');
+  const l1 = el.querySelector('.l1'), l2 = el.querySelector('.l2'), goo = el.querySelector('.goo b');
+  const s = pop(local / 0.45);
+  const L = window.LAYOUT;
+  const lift = isEnd ? (L.vertical ? -40 : -20) : 0;
+  logo.style.transform = `translateY(${lift}px) scale(${s * (isEnd ? 0.72 : 1)})`;
+  // the game's own logo wobble, in step with the edit instead of the wall clock
+  l1.style.transform = `rotate(${-4 + Math.sin(local * 2.1) * 1.6}deg)`;
+  l2.style.transform = `rotate(${-2 - Math.sin(local * 2.1) * 1.6}deg)`;
+  // the googly eye looks around, then straight at you
+  const gx = local < 1.0 ? Math.sin(local * 9) * 22 : local < 2.2 ? 22 * Math.cos((local - 1) * 3) : 0;
+  const gy = local < 1.0 ? Math.cos(local * 7) * 14 : 0;
+  goo.style.transform = `translate(${gx}%, ${gy}%)`;
+  const parts = el.querySelectorAll('.tagline2, .sub, .cta, .url');
+  parts.forEach((p, i) => {
+    const k = (local - 0.35 - i * 0.18) / 0.35;
+    p.style.opacity = clamp01(k);
+    p.style.transform = `translateY(${(1 - easeOut(k)) * 26}px) scale(${p.classList.contains('cta') ? pop(k) : 1})`;
+  });
+}
+
+window.renderFrame = renderFrame;
+window.setupCompose = setup;
+</script>
+</body>
+</html>
