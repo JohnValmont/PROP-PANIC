@@ -37,12 +37,12 @@ async function main() {
   const target = 'I=-14:TP=-1.5:LRA=11'; // the measurement pass only
   const res = require('node:child_process').spawnSync('ffmpeg', ['-hide_banner', ...mixIn, '-filter_complex', `${pre},loudnorm=${target}:print_format=json`, '-t', String(cues.seconds), '-f', 'null', '-'], { encoding: 'utf8' });
   const m = JSON.parse(res.stderr.slice(res.stderr.lastIndexOf('{'), res.stderr.lastIndexOf('}') + 1));
-  // make-up gain into a -1.5 dB ceiling; the limiter eats some of it on a peaky mix, so measure and top up
+  // make-up gain into a -2 dB ceiling (limited at 4x oversampling, so true peaks between samples are caught before AAC); the limiter eats some of it on a peaky mix, so measure and top up
   const outFile = path.join(outDir, 'mix.wav');
   const lufs = (f) => { const r = require('node:child_process').spawnSync('ffmpeg', ['-hide_banner', '-i', f, '-af', 'ebur128=framelog=quiet', '-f', 'null', '-'], { encoding: 'utf8' }); return Number(/I:\s+(-?[\d.]+) LUFS/.exec(r.stderr.slice(r.stderr.lastIndexOf('Summary')))[1]); };
   let gain = -14 - Number(m.input_i);
   for (let pass = 0; pass < 4; pass++) {
-    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...mixIn, '-filter_complex', `${pre},volume=${gain.toFixed(2)}dB,alimiter=limit=0.84:attack=1:release=80:level=false,aresample=48000`, '-t', String(cues.seconds), outFile]);
+    execFileSync('ffmpeg', ['-y', '-loglevel', 'error', ...mixIn, '-filter_complex', `${pre},volume=${gain.toFixed(2)}dB,aresample=192000,alimiter=limit=0.79:attack=1:release=80:level=false,aresample=48000`, '-t', String(cues.seconds), outFile]);
     const got = lufs(outFile);
     console.log(`pass ${pass + 1}: gain ${gain.toFixed(2)} dB -> ${got} LUFS`);
     if (Math.abs(got + 14) < 0.4) break;

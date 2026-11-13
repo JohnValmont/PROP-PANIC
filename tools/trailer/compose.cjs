@@ -87,9 +87,10 @@ async function video() {
   const silent = !AUDIO || AUDIO === '-';
   const args = ['-y', '-loglevel', 'error', '-f', 'image2pipe', '-framerate', '30', '-c:v', 'mjpeg', '-i', '-'];
   if (!silent) args.push('-ss', String(from), '-i', path.join(AUDIO, 'mix.wav'));
-  args.push('-c:v', 'libx264', '-preset', HALF ? 'veryfast' : 'slow', '-crf', HALF ? '23' : '17', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-movflags', '+faststart',
+  // 1080p at up to 12 Mbit/s (YouTube asks for 8 at 30 fps): sharp on every platform, small enough to upload anywhere
+  args.push('-c:v', 'libx264', '-preset', HALF ? 'veryfast' : 'slow', '-crf', HALF ? '23' : '19', '-maxrate', '12M', '-bufsize', '24M', '-pix_fmt', 'yuv420p', '-profile:v', 'high', '-movflags', '+faststart',
     '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709');
-  if (!silent) args.push('-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-shortest');
+  if (!silent) args.push('-af', 'volume=-1dB', '-c:a', 'aac', '-b:a', '256k', '-ar', '48000', '-shortest'); // 1 dB of headroom: AAC rings past the limiter's ceiling
   args.push(OUT);
   const ff = spawn('ffmpeg', args, { stdio: ['pipe', 'inherit', 'inherit'] });
   const t0 = Date.now();
