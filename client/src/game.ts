@@ -23,7 +23,7 @@ import { Net } from './net';
 import { assets } from './assets';
 import { HunterRig, buildBlaster, buildEyes } from './hunter';
 import { WorldView } from './world';
-import { ACTIONS, B, keyLabel } from './keys';
+import { ACTIONS, B, isBound, keyLabel } from './keys';
 
 const STEP = 1 / 60;
 const DUCK_TYPE = PROP_INDEX['duck'];
@@ -377,13 +377,18 @@ export class Game {
     });
     document.addEventListener('mousedown', (e) => {
       if (!this.locked) return;
+      // a mouse button bound to an action in the key bindings does that action instead of its usual job
+      const code = `Mouse${e.button}`;
+      if (isBound(code)) { e.preventDefault(); this.keys.add(code); this.pressKey(code); return; }
       // a ghost's mouse buttons pick who to watch
       // (while haunting is possible, left click haunts and right click takes over choosing who to watch)
       if (this.specOn) { if (e.button === 0) this.ghostAct(); else if (e.button === 2) { if (!this.canHaunt()) this.specCycle(-1); else if (this.specMode === 'free') this.specClick(); else this.specCycle(1); } return; }
       if (e.button === 0) { this.mouseL = true; if (this.team === 'prop') this.tryTransform(); }
       if (e.button === 2) this.mouseR = true;
     });
-    document.addEventListener('mouseup', (e) => { if (e.button === 0) this.mouseL = false; if (e.button === 2) this.mouseR = false; });
+    // side buttons would otherwise make the browser go back / forward a page
+    document.addEventListener('auxclick', (e) => { if (this.inGame && e.button >= 3) e.preventDefault(); });
+    document.addEventListener('mouseup', (e) => { this.keys.delete(`Mouse${e.button}`); if (this.inGame && e.button >= 3) e.preventDefault(); if (e.button === 0) this.mouseL = false; if (e.button === 2) this.mouseR = false; });
     document.addEventListener('contextmenu', (e) => { if (this.inGame) e.preventDefault(); });
     document.addEventListener('wheel', (e) => { if (this.locked) this.camDist = Math.max(1.6, Math.min(6.5, this.camDist + Math.sign(e.deltaY) * 0.4)); }, { passive: true });
     document.addEventListener('keyup', (e) => { this.keys.delete(e.code); if (e.code === 'Tab') this.showScores = false; });
@@ -394,26 +399,31 @@ export class Game {
       if (e.code === 'Tab') { e.preventDefault(); this.showScores = true; return; }
       if (e.repeat) return;
       this.keys.add(e.code);
-      const digit = e.code.startsWith('Digit') ? Number(e.code.slice(5)) : 0;
-      if (this.chatOpen) {
-        if (digit >= 1 && digit <= QUICK_CHAT.length) this.net.send({ t: 'chat', i: digit - 1 });
-        this.chatOpen = false; this.hud.chatMenu(false);
-        return;
-      }
-      if (this.specOn && this.specKey(e.code)) return;
-      switch (e.code) {
-        case 'Enter': this.chatOpen = true; this.hud.chatMenu(true); break;
-        case B.act: this.tryTransform(); break;
-        case B.help: this.helpOn = !this.helpOn; try { localStorage.setItem('pp_help', this.helpOn ? '1' : '0'); } catch { /* ignore */ } break;
-        case B.ab1: this.useAbility(this.team === 'hunter' ? 'pulse' : 'decoy'); break;
-        case B.ab2: this.useAbility(this.team === 'hunter' ? 'shock' : 'ghost'); break;
-        case B.dash: if (this.team === 'prop' && this.alive) { if (this.body.dashCd <= 0) { this.dashQueued = true; this.sfx.play('dash'); } else this.sfx.play('deny'); } break;
-        case B.taunt: this.taunt(Math.floor(Math.random() * TAUNTS.length)); break;
-        case 'KeyM': { const m = this.sfx.toggleMute(); localStorage.setItem('pp_mute', m ? '1' : '0'); this.hud.popup(m ? 'Sound off' : 'Sound on'); break; }
-        case 'Minus': case 'Equal': this.sens = Math.max(0.0006, Math.min(0.006, this.sens * (e.code === 'Minus' ? 0.88 : 1.14))); localStorage.setItem('pp_sens', String(this.sens)); this.hud.popup(`Mouse sensitivity ${(this.sens / 0.0022).toFixed(2)}x`); break;
-        default: if (digit >= 1 && digit <= 5) this.taunt(digit - 1);
-      }
+      this.pressKey(e.code);
     });
+  }
+
+  /** One press of a bound key or mouse button (code is a KeyboardEvent.code, or 'Mouse<button>'). */
+  private pressKey(code: string) {
+    const digit = code.startsWith('Digit') ? Number(code.slice(5)) : 0;
+    if (this.chatOpen) {
+      if (digit >= 1 && digit <= QUICK_CHAT.length) this.net.send({ t: 'chat', i: digit - 1 });
+      this.chatOpen = false; this.hud.chatMenu(false);
+      return;
+    }
+    if (this.specOn && this.specKey(code)) return;
+    switch (code) {
+      case 'Enter': this.chatOpen = true; this.hud.chatMenu(true); break;
+      case B.act: this.tryTransform(); break;
+      case B.help: this.helpOn = !this.helpOn; try { localStorage.setItem('pp_help', this.helpOn ? '1' : '0'); } catch { /* ignore */ } break;
+      case B.ab1: this.useAbility(this.team === 'hunter' ? 'pulse' : 'decoy'); break;
+      case B.ab2: this.useAbility(this.team === 'hunter' ? 'shock' : 'ghost'); break;
+      case B.dash: if (this.team === 'prop' && this.alive) { if (this.body.dashCd <= 0) { this.dashQueued = true; this.sfx.play('dash'); } else this.sfx.play('deny'); } break;
+      case B.taunt: this.taunt(Math.floor(Math.random() * TAUNTS.length)); break;
+      case 'KeyM': { const m = this.sfx.toggleMute(); localStorage.setItem('pp_mute', m ? '1' : '0'); this.hud.popup(m ? 'Sound off' : 'Sound on'); break; }
+      case 'Minus': case 'Equal': this.sens = Math.max(0.0006, Math.min(0.006, this.sens * (code === 'Minus' ? 0.88 : 1.14))); localStorage.setItem('pp_sens', String(this.sens)); this.hud.popup(`Mouse sensitivity ${(this.sens / 0.0022).toFixed(2)}x`); break;
+      default: if (digit >= 1 && digit <= 5) this.taunt(digit - 1);
+    }
   }
 
   private useAbility(k: 'decoy' | 'ghost' | 'pulse' | 'shock') {

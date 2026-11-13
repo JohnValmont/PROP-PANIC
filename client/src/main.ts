@@ -278,7 +278,7 @@ fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online
 import { ACTIONS, B, keyLabel, resetBinds, setBind } from './keys';
 let listening = '';
 function renderBinds() {
-  $('binds').innerHTML = ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span><button data-a="${id}" class="${listening === id ? 'listening' : ''}">${listening === id ? 'press a key…' : keyLabel(B[id])}</button></div>`).join('');
+  $('binds').innerHTML = ACTIONS.map(([id, label]) => `<div class="bind"><span>${label}</span><button data-a="${id}" class="${listening === id ? 'listening' : ''}">${listening === id ? 'press a key / button…' : keyLabel(B[id])}</button></div>`).join('');
 }
 $('binds').onclick = (e) => { const a = (e.target as HTMLElement).dataset.a; if (a) { listening = a; renderBinds(); } };
 $('resetBinds').onclick = () => { resetBinds(); listening = ''; renderBinds(); };
@@ -288,6 +288,25 @@ window.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') setBind(listening, e.code);
   listening = ''; renderBinds();
 }, true);
+// mouse buttons can be bound too: middle / side buttons anywhere, left / right only on the waiting button itself
+// (a left click elsewhere just cancels, so clicking away never binds by accident)
+let swallowUntil = 0, swallowBtn = -1;
+window.addEventListener('mousedown', (e) => {
+  if (!listening) return;
+  const onBtn = (e.target as HTMLElement)?.dataset?.a === listening;
+  e.preventDefault(); e.stopImmediatePropagation();
+  if ((e.button !== 0 && e.button !== 2) || onBtn) setBind(listening, `Mouse${e.button}`);
+  listening = ''; renderBinds();
+  swallowUntil = performance.now() + 600; swallowBtn = e.button;
+}, true);
+// the click / context menu / back-forward navigation that follows that press must not do anything else
+for (const ev of ['mouseup', 'click', 'auxclick', 'contextmenu'] as const) {
+  window.addEventListener(ev, (e) => {
+    if (performance.now() > swallowUntil || e.button !== swallowBtn) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (ev === 'click' || ev === 'auxclick') swallowUntil = 0; // that press is over
+  }, true);
+}
 renderBinds();
 // ---------------------------------------------------------------- sound test: hear every track and effect
 let stopSoundTest = () => {};
