@@ -10,7 +10,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, type Phase, type Team } from '../../shared/constants';
-import { bankRound, kitToWire, utcDay, xpLevel, type Profile, type Report } from '../../shared/progress';
+import { GUNS, KIT, bankRound, kitToWire, utcDay, xpLevel, type Profile, type Report, type WireKit } from '../../shared/progress';
 import { loadProfile, saveProfile } from './profile';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
@@ -21,7 +21,7 @@ import { Fx, makeBeacon, textSprite } from './fx';
 import { Hud, esc, type AbilityView } from './hud';
 import { Net } from './net';
 import { assets } from './assets';
-import { HunterRig, buildBlaster, buildEyes } from './hunter';
+import { HunterRig, buildEyes, buildViewmodel } from './hunter';
 import { WorldView } from './world';
 import { ACTIONS, B, isBound, keyLabel } from './keys';
 
@@ -115,7 +115,8 @@ export class Game {
   sens = 0.0022;
 
   // misc
-  private viewmodel: THREE.Object3D; private flashlight: THREE.SpotLight; private highlight: THREE.LineSegments;
+  /** Holds the first-person arms and blaster (rebuilt when the kit, or the hunter being watched, changes). */
+  private viewmodel = new THREE.Group(); private vmKey = ''; private flashlight: THREE.SpotLight; private highlight: THREE.LineSegments;
   private last = performance.now(); private time = 0; private menuAngle = 0;
   private fpsAcc = 0; private fpsN = 0; private fpsChecked = false;
   quality: Quality = 'high';
@@ -166,17 +167,14 @@ export class Game {
     this.composer.addPass(this.bloom);
     this.composer.addPass(new OutputPass());
     this.muzzle = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: new THREE.Color(4, 3.2, 1.2), transparent: true, opacity: 0.9 }));
-    this.muzzle.position.set(0, 0, -0.46); this.muzzle.visible = false;
+    this.muzzle.visible = false;
     this.ghostMat = new THREE.MeshStandardMaterial({ color: 0xa8dcff, roughness: 0.35, transparent: true, opacity: 0.36, depthWrite: false });
     this.scene.add(this.camera);
     this.camera.rotation.order = 'YXZ';
 
-    this.viewmodel = buildBlaster();
-    this.viewmodel.traverse((o) => { o.castShadow = false; });
-    this.viewmodel.position.set(0.27, -0.25, -0.5);
+    this.viewmodel.position.set(0.25, -0.2, -0.5);
     this.viewmodel.visible = false;
     this.camera.add(this.viewmodel);
-    this.viewmodel.add(this.muzzle);
     this.flashlight = new THREE.SpotLight(0xfff2cc, 0, 32, 0.52, 0.5, 1.2);
     this.flashlight.position.set(0.1, -0.05, -1); // just past the blaster so it doesn't blow out the viewmodel
     this.flashlight.target.position.set(0.1, -0.05, -2);
@@ -316,8 +314,9 @@ export class Game {
     saveProfile(this.profile);
     const w = kitToWire(this.profile);
     this.preview.clear();
-    this.previewRig = new HunterRig(w[0], w[1]);
+    this.previewRig = new HunterRig(w[KIT.paint], w[KIT.hat], w[KIT.char], w[KIT.gun]);
     this.preview.add(this.previewRig.root);
+    this.setViewmodel(w);
     // the wardrobe shows eyes and pops on a cardboard box next to the hunter
     this.showcase.clear();
     const box = assets.propObject(PROP_INDEX_BOX);
@@ -325,6 +324,32 @@ export class Game {
     eyes.position.set(0, PROPS[PROP_INDEX_BOX].h + 0.07, PROPS[PROP_INDEX_BOX].d * 0.22);
     eyes.name = 'eyes';
     this.showcase.add(box, eyes);
+  }
+  /** First-person arms and blaster for a kit: yours, or the hunter a ghost is watching through. */
+  private setViewmodel(w: WireKit | undefined) {
+    const p = (w?.[KIT.paint] ?? 0), c = (w?.[KIT.char] ?? 0), g = (w?.[KIT.gun] ?? 0), key = `${p}.${c}.${g}`;
+    if (key === this.vmKey) return;
+    this.vmKey = key;
+    this.viewmodel.clear();
+    const vm = buildViewmodel(p, c, g);
+    this.viewmodel.add(vm);
+    (vm.getObjectByName('muzzle') ?? vm).add(this.muzzle);
+    (this.muzzle.material as THREE.MeshBasicMaterial).color.set(GUNS[g]?.flash ?? 0xffe08a).multiplyScalar(3.5);
+  }
+  private previewKick = 0;
+  /** The menu hunter fires a test shot with the blaster and trail just put on. */
+  previewShot() {
+    const rig = this.previewRig;
+    if (!rig) return;
+    this.previewKick = 1;
+    this.preview.updateMatrixWorld(true);
+    const from = rig.muzzle.getWorldPosition(new THREE.Vector3());
+    const dir = new THREE.Vector3(0, 0, 1).applyQuaternion(this.preview.getWorldQuaternion(new THREE.Quaternion()));
+    const w = kitToWire(this.profile);
+    this.fx.zap(from, from.clone().addScaledVector(dir, 9), w[KIT.trail]);
+    this.fx.flash(from.x, from.y, from.z, GUNS[w[KIT.gun]]?.flash ?? 0xffe08a, 6);
+    this.sfx.play('shoot', undefined, 0.6);
+    const extra = GUNS[w[KIT.gun]]?.sfx; if (extra) this.sfx.play(extra, undefined, 0.5);
   }
   /** The googly-eyed box beside the menu hunter: shown while the wardrobe is open. */
   showcase = new THREE.Group();
@@ -553,7 +578,7 @@ export class Game {
       }
       let e = this.ents.get(r.id);
       // hunters are not told a prop's disguise up front (-1): it arrives with the prop's position once it is in view
-      let wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : `hunter:${r.kit?.[0] | 0}.${r.kit?.[1] | 0}`) : r.disguise >= 0 ? 'prop:' + r.disguise : '?';
+      let wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : `hunter:${r.kit?.[KIT.paint] | 0}.${r.kit?.[KIT.hat] | 0}.${r.kit?.[KIT.char] | 0}.${r.kit?.[KIT.gun] ?? 0}`) : r.disguise >= 0 ? 'prop:' + r.disguise : '?';
       if (wantKind === '?') wantKind = e && e.kind.startsWith('prop:') ? e.kind : 'prop:' + (PROPS[e?.netType ?? -1] ? e!.netType : -1);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
@@ -607,8 +632,8 @@ export class Game {
     e.kind = kind; e.rig = null; e.model = null;
     if (kind === 'prop:-1') { e.labelKey = ''; return; } // an unseen prop: nothing to draw yet
     if (kind.startsWith('hunter')) {
-      const [pi, hi] = kind.slice(7).split('.').map(Number);
-      e.rig = new HunterRig(pi || 0, hi || 0);
+      const [pi, hi, ci, gi] = kind.slice(7).split('.').map(Number);
+      e.rig = new HunterRig(pi || 0, hi || 0, ci || 0, gi || 0);
       e.model = e.rig.root; e.h = CFG.HUNTER_H;
     } else {
       const type = kind === 'duck' ? DUCK_TYPE : Number(kind.slice(5));
@@ -729,13 +754,16 @@ export class Game {
         const src = this.entPos(m.by);
         const shooter = this.ents.get(m.by); if (shooter) shooter.kick = 1;
         const to = new THREE.Vector3(m.x, m.y, m.z);
+        const kit = this.roster.get(m.by)?.kit;
         if (src) {
-          const from = (mine && !this.quackedMe) || eyes
-            ? this.camera.localToWorld(new THREE.Vector3(0.27, -0.2, -0.9))
-            : new THREE.Vector3(src[0], src[1] + 1.3, src[2]);
-          this.fx.tracer(from, to, 0xfff27a);
+          // from the muzzle you can see: your own blaster on screen, or the one in the shooter's hand
+          let from: THREE.Vector3;
+          if ((mine && !this.quackedMe) || eyes) { this.muzzle.updateWorldMatrix(true, false); from = this.muzzle.getWorldPosition(new THREE.Vector3()); }
+          else if (shooter?.rig && shooter.group.visible) { shooter.group.updateMatrixWorld(true); from = shooter.rig.muzzle.getWorldPosition(new THREE.Vector3()); }
+          else from = new THREE.Vector3(src[0], src[1] + 1.3, src[2]);
+          this.fx.zap(from, to, kit?.[KIT.trail] ?? 0);
           if (!mine) this.sfx.play('shoot', [src[0], src[1] + 1.4, src[2]]);
-          this.fx.flash(from.x, from.y, from.z, 0xffe08a, mine ? 14 : 22);
+          this.fx.flash(from.x, from.y, from.z, GUNS[kit?.[KIT.gun] ?? 0]?.flash ?? 0xffe08a, mine ? 14 : 22);
         }
         if (m.hit === 1) { this.fx.burst(m.x, m.y, m.z, 5, [0xdddddd, 0xfff27a], 1.5, 1.5, 0.6, 0.4); this.sfx.play('thud', [m.x, m.y, m.z], 0.6); }
         else if (m.hit === 2) {
@@ -954,6 +982,8 @@ export class Game {
     this.net.send({ t: 'fire', yaw: this.yaw, pitch: this.pitch, rt: now - INTERP_MS });
     this.recoil = 1; this.muzzleT = 0.05; this.fovPunch = Math.max(this.fovPunch, 1.6);
     this.sfx.play('shoot');
+    const extra = GUNS[kitToWire(this.profile)[KIT.gun]]?.sfx; // a little extra on your own shot only: everyone else hears the same zap
+    if (extra) this.sfx.play(extra, undefined, 0.35);
   }
 
   private sampleEnt(e: Ent, rt: number, dt: number) {
@@ -1130,7 +1160,8 @@ export class Game {
       this.preview.visible = true;
       this.preview.rotation.y = 0.35 + Math.sin(this.menuAngle * 0.9) * 0.3;
       this.preview.position.y = Math.abs(Math.sin(this.menuAngle * 2.2)) * 0.04;
-      this.previewRig?.pose({ time: this.menuAngle, stepT: 0, move: 0, pitch: 0.25 + Math.sin(this.menuAngle * 1.1) * 0.2, air: false, dizzy: false, kick: 0 });
+      this.previewKick = Math.max(0, this.previewKick - dt * 5);
+      this.previewRig?.pose({ time: this.menuAngle, stepT: 0, move: 0, pitch: 0.25 + Math.sin(this.menuAngle * 1.1) * 0.2, air: false, dizzy: false, kick: this.previewKick });
       this.showcase.visible = this.showcaseOn;
       if (this.showcaseOn) {
         // the box twitches now and then, eyes out, like a prop that cannot keep still
@@ -1169,6 +1200,7 @@ export class Game {
       firstPerson = this.team === 'hunter' && !this.quackedMe;
       dashing = this.body.dashLeft > 0 && !firstPerson;
       if (firstPerson) {
+        this.setViewmodel(kitToWire(this.profile));
         const bobY = this.poseViewmodel(dt, Math.hypot(this.body.vx, this.body.vz), this.body.ground);
         cam.position.set(this.rpos.x, this.camY + CFG.HUNTER_EYE + bobY, this.rpos.z);
         if (this.glide < 1) { this.glide = Math.min(1, this.glide + dt * 2.2); const k = this.glide * this.glide * (3 - 2 * this.glide); cam.position.lerpVectors(this.glideFrom, cam.position.clone(), k); }
@@ -1212,7 +1244,7 @@ export class Game {
     this.viewmodel.visible = true;
     this.recoil = Math.max(0, this.recoil - dt * 7);
     const r = this.recoil * this.recoil;
-    this.viewmodel.position.set(0.27 + Math.cos(this.bob * 0.5) * 0.008 * k, -0.25 + Math.abs(Math.sin(this.bob * 0.5)) * 0.012 * k + r * 0.02, -0.5 + r * 0.12);
+    this.viewmodel.position.set(0.25 + Math.cos(this.bob * 0.5) * 0.008 * k, -0.2 + Math.abs(Math.sin(this.bob * 0.5)) * 0.012 * k + r * 0.02, -0.5 + r * 0.12);
     this.viewmodel.rotation.set(r * 0.35, 0, 0);
     this.muzzleT -= dt; this.muzzle.visible = this.muzzleT > 0;
     if (this.muzzle.visible) this.muzzle.scale.setScalar(0.8 + Math.random() * 0.9);
@@ -1337,6 +1369,7 @@ export class Game {
         if (this.specPov) {
           const a = Math.min(1, dt * 18);
           this.yaw = lerpAngle(this.yaw, e.f, a); this.pitch += (e.pitch - this.pitch) * a;
+          this.setViewmodel(this.roster.get(e.id)?.kit); // their arms and blaster, not yours
           const bobY = this.poseViewmodel(dt, e.speed, Math.abs(e.vy) < 1.2);
           want.set(e.x, e.y + CFG.HUNTER_EYE + bobY, e.z);
         } else {

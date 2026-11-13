@@ -44,16 +44,24 @@ export function rankOf(level: number): { name: string; next: string; nextAt: num
 // ============================================================================ cosmetics
 
 /**
- * Four slots, none of which can give a hiding prop away:
- * - paint and hat: on the hunter robot, which everyone can see anyway;
- * - eyes: the googly eyes that pop out of a prop only when it has already given itself away (taunt, panic, scanner);
- * - pop: the burst when you are caught, when there is nothing left to hide.
+ * Seven slots, none of which can give a hiding prop away or change how a round plays:
+ * - the hunter's look (the Characters tab and the Hunter locker): character, blaster, zap trail, hat and
+ *   paint. A hunter is in plain view anyway, and every blaster fires the same shot with the same rules;
+ * - the prop's (the Prop wardrobe): eyes, the googly eyes that pop out of a prop only when it has already
+ *   given itself away (taunt, panic, scanner), and pop, the burst when you are caught.
  */
-export type Slot = 'paint' | 'hat' | 'eyes' | 'pop';
+export type Slot = 'char' | 'gun' | 'trail' | 'paint' | 'hat' | 'eyes' | 'pop';
 export type Unlock = { free: true } | { level: number } | { price: number } | { feat: string };
 export interface Item { id: string; name: string; slot: Slot; how: Unlock; }
 export interface Paint extends Item { hex: number; metal: number; rough: number; iri?: number; }
 export interface Pop extends Item { colors: number[]; n: number; speed: number; up: number; size: number; life: number; grav: number; }
+/** Rarity is only a label (and a frame colour): it changes nothing in play. */
+export type Tier = 'common' | 'rare' | 'epic' | 'legendary';
+export interface Char extends Item { tier: Tier; blurb: string; }
+/** `two`: held in both hands. `flash`: muzzle flash colour. `sfx`: an extra local sound on your own shot (everyone still hears the same zap). */
+export interface Gun extends Item { tier: Tier; blurb: string; two?: boolean; flash: number; sfx?: string; }
+/** A zap trail: the tracer colours (cycled shot to shot) and, optionally, sparks left along the line. */
+export interface Trail extends Item { colors: number[]; spark?: number[]; width: number; }
 
 const free = { free: true } as const;
 const lv = (level: number) => ({ level });
@@ -101,7 +109,51 @@ export const POPS: Pop[] = ([
 ] as [string, string, Unlock, number[], number, number, number, number, number, number][])
   .map(([id, name, how, colors, n, speed, up, size, life, grav]) => ({ id: `pop.${id}`, name, slot: 'pop' as const, how, colors, n, speed, up, size, life, grav }));
 
-export const SLOTS: Record<Slot, Item[]> = { paint: PAINTS, hat: HATS, eyes: EYES, pop: POPS };
+/** Hunter characters. Index 0 is what an older client (which sends no character) shows as. */
+export const CHARS: Char[] = ([
+  ['guard', 'Night Guard', free, 'common', 'Twelve years on the night shift. Has never once found the gnome.'],
+  ['robot', 'Securibot 3000', free, 'common', 'The original. Runs on batteries and suspicion.'],
+  ['granny', 'Granny Tumbleton', lv(6), 'rare', 'Founded the Emporium in 1952. Knows exactly where everything should be.'],
+  ['janitor', 'The Janitor', buy(800), 'rare', 'Has mopped every aisle. Notices when a bucket is one bucket too many.'],
+  ['exterminator', 'Pest Control', buy(1500), 'epic', 'Was called about a rodent. Found a chair with legs that move.'],
+  ['detective', 'Inspector Gumshoe', buy(2000), 'epic', 'Follows the clues. The clues are usually a lamp.'],
+  ['agent', 'Agent Zero', feat('bloodhound'), 'epic', 'Classified. The sunglasses stay on. Indoors. At night.'],
+  ['santa', 'Mall Santa', buy(2500), 'legendary', 'Has a list. Is checking it twice. You are on it.'],
+  ['mascot', 'Barnaby Bear', buy(4000), 'legendary', 'The store mascot. Nobody knows who is inside. Nobody asks.'],
+] as [string, string, Unlock, Tier, string][]).map(([id, name, how, tier, blurb]) => ({ id: `char.${id}`, name, slot: 'char' as const, how, tier, blurb }));
+
+/** Blasters. All of them fire the same shot: the look, the flash and a little extra sound are the only difference. */
+export const GUNS: Gun[] = ([
+  // id, name, unlock, tier, blurb, flash, two-handed, extra sound
+  ['zapper', 'Zapper', free, 'common', 'Standard issue. Reliable. Beige.', 0xffe08a],
+  ['soaker', 'Super Soaker', lv(2), 'common', 'Pressurised. Mostly with confidence.', 0x9ad8ff, true, 'pop'],
+  ['plunger', 'Plunger Popper', lv(4), 'common', 'Fires suction. Unclogs mysteries.', 0xffb46b, false, 'pop'],
+  ['banana', 'Banana', buy(300), 'rare', 'Point it like you mean it.', 0xfff27a],
+  ['dryer', 'Hair Dryer', buy(500), 'rare', 'Hot air, aimed at furniture.', 0xff9ad5, false, 'dash'],
+  ['baguette', 'Baguette', buy(650), 'rare', 'Day-old. Rock hard. Very French.', 0xffd08a],
+  ['raygun', 'Retro Raygun', buy(800), 'epic', 'Straight out of a 1950s comic book.', 0x8affc1],
+  ['duck', 'Duck Cannon', buy(1100), 'epic', 'The duck is load-bearing.', 0xffe14d, true, 'squeak'],
+  ['blower', 'Leaf Blower', buy(1300), 'epic', 'For leaves. And for people pretending to be leaves.', 0xc8ffb0, true, 'dash'],
+  ['fish', 'Wet Fish', buy(1600), 'epic', 'Slippery. Smells like the stock room.', 0x9ae6ff, false, 'squeak'],
+  ['remote', 'TV Remote', feat('sharpshooter'), 'epic', 'Pause. Rewind. Caught.', 0xff6b6b],
+  ['fingers', 'Finger Guns', buy(2500), 'legendary', 'Pew pew. No blaster required.', 0xffffff],
+  ['golden', 'Golden Zapper', feat('champion'), 'legendary', 'Awarded to champions. Polished nightly.', 0xffd166],
+] as [string, string, Unlock, Tier, string, number, boolean?, string?][]).map(([id, name, how, tier, blurb, flash, two, sfx]) => ({ id: `gun.${id}`, name, slot: 'gun' as const, how, tier, blurb, flash, two, sfx }));
+
+export const TRAILS: Trail[] = ([
+  ['zap', 'Zap', free, [0xfff27a], undefined, 1],
+  ['laser', 'Laser Red', lv(3), [0xff3b3b], undefined, 0.75],
+  ['plasma', 'Plasma Blue', buy(250), [0x4fd6ff], [0xbff4ff], 1.2],
+  ['toxic', 'Toxic Green', buy(350), [0x7dff4f], [0xc6ff8a, 0x4caf50], 1.2],
+  ['bubbles', 'Bubbles', buy(500), [0xbfe9ff], [0xbfe9ff, 0xe8f8ff, 0x8fd3ff], 0.8],
+  ['confetti', 'Confetti', buy(700), [0xffffff], CONFETTI, 0.8],
+  ['rainbow', 'Rainbow', lv(12), [0xff595e, 0xffca3a, 0x8ac926, 0x1982c4, 0x6a4c93], undefined, 1.1],
+  ['gold', 'Gold Rush', feat('collector'), [0xffd166], [0xffc64a, 0xfff3b0], 1.1],
+] as [string, string, Unlock, number[], number[] | undefined, number][]).map(([id, name, how, colors, spark, width]) => ({ id: `trail.${id}`, name, slot: 'trail' as const, how, colors, spark, width }));
+
+export const SLOTS: Record<Slot, Item[]> = { char: CHARS, gun: GUNS, trail: TRAILS, paint: PAINTS, hat: HATS, eyes: EYES, pop: POPS };
+/** Slot order in the kit; the wire kit is [paint, hat, eyes, pop, title, char, gun, trail]. */
+const KIT_SLOTS: Slot[] = ['char', 'gun', 'trail', 'paint', 'hat', 'eyes', 'pop'];
 export const ITEMS: Record<string, Item> = {};
 for (const list of Object.values(SLOTS)) for (const it of list) ITEMS[it.id] = it;
 
@@ -136,7 +188,7 @@ export interface Life {
 const LIFE_KEYS: (keyof Life)[] = ['rounds', 'games', 'wins', 'propRounds', 'hunterRounds', 'survived', 'untouched', 'catches', 'hits', 'shots', 'innocents', 'cleanHunts',
   'escapes', 'bonks', 'decoys', 'spooks', 'haunts', 'near', 'taunts', 'ducks', 'points', 'best', 'podiums', 'champs'];
 
-export interface Kit { paint: string; hat: string; eyes: string; pop: string; title: string; }
+export interface Kit { char: string; gun: string; trail: string; paint: string; hat: string; eyes: string; pop: string; title: string; }
 export interface Profile {
   v: 1;
   xp: number; coins: number;
@@ -158,7 +210,7 @@ export function newProfile(now = Date.now()): Profile {
   for (const k of LIFE_KEYS) life[k] = 0;
   return {
     v: 1, xp: 0, coins: 0, owned: [], cat: {}, life, feats: [], paid: '', since: now,
-    kit: { paint: PAINTS[Math.floor(Math.random() * 8)].id, hat: HATS[0].id, eyes: EYES[0].id, pop: POPS[0].id, title: '' },
+    kit: { char: CHARS[0].id, gun: GUNS[0].id, trail: TRAILS[0].id, paint: PAINTS[Math.floor(Math.random() * 8)].id, hat: HATS[0].id, eyes: EYES[0].id, pop: POPS[0].id, title: '' },
     jobs: { day: '', have: [0, 0, 0], done: [false, false, false], shift: false },
   };
 }
@@ -183,7 +235,7 @@ export function sanitizeProfile(raw: any): Profile {
   }
   if (typeof raw.paid === 'string') p.paid = raw.paid.slice(0, 80);
   const k = raw.kit ?? {};
-  for (const slot of ['paint', 'hat', 'eyes', 'pop'] as Slot[]) {
+  for (const slot of KIT_SLOTS) {
     const id = k[slot];
     if (typeof id === 'string' && ITEMS[id]?.slot === slot && owns(p, id)) p.kit[slot] = id;
   }
@@ -242,14 +294,18 @@ export function unlockText(it: Item): string {
 
 // ============================================================================ the kit on the wire
 
-/** [paint, hat, eyes, pop, title] as indices; title 0 is none, otherwise a feat index + 1. */
+/**
+ * [paint, hat, eyes, pop, title, char, gun, trail] as indices; title 0 is none, otherwise a feat index + 1.
+ * The hunter fields were appended in 2.12: an older client sends five and gets the defaults for the rest.
+ */
 export type WireKit = number[];
-export const KIT_LIMITS = () => [PAINTS.length, HATS.length, EYES.length, POPS.length, FEATS.length + 1];
+export const KIT = { paint: 0, hat: 1, eyes: 2, pop: 3, title: 4, char: 5, gun: 6, trail: 7 } as const;
+export const KIT_LIMITS = () => [PAINTS.length, HATS.length, EYES.length, POPS.length, FEATS.length + 1, CHARS.length, GUNS.length, TRAILS.length];
 
 export function kitToWire(p: Profile): WireKit {
   const ix = (list: Item[], id: string) => Math.max(0, list.findIndex((it) => it.id === id && owns(p, id)));
   const t = p.feats.includes(p.kit.title) ? FEAT_INDEX[p.kit.title] + 1 : 0;
-  return [ix(PAINTS, p.kit.paint), ix(HATS, p.kit.hat), ix(EYES, p.kit.eyes), ix(POPS, p.kit.pop), t];
+  return [ix(PAINTS, p.kit.paint), ix(HATS, p.kit.hat), ix(EYES, p.kit.eyes), ix(POPS, p.kit.pop), t, ix(CHARS, p.kit.char), ix(GUNS, p.kit.gun), ix(TRAILS, p.kit.trail)];
 }
 
 /** Server side: any value at all becomes a valid kit. Ownership cannot be checked without accounts (see SECURITY.md). */
@@ -258,7 +314,9 @@ export function cleanKit(raw: unknown): WireKit {
   const a = Array.isArray(raw) ? raw : [];
   return lim.map((n, i) => { const v = a[i]; return typeof v === 'number' && Number.isFinite(v) ? Math.max(0, Math.min(n - 1, Math.floor(v))) : 0; });
 }
-export const randomKit = (r = Math.random): WireKit => [Math.floor(r() * 8), Math.floor(r() * HATS.length), Math.floor(r() * EYES.length), Math.floor(r() * POPS.length), 0];
+/** Bots dress at random, from everything: a lobby is also the shop window. */
+export const randomKit = (r = Math.random): WireKit => [Math.floor(r() * 8), Math.floor(r() * HATS.length), Math.floor(r() * EYES.length), Math.floor(r() * POPS.length), 0,
+  Math.floor(r() * CHARS.length), Math.floor(r() * GUNS.length), Math.floor(r() * TRAILS.length)];
 export const titleName = (wire: number) => (wire > 0 ? FEATS[wire - 1]?.name ?? '' : '');
 
 // ============================================================================ feats: achievements you can wear as a title
@@ -277,7 +335,7 @@ const life = (id: string, name: string, desc: string, key: keyof Life, goal: num
 export const FEATS: Feat[] = [
   { id: 'shopper', name: 'Window Shopper', group: 'Catalogue', desc: 'Earn 10 catalogue stamps', goal: 10, progress: stampCount, reward: { coins: 50 } },
   { id: 'bargain', name: 'Bargain Hunter', group: 'Catalogue', desc: 'Earn 30 catalogue stamps', goal: 30, progress: stampCount, reward: { coins: 100 } },
-  { id: 'collector', name: 'Collector', group: 'Catalogue', desc: 'Earn 60 catalogue stamps', goal: 60, progress: stampCount, reward: { coins: 250 } },
+  { id: 'collector', name: 'Collector', group: 'Catalogue', desc: 'Earn 60 catalogue stamps', goal: 60, progress: stampCount, reward: { coins: 250, item: 'trail.gold' } },
   { id: 'curator', name: 'Curator', group: 'Catalogue', desc: 'Earn 100 catalogue stamps', goal: 100, progress: stampCount, reward: { coins: 500 } },
   { id: 'heir', name: "Tumbleton's Heir", group: 'Catalogue', desc: `Earn every catalogue stamp (${STAMPS_MAX})`, goal: STAMPS_MAX, progress: stampCount, reward: { item: 'paint.gilded' } },
   deptFeat('interior', 'Interior Designer', 'furniture', 'hat.lampshade'),
@@ -292,12 +350,12 @@ export const FEATS: Feat[] = [
   life('bamboozler', 'Bamboozler', 'Fool hunters with decoys 20 times', 'decoys', 20, { coins: 100 }),
   life('daredevil', 'Daredevil', "Spend 10 minutes in all within arm's reach of a hunter", 'near', 600, { coins: 100 }),
   life('loudmouth', 'Loudmouth', 'Taunt 150 times', 'taunts', 150, { coins: 50 }),
-  life('bloodhound', 'Bloodhound', 'Catch 50 props', 'catches', 50, { coins: 150 }),
-  life('sharpshooter', 'Sharpshooter', 'Catch 2 or more props in a round without zapping an innocent object, 5 times', 'cleanHunts', 5, { coins: 150 }),
+  life('bloodhound', 'Bloodhound', 'Catch 50 props', 'catches', 50, { coins: 150, item: 'char.agent' }),
+  life('sharpshooter', 'Sharpshooter', 'Catch 2 or more props in a round without zapping an innocent object, 5 times', 'cleanHunts', 5, { coins: 150, item: 'gun.remote' }),
   life('poltergeist', 'Poltergeist', 'Spook hunters 20 times as a ghost', 'spooks', 20, { item: 'hat.halo' }),
   life('quack', 'Quack Addict', 'Get turned into a duck 10 times', 'ducks', 10, { item: 'hat.duck' }),
   life('regular', 'Regular', 'Finish 50 games', 'games', 50, { coins: 200 }),
-  life('champion', 'Champion', 'Win 10 games (first in the final standings)', 'champs', 10, { coins: 250 }),
+  life('champion', 'Champion', 'Win 10 games (first in the final standings)', 'champs', 10, { coins: 250, item: 'gun.golden' }),
   { id: 'priceless', name: 'Priceless', group: 'Play', desc: 'Reach level 40', goal: 40, progress: (p) => xpLevel(p.xp), reward: { coins: 500 } },
 ];
 export const FEAT_INDEX: Record<string, number> = {};

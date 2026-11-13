@@ -43,8 +43,13 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
     await A.click('#profBtn');
     await A.waitForSelector('#profile .profBody', { state: 'visible', timeout: 4000 });
     ok(await A.isHidden('.hero') && (await text(A, '#profile')).includes("TODAY'S ODD JOBS"), 'the profile opens in place of the hero text, on the overview');
-    ok(await A.evaluate(() => window.__pp.showcaseOn), 'the googly-eyed box appears beside the robot');
-    await A.click('#profile [data-tab="wardrobe"]');
+    await A.click('#profile [data-tab="chars"]');
+    ok((await A.$$('#profile .charCard')).length === 9 && (await text(A, '[data-item="char.mascot"]')).includes('4,000'), 'the Characters tab lists every hunter character with its price');
+    await A.click('#profile [data-item="char.robot"]');
+    ok(await A.evaluate(() => window.__pp.profile.kit.char === 'char.robot'), 'a free character is worn with one click');
+    await A.click('#profile [data-tab="hunter"]');
+    await A.click('#profile [data-slot="gun"]');
+    ok((await A.$$('#profile .item')).length === 13, 'the hunter locker lists every blaster');
     await A.click('#profile [data-slot="hat"]');
     await A.click('#profile [data-item="hat.beanie"]'); await A.click('#profile [data-item="hat.beanie"]');
     ok(!(await A.evaluate(() => window.__pp.profile.owned.includes('hat.beanie'))), 'a hat cannot be bought without the coins');
@@ -54,6 +59,8 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
     await A.click('#profile [data-item="hat.beanie"]');
     const bought = await A.evaluate(() => ({ owned: window.__pp.profile.owned.includes('hat.beanie'), coins: window.__pp.profile.coins, hat: window.__pp.profile.kit.hat, saved: JSON.parse(localStorage.getItem('pp_profile')).kit.hat }));
     ok(bought.owned && bought.coins === 250 && bought.hat === 'hat.beanie' && bought.saved === 'hat.beanie', 'the second click buys and wears it, and it is saved');
+    await A.click('#profile [data-tab="props"]');
+    ok(await A.evaluate(() => window.__pp.showcaseOn), 'the googly-eyed box appears beside the hunter in the prop wardrobe');
     await A.click('#profile [data-slot="eyes"]');
     ok((await A.$$('#profile .item')).length === 10 && (await text(A, '[data-item="eyes.monocle"]')).includes('Feat: Antiquarian'), 'eyes list every style and how to get the ones not owned');
     await A.click('#profile [data-tab="catalogue"]');

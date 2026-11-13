@@ -72,7 +72,7 @@ async function main() {
   try {
     console.log('rooms');
     const a = new Client('Alice'), b = new Client('Bob');
-    await a.connect({ mode: 'create', kit: [9, 11, 8, 2, 1], lvl: 23 });
+    await a.connect({ mode: 'create', kit: [9, 11, 8, 2, 1, 4, 7, 3], lvl: 23 });
     await a.wait((m) => m.t === 'welcome', 3000, 'welcome');
     ok(/^[A-Z]{4}$/.test(a.code), `private room created with code ${a.code}`);
     await b.connect({ mode: 'join', code: a.code.toLowerCase(), kit: [1e9, -3, 'x', null], lvl: -50 });
@@ -81,8 +81,8 @@ async function main() {
     ok(b.code === a.code && a.roster.length === 2, 'second player joined by code (case-insensitive)');
     ok(a.me().host && !b.roster.find((r: any) => r.id === b.id).host, 'creator is host');
     const bk = a.roster.find((r: any) => r.id === b.id);
-    ok(JSON.stringify(a.me().kit) === '[9,11,8,2,1]' && a.me().lvl === 23, 'kit and level from the hello are carried in the roster');
-    ok(bk.kit.length === 5 && bk.kit.every((v: unknown) => Number.isInteger(v) && (v as number) >= 0) && bk.kit[0] < 20 && bk.lvl === 1, `a hostile kit and level are clamped (${JSON.stringify(bk.kit)}, level ${bk.lvl})`);
+    ok(JSON.stringify(a.me().kit) === '[9,11,8,2,1,4,7,3]' && a.me().lvl === 23, 'kit and level from the hello are carried in the roster');
+    ok(bk.kit.length === 8 && bk.kit.every((v: unknown) => Number.isInteger(v) && (v as number) >= 0) && bk.kit[0] < 20 && bk.lvl === 1, `a hostile kit and level are clamped (${JSON.stringify(bk.kit)}, level ${bk.lvl})`);
     const x = new Client('Nobody');
     await x.connect({ mode: 'join', code: 'ZZZZ' });
     const err = await x.wait((m) => m.t === 'err', 3000, 'err');

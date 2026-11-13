@@ -1,6 +1,6 @@
 /** Lightweight visual effects: pooled particles, tracers, expanding rings and floating text. */
 import * as THREE from 'three';
-import { POPS } from '../../shared/progress';
+import { POPS, TRAILS } from '../../shared/progress';
 
 const texCache = new Map<string, THREE.CanvasTexture>();
 
@@ -126,16 +126,30 @@ export class Fx {
     this.burst(x, y, z, p.n, p.colors, p.speed, p.up, p.size, p.life, p.grav);
   }
 
-  tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff27a) {
+  tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff27a, width = 1) {
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
     mat.color.multiplyScalar(2.6); // brighter than white so the bloom pass makes it glow
     const m = new THREE.Mesh(this.tracerGeo, mat);
     const len = from.distanceTo(to);
     m.position.copy(from).lerp(to, 0.5);
     m.lookAt(to);
-    m.scale.set(0.045, 0.045, len);
+    m.scale.set(0.045 * width, 0.045 * width, len);
     this.scene.add(m);
     this.tracers.push({ mesh: m, t: 0 });
+  }
+
+  private zapN = 0;
+  /** A shot in a zap trail's style (TRAILS): its colour, cycled shot to shot, its width, and sparks along the line. */
+  zap(from: THREE.Vector3, to: THREE.Vector3, trail = 0) {
+    const t = TRAILS[trail] ?? TRAILS[0];
+    const color = t.colors[this.zapN++ % t.colors.length];
+    this.tracer(from, to, color, t.width);
+    if (!t.spark) return;
+    const len = from.distanceTo(to), n = Math.min(9, Math.max(2, Math.round(len / 1.6)));
+    for (let k = 0; k < n; k++) {
+      const f = (k + Math.random()) / n;
+      this.burst(from.x + (to.x - from.x) * f, from.y + (to.y - from.y) * f, from.z + (to.z - from.z) * f, 1, t.spark, 0.6, 0.6, 0.7, 0.6, 1.5);
+    }
   }
 
   /** Expanding ring. kind 'pulse' = scanner wall sweeping outwards, 'shock' = blast dome. */
