@@ -1,11 +1,11 @@
 /**
  * The hunters: store security robots. Built from smooth primitives with physically based materials
  * (clear-coated paint, brushed metal, rubber, a glowing visor) and posed procedurally every frame,
- * so there is no rigged asset to download. `look` picks a paint colour and a hat.
+ * so there is no rigged asset to download. The player's kit picks a paint and a hat (shared/progress.ts).
  */
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { HATS, HUNTER_COLORS } from '../../shared/constants';
+import { EYES, HATS, PAINTS } from '../../shared/progress';
 
 const cache = new Map<string, THREE.BufferGeometry>();
 function G(key: string, make: () => THREE.BufferGeometry): THREE.BufferGeometry {
@@ -32,6 +32,22 @@ function paint(hex: number): THREE.MeshPhysicalMaterial {
   if (!m) paints.set(hex, (m = new THREE.MeshPhysicalMaterial({ color: hex, roughness: 0.36, metalness: 0.08, clearcoat: 0.85, clearcoatRoughness: 0.18 })));
   return m;
 }
+/** A body finish from the wardrobe: plain paints, plus pearl, chrome, opal and gold. */
+const finishes = new Map<number, THREE.MeshPhysicalMaterial>();
+function finish(i: number): THREE.MeshPhysicalMaterial {
+  const d = PAINTS[i] ?? PAINTS[0];
+  let m = finishes.get(i);
+  if (!m) {
+    m = new THREE.MeshPhysicalMaterial({ color: d.hex, roughness: d.rough, metalness: d.metal, clearcoat: d.metal > 0.5 ? 0.3 : 0.85, clearcoatRoughness: 0.18 });
+    if (d.iri) { m.iridescence = d.iri; m.iridescenceIOR = 1.6; m.iridescenceThicknessRange = [180, 520]; }
+    finishes.set(i, m);
+  }
+  return m;
+}
+const matte = (hex: number, rough = 0.9) => G2(`matte${hex}_${rough}`, () => new THREE.MeshStandardMaterial({ color: hex, roughness: rough }));
+const mats = new Map<string, THREE.Material>();
+function G2<T extends THREE.Material>(key: string, make: () => T): T { let m = mats.get(key) as T | undefined; if (!m) mats.set(key, (m = make())); return m; }
+const glowGold = new THREE.MeshBasicMaterial({ color: new THREE.Color(3.2, 2.5, 0.9) });
 
 function mesh(geo: THREE.BufferGeometry, mat: THREE.Material, x = 0, y = 0, z = 0): THREE.Mesh {
   const m = new THREE.Mesh(geo, mat);
@@ -45,45 +61,112 @@ const tube = (r0: number, r1: number, h: number, open = false) => G(`tube${r0}_$
 const rbox = (w: number, h: number, d: number, r: number) => G(`rbox${w}_${h}_${d}_${r}`, () => new RoundedBoxGeometry(w, h, d, 4, r));
 
 function buildHat(i: number, accent: THREE.Material): THREE.Group {
+  const id = (HATS[i] ?? HATS[0]).id.slice(4);
   const g = new THREE.Group();
   const dome = (r: number) => G(`dome${r}`, () => new THREE.SphereGeometry(r, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2));
   // the origin is the centre of the skull (radius ~0.15), so domes can wrap the top of the head
-  switch (HATS[i]) {
-    case 'Cap': {
+  switch (id) {
+    case 'cap': {
       const brim = mesh(tube(0.115, 0.115, 0.012), accent, 0, 0.045, 0.15); brim.scale.set(1, 1, 0.85); brim.rotation.x = 0.12;
       g.add(mesh(dome(0.159), accent, 0, 0.012, 0), brim, mesh(ball(0.016), white, 0, 0.172, 0));
       break;
     }
-    case 'Hard Hat': {
+    case 'hardhat': {
       const hi = paint(0xffc61a);
       const rim = mesh(tube(0.2, 0.2, 0.014), hi, 0, 0.05, 0.02); rim.scale.z = 1.12;
       g.add(mesh(dome(0.166), hi, 0, 0.03, 0), rim, mesh(rbox(0.04, 0.03, 0.3, 0.012), hi, 0, 0.19, 0));
       break;
     }
-    case 'Party Hat': {
+    case 'party': {
       const cone = mesh(G('pcone', () => new THREE.ConeGeometry(0.095, 0.27, 24)), paint(0xff4f8b), 0, 0.255, 0);
       g.add(cone, mesh(ball(0.032), white, 0, 0.395, 0), mesh(G('pband', () => new THREE.TorusGeometry(0.094, 0.012, 8, 24).rotateX(Math.PI / 2)), gold, 0, 0.125, 0));
       g.rotation.z = -0.1;
       break;
     }
-    case 'Propeller': {
+    case 'propeller': {
       const spin = new THREE.Group(); spin.position.y = 0.225; spin.name = 'spin';
       for (const s of [1, -1]) { const b = mesh(rbox(0.13, 0.008, 0.045, 0.004), paint(s > 0 ? 0xff4f4f : 0xffd23f), s * 0.07, 0, 0); b.rotation.x = 0.35 * s; spin.add(b); }
       const d = mesh(dome(0.158), paint(0x2f7fe0), 0, 0.03, 0); d.scale.y = 0.9;
       g.add(d, mesh(tube(0.008, 0.008, 0.06), steel, 0, 0.195, 0), spin, mesh(ball(0.016), gold, 0, 0.232, 0));
       break;
     }
-    case 'Top Hat': {
+    case 'tophat': {
       g.add(mesh(tube(0.105, 0.098, 0.21), felt, 0, 0.225, 0), mesh(tube(0.168, 0.168, 0.014), felt, 0, 0.12, 0), mesh(tube(0.101, 0.101, 0.035), accent, 0, 0.147, 0));
       break;
     }
-    case 'Crown': {
+    case 'crown': {
       g.add(mesh(tube(0.118, 0.11, 0.075), gold, 0, 0.135, 0));
       for (let k = 0; k < 6; k++) {
         const a = (k / 6) * Math.PI * 2;
         const spike = mesh(G('spike', () => new THREE.ConeGeometry(0.026, 0.07, 12)), gold, Math.cos(a) * 0.112, 0.205, Math.sin(a) * 0.112);
         g.add(spike, mesh(ball(0.014), k % 2 ? glowRed : glowCyan, Math.cos(a) * 0.112, 0.247, Math.sin(a) * 0.112));
       }
+      break;
+    }
+    case 'beanie': {
+      const knit = matte(0xd64550, 0.95), rib = matte(0xf2e9dc, 0.95);
+      const d = mesh(dome(0.163), knit, 0, 0.01, 0); d.scale.y = 1.12;
+      g.add(d, mesh(tube(0.166, 0.166, 0.055), rib, 0, 0.03, 0), mesh(ball(0.042), rib, 0, 0.2, 0));
+      break;
+    }
+    case 'cone': {
+      const orange = paint(0xff6a13);
+      g.add(mesh(rbox(0.26, 0.025, 0.26, 0.01), orange, 0, 0.13, 0), mesh(G('tcone', () => new THREE.ConeGeometry(0.105, 0.32, 24)), orange, 0, 0.3, 0));
+      g.add(mesh(tube(0.07, 0.081, 0.05, true), white, 0, 0.27, 0), mesh(tube(0.043, 0.053, 0.04, true), white, 0, 0.35, 0));
+      g.rotation.z = 0.12;
+      break;
+    }
+    case 'chef': {
+      g.add(mesh(tube(0.125, 0.118, 0.13), white, 0, 0.17, 0));
+      for (let k = 0; k < 5; k++) { const a = (k / 5) * Math.PI * 2; g.add(mesh(ball(0.075), white, Math.cos(a) * 0.075, 0.27, Math.sin(a) * 0.075)); }
+      g.add(mesh(ball(0.085), white, 0, 0.3, 0));
+      break;
+    }
+    case 'cowboy': {
+      const leather = matte(0x7a4a24, 0.7), band = matte(0x2a1a10, 0.6);
+      const brim = mesh(G('cbrim', () => new THREE.CylinderGeometry(0.27, 0.25, 0.014, 32)), leather, 0, 0.11, 0); brim.scale.z = 0.85;
+      const top = mesh(tube(0.1, 0.125, 0.14), leather, 0, 0.19, 0); top.scale.z = 0.85;
+      const b = mesh(tube(0.127, 0.127, 0.03), band, 0, 0.135, 0); b.scale.z = 0.86;
+      g.add(brim, top, b);
+      for (const s of [1, -1]) { const curl = mesh(rbox(0.04, 0.05, 0.36, 0.01), leather, s * 0.255, 0.13, 0); curl.rotation.z = s * -0.6; g.add(curl); }
+      break;
+    }
+    case 'wizard': {
+      const cloth = matte(0x2b2d8f, 0.85);
+      const cone = mesh(G('wcone', () => new THREE.ConeGeometry(0.15, 0.42, 28)), cloth, 0, 0.33, -0.02); cone.rotation.x = -0.18;
+      g.add(mesh(tube(0.23, 0.23, 0.012), cloth, 0, 0.12, 0), cone);
+      for (const [x, y, z] of [[0.07, 0.24, 0.1], [-0.06, 0.33, 0.06], [0.02, 0.42, 0.02]]) g.add(mesh(ball(0.016), glowAmber, x, y, z));
+      break;
+    }
+    case 'viking': {
+      const brass = new THREE.MeshStandardMaterial({ color: 0xb8863b, roughness: 0.3, metalness: 1 });
+      const ivory = matte(0xf2ead6, 0.5);
+      g.add(mesh(dome(0.168), steel, 0, 0.015, 0), mesh(tube(0.17, 0.17, 0.04), brass, 0, 0.03, 0), mesh(rbox(0.03, 0.17, 0.02, 0.008), brass, 0, 0.1, 0.16));
+      for (const s of [1, -1]) {
+        const horn = mesh(G('horn', () => new THREE.ConeGeometry(0.035, 0.19, 16)), ivory, s * 0.19, 0.13, 0); horn.rotation.z = s * -0.95;
+        g.add(horn);
+      }
+      break;
+    }
+    case 'lampshade': {
+      const fabric = G2('shade', () => new THREE.MeshStandardMaterial({ color: 0xf2e2b8, roughness: 0.9, side: THREE.DoubleSide, emissive: 0xffc870, emissiveIntensity: 0.25 }));
+      const shade = mesh(G('lshade', () => new THREE.CylinderGeometry(0.1, 0.2, 0.22, 28, 1, true)), fabric, 0, 0.2, 0);
+      g.add(shade, mesh(G('lrim', () => new THREE.TorusGeometry(0.2, 0.008, 6, 32).rotateX(Math.PI / 2)), gold, 0, 0.09, 0), mesh(G('lrim2', () => new THREE.TorusGeometry(0.1, 0.008, 6, 28).rotateX(Math.PI / 2)), gold, 0, 0.31, 0));
+      g.rotation.z = -0.14;
+      break;
+    }
+    case 'duck': {
+      const yellow = paint(0xffd23f), beak = paint(0xff8c1a);
+      const body = mesh(ball(0.1), yellow, 0, 0.2, -0.01); body.scale.set(1, 0.75, 1.25);
+      const tail = mesh(G('dtail', () => new THREE.ConeGeometry(0.04, 0.08, 12)), yellow, 0, 0.24, -0.13); tail.rotation.x = -1.1;
+      const bk = mesh(G('dbeak', () => new THREE.ConeGeometry(0.03, 0.07, 12)), beak, 0, 0.3, 0.12); bk.rotation.x = Math.PI / 2;
+      g.add(body, tail, mesh(ball(0.065), yellow, 0, 0.3, 0.06), bk, mesh(ball(0.012), felt, 0.035, 0.32, 0.105), mesh(ball(0.012), felt, -0.035, 0.32, 0.105));
+      break;
+    }
+    case 'halo': {
+      const ring = mesh(G('halo', () => new THREE.TorusGeometry(0.12, 0.016, 10, 40).rotateX(Math.PI / 2)), glowGold, 0, 0.32, 0);
+      ring.name = 'bob'; ring.castShadow = false;
+      g.add(ring);
       break;
     }
   }
@@ -114,11 +197,11 @@ export class HunterRig {
   private armR = new THREE.Group(); private armL = new THREE.Group(); private foreR = new THREE.Group(); private foreL = new THREE.Group();
   private legL = new THREE.Group(); private legR = new THREE.Group(); private shinL = new THREE.Group(); private shinR = new THREE.Group();
   private spin: THREE.Object3D | null = null;
+  private bob: THREE.Object3D | null = null;
 
-  constructor(look = 0) {
-    const key = look & 63;
-    const body = paint(HUNTER_COLORS[(key >> 3) % HUNTER_COLORS.length]);
-    const hat = (key & 7) % HATS.length;
+  /** `paintIx` and `hat` index PAINTS and HATS (a player's kit). */
+  constructor(paintIx = 0, hat = 0) {
+    const body = finish(paintIx);
 
     // legs
     for (const [leg, shin, sx] of [[this.legL, this.shinL, -1], [this.legR, this.shinR, 1]] as [THREE.Group, THREE.Group, number][]) {
@@ -156,6 +239,7 @@ export class HunterRig {
     this.head.add(mesh(tube(0.007, 0.007, 0.11), steel, -0.1, 0.31, -0.02), mesh(ball(0.02), glowRed, -0.1, 0.37, -0.02));
     const hatGroup = buildHat(hat, body); hatGroup.position.y = 0.16; this.head.add(hatGroup);
     this.spin = hatGroup.getObjectByName('spin') ?? null;
+    this.bob = hatGroup.getObjectByName('bob') ?? null;
     this.torso.add(this.head);
     // arms (gun arm on +X)
     for (const [arm, fore, sx] of [[this.armL, this.foreL, -1], [this.armR, this.foreR, 1]] as [THREE.Group, THREE.Group, number][]) {
@@ -188,19 +272,53 @@ export class HunterRig {
     this.armL.rotation.set(s * 0.7 * m + 0.12, 0, -0.12);
     this.foreL.rotation.x = -0.35 - Math.max(0, s) * 0.5 * m;
     if (this.spin) this.spin.rotation.y = p.time * (4 + m * 14);
+    if (this.bob) this.bob.position.y = 0.32 + Math.sin(p.time * 2.4) * 0.012;
   }
 }
 
-/** Googly eyes that pop out of a disguise when it gives itself away. */
-let eyesGroupGeo: { white: THREE.BufferGeometry; pupil: THREE.BufferGeometry } | null = null;
+/**
+ * Googly eyes that pop out of a disguise when it gives itself away. `style` indexes EYES (the player's kit):
+ * they only ever show on a prop that has already been revealed, so a style gives nothing away.
+ */
 const eyeWhite = new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.15, clearcoat: 1 });
 const eyePupil = new THREE.MeshStandardMaterial({ color: 0x0b0b10, roughness: 0.2 });
-export function buildEyes(): THREE.Group {
-  eyesGroupGeo ??= { white: new THREE.SphereGeometry(0.1, 24, 16).scale(1, 1, 0.6), pupil: new THREE.SphereGeometry(0.045, 16, 12).scale(1, 1, 0.5) };
+const lidMat = new THREE.MeshStandardMaterial({ color: 0xd8c9b4, roughness: 0.6 });
+const pinkPupil = new THREE.MeshStandardMaterial({ color: 0xff2f7a, roughness: 0.25, emissive: 0x6a0a2a });
+export function buildEyes(style = 0): THREE.Group {
+  const id = (EYES[style] ?? EYES[0]).id.slice(5);
   const g = new THREE.Group();
-  g.add(new THREE.Mesh(eyesGroupGeo.white, eyeWhite).translateX(-0.11), new THREE.Mesh(eyesGroupGeo.white, eyeWhite).translateX(0.11));
-  const p1 = new THREE.Mesh(eyesGroupGeo.pupil, eyePupil); p1.position.set(-0.1, -0.02, 0.05);
-  const p2 = new THREE.Mesh(eyesGroupGeo.pupil, eyePupil); p2.position.set(0.12, 0.01, 0.05);
-  g.add(p1, p2);
+  const whiteGeo = G('eyeW', () => new THREE.SphereGeometry(0.1, 24, 16).scale(1, 1, 0.6));
+  const pupilGeo = G('eyeP', () => new THREE.SphereGeometry(0.045, 16, 12).scale(1, 1, 0.5));
+  const plain = (m: THREE.Mesh) => { m.castShadow = false; return m; };
+  const eye = (x: number, k: number, px: number, py: number, pupil: THREE.Material = eyePupil) => {
+    const w = plain(new THREE.Mesh(whiteGeo, eyeWhite)); w.position.x = x; w.scale.setScalar(k);
+    const p = plain(new THREE.Mesh(pupilGeo, pupil)); p.position.set(x + px * k, py * k, 0.05 * k); p.scale.setScalar(k * (id === 'love' ? 1.35 : 1));
+    g.add(w, p);
+  };
+  if (id === 'cyclops') { eye(0, 1.6, 0.01, -0.01); return g; }
+  const k = id === 'wide' ? 1.3 : id === 'beady' ? 0.62 : 1;
+  const sx = 0.11 * (id === 'wide' ? 1.25 : id === 'beady' ? 0.75 : 1);
+  const lookDown = id === 'sleepy' ? -0.035 : 0;
+  eye(-sx, k, 0.01, -0.02 + lookDown, id === 'love' ? pinkPupil : eyePupil);
+  eye(sx, k, 0.01, 0.01 + lookDown, id === 'love' ? pinkPupil : eyePupil);
+  const box = (w: number, h: number, d: number, mat: THREE.Material, x: number, y: number, z: number, rz = 0) => {
+    const m = plain(new THREE.Mesh(G(`ebox${w}_${h}_${d}`, () => new THREE.BoxGeometry(w, h, d)), mat)); m.position.set(x, y, z); m.rotation.z = rz; g.add(m); return m;
+  };
+  switch (id) {
+    case 'angry': for (const s of [-1, 1]) box(0.13, 0.03, 0.03, eyePupil, s * sx, 0.1, 0.05, s * 0.45); break;
+    case 'sleepy': for (const s of [-1, 1]) { const lid = plain(new THREE.Mesh(G('lid', () => new THREE.SphereGeometry(0.104, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2).scale(1, 1, 0.62)), lidMat)); lid.position.x = s * sx; lid.rotation.x = 0.35; g.add(lid); } break;
+    case 'lashes': for (const s of [-1, 1]) for (const a of [-0.5, 0, 0.5]) box(0.012, 0.06, 0.012, eyePupil, s * sx + Math.sin(a) * 0.09, 0.1 + Math.cos(a) * 0.01, 0.02, -a); break;
+    case 'shades': {
+      const lens = G2('lens', () => new THREE.MeshPhysicalMaterial({ color: 0x0a0a10, roughness: 0.05, metalness: 0.5, clearcoat: 1 }));
+      for (const s of [-1, 1]) box(0.17, 0.11, 0.02, lens, s * sx, 0, 0.075);
+      box(0.08, 0.02, 0.02, lens, 0, 0.03, 0.075);
+      break;
+    }
+    case 'monocle': {
+      const ring = plain(new THREE.Mesh(G('mono', () => new THREE.TorusGeometry(0.105, 0.012, 8, 28)), gold)); ring.position.set(sx, 0, 0.065); g.add(ring);
+      box(0.008, 0.16, 0.008, gold, sx + 0.1, -0.12, 0.06, 0.3);
+      break;
+    }
+  }
   return g;
 }

@@ -72,14 +72,17 @@ async function main() {
   try {
     console.log('rooms');
     const a = new Client('Alice'), b = new Client('Bob');
-    await a.connect({ mode: 'create' });
+    await a.connect({ mode: 'create', kit: [9, 11, 8, 2, 1], lvl: 23 });
     await a.wait((m) => m.t === 'welcome', 3000, 'welcome');
     ok(/^[A-Z]{4}$/.test(a.code), `private room created with code ${a.code}`);
-    await b.connect({ mode: 'join', code: a.code.toLowerCase() });
+    await b.connect({ mode: 'join', code: a.code.toLowerCase(), kit: [1e9, -3, 'x', null], lvl: -50 });
     await b.wait((m) => m.t === 'welcome', 3000, 'welcome');
     await a.wait((m) => m.t === 'roster' && m.p.length === 2, 3000, 'roster of 2');
     ok(b.code === a.code && a.roster.length === 2, 'second player joined by code (case-insensitive)');
     ok(a.me().host && !b.roster.find((r: any) => r.id === b.id).host, 'creator is host');
+    const bk = a.roster.find((r: any) => r.id === b.id);
+    ok(JSON.stringify(a.me().kit) === '[9,11,8,2,1]' && a.me().lvl === 23, 'kit and level from the hello are carried in the roster');
+    ok(bk.kit.length === 5 && bk.kit.every((v: unknown) => Number.isInteger(v) && (v as number) >= 0) && bk.kit[0] < 20 && bk.lvl === 1, `a hostile kit and level are clamped (${JSON.stringify(bk.kit)}, level ${bk.lvl})`);
     const x = new Client('Nobody');
     await x.connect({ mode: 'join', code: 'ZZZZ' });
     const err = await x.wait((m) => m.t === 'err', 3000, 'err');
@@ -189,6 +192,10 @@ async function main() {
     ok(end.results.board.some((r: any) => r.round > 0), 'points were awarded');
     ok(end.round === 1 && end.rounds === 3 && end.results.rounds === 3 && !end.results.final, 'round 1 of a three-round game: no final standings yet');
     ok(end.results.board.every((r: any) => Number.isInteger(r.coins) && r.coins >= 5 && r.coins <= 50), `every player is paid coins for the round (${end.results.board.map((r: any) => r.coins).join(', ')})`);
+    const st = end.results.board.map((r: any) => r.st);
+    ok(st.every((x: any) => x && Number.isInteger(x.k) && Number.isInteger(x.hid) && Array.isArray(x.ct) && (x.nh === 0 || x.nh === 1)), 'every row carries round stats for the profile');
+    ok(end.results.board.every((r: any) => r.st.hid === -1 || (r.survived && PROPS[r.st.hid])), 'only a survivor is credited a disguise for the catalogue');
+    ok(end.results.board.every((r: any) => r.st.ct.length === r.st.k && r.st.ct.every((t: number) => PROPS[t])), 'each catch lists the disguise it found');
     console.log('  awards:', end.results.awards.map((w: any) => `${w.title} → ${w.name}`).join(', ') || '(none)');
     a.msgs.length = 0;
     const next = await a.wait((m) => m.t === 'phase' && m.phase === 'hiding', 6000, 'next round');

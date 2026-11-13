@@ -114,7 +114,7 @@ async function network() {
   await until(() => fz.welcome);
   const evil: unknown[] = [null, undefined, NaN, Infinity, -Infinity, 1e308, -1e308, 2 ** 31, -(2 ** 31), 0.5, -1, '', 'x', '__proto__', 'constructor', [], [[]], {}, { length: 1e9 }, true, [1e308, NaN, 'a', null, {}, [], 1, 2]];
   const types = ['in', 'fire', 'tf', 'ab', 'taunt', 'chat', 'start', 'map', 'bots', 'ping', 'hello', 'kick', 'toString', '__proto__', ''];
-  const keys = ['c', 'yaw', 'pitch', 'rt', 'd', 'k', 'i', 'm', 'n', 'name', 'code', 'token', 'mode', 'look'];
+  const keys = ['c', 'yaw', 'pitch', 'rt', 'd', 'k', 'i', 'm', 'n', 'name', 'code', 'token', 'mode', 'kit', 'lvl'];
   let sent = 0;
   for (let round = 0; round < 6 && !fz.closed; round++) {
     for (const t of types) for (const v of evil) {

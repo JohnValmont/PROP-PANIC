@@ -48,6 +48,23 @@ nobody hiding loses their spot. Ask the props whether a bot hunter felt like a c
 
 Cut it if: people would rather the round ended. Set both timers very high.
 
+### 2.7: progression
+
+Mostly visible after a session, so ask at the end, and look at a couple of players' profiles.
+
+- Does anyone open the profile without being told? (The price tag on the menu card is the only door.)
+- After a round, do people read the progress strip on the results panel, or skip past it?
+- Catalogue: do props try objects they have no stamp for? If everyone still hides as the same few objects, the
+  stamp rewards (`GRADE_REWARD`) are too small; if props pick hopeless disguises just for stamps, the
+  20-second hold (`CATALOG_HOLD_MS`) is too short.
+- Odd jobs: is the hunter job ever finished in a short session? If not, players do not get enough hunter rounds.
+- Prices: after an hour, how many coins does a typical player have and what did they buy? A first purchase should
+  come within the first session; the dearest items should take weeks.
+- Titles: does anyone change theirs? Does anyone mention someone else's?
+
+Cut or change it if: the results panel feels cluttered (drop the jobs line first), or people feel pushed to grind
+instead of play.
+
 ### Existing systems worth a second look
 
 - **Focus and QUACK**: how often does a hunter turn into a duck per round? If never, `FOCUS_MISS` is too low; if more

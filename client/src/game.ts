@@ -9,7 +9,9 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
-import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, xpLevel, type Phase, type Team } from '../../shared/constants';
+import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, type Phase, type Team } from '../../shared/constants';
+import { bankRound, kitToWire, utcDay, xpLevel, type Profile, type Report } from '../../shared/progress';
+import { loadProfile, saveProfile } from './profile';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
@@ -25,6 +27,7 @@ import { ACTIONS, B, keyLabel } from './keys';
 
 const STEP = 1 / 60;
 const DUCK_TYPE = PROP_INDEX['duck'];
+const PROP_INDEX_BOX = PROP_INDEX['box'];
 export type Quality = 'ultra' | 'high' | 'low';
 const INTERP_MS = 110;
 const CONFETTI = [0xef476f, 0xffd166, 0x06d6a0, 0x118ab2, 0x9b5de5, 0xf78c2b, 0xffffff];
@@ -122,9 +125,13 @@ export class Game {
   private stepCount = 0;
   helpOn = true;
   private slowSecs = 0;
-  look = 0; baseFov = 78; xp = 0;
-  /** Wallet for cosmetics. Kept in the browser, like XP: there are no accounts for the server to keep it against. */
-  coins = 0; private coinGain = 0; private paid = '';
+  baseFov = 78;
+  /** Level, coins, wardrobe, catalogue, feats and jobs. Kept in the browser: there are no accounts to keep it against. */
+  profile: Profile = loadProfile();
+  /** What the last round banked, for the results panel. */
+  report: Report | null = null;
+  /** Called after a round is banked (the menu redraws the profile from it). */
+  onBanked: (r: Report) => void = () => {};
   private composer!: EffectComposer; private bloom!: UnrealBloomPass; private gtao!: GTAOPass;
   private muzzle!: THREE.Mesh; private previewRig: HunterRig | null = null;
   private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0;
@@ -183,21 +190,19 @@ export class Game {
     const s = Number(localStorage.getItem('pp_sens'));
     if (s > 0.0004 && s < 0.01) this.sens = s;
     if (localStorage.getItem('pp_mute') === '1') this.sfx.muted = true;
-    this.xp = Math.max(0, Number(localStorage.getItem('pp_xp')) || 0);
-    this.coins = Math.max(0, Math.floor(Number(localStorage.getItem('pp_coins')) || 0));
-    this.paid = localStorage.getItem('pp_paid') ?? '';
     this.invertY = localStorage.getItem('pp_invy') === '1';
     const mv = localStorage.getItem('pp_mus'); if (mv !== null && Number(mv) >= 0 && Number(mv) <= 1) this.sfx.musicVol = Number(mv);
     const hp = localStorage.getItem('pp_help');
     this.helpOn = hp === null ? true : hp === '1';
-    this.look = Math.max(0, Math.min(63, Number(localStorage.getItem('pp_look')) || Math.floor(Math.random() * 8) * 8));
     const f = Number(localStorage.getItem('pp_fov')); if (f >= 60 && f <= 100) this.baseFov = f;
     const v = Number(localStorage.getItem('pp_vol')); if (localStorage.getItem('pp_vol') !== null && v >= 0 && v <= 1) this.sfx.volume = v;
 
     this.loadMap(1);
     this.preview.position.set(0.25, 0, 13.0);
     this.scene.add(this.preview);
-    this.setLook(this.look);
+    this.showcase.position.set(-0.75, 0, 13.6); this.showcase.rotation.y = 0.5; this.showcase.visible = false;
+    this.scene.add(this.showcase);
+    this.applyKit();
     this.bindInput();
     this.net.onMsg = (m) => this.onMsg(m);
     window.addEventListener('resize', () => this.resize());
@@ -231,6 +236,7 @@ export class Game {
         for (const e of this.ents.values()) if (e.kind) this.buildModel(e, e.kind);
         for (const d of this.decoys.values()) { this.scene.remove(d.mesh); d.mesh = assets.propObject(d.type); d.mesh.position.set(d.x, d.y, d.z); d.mesh.rotation.y = d.yaw + Math.PI; this.scene.add(d.mesh); }
       }
+      if (this.previewRig) this.applyKit(); // the wardrobe's box was built from the other model set
     }
     this.gtao.enabled = q === 'ultra';
     this.resize();
@@ -267,7 +273,7 @@ export class Game {
 
   join(name: string, mode: 'quick' | 'create' | 'join', code?: string) {
     this.sfx.unlock();
-    this.net.connect(name, mode, code, this.look);
+    this.net.connect(name, mode, code, kitToWire(this.profile), xpLevel(this.profile.xp));
   }
 
   leave() {
@@ -296,13 +302,29 @@ export class Game {
   }
   private preview = new THREE.Group();
 
-  /** Change hunter colour/hat; updates the menu preview and is sent with the next join. */
-  setLook(look: number) {
-    this.look = look & 63;
-    try { localStorage.setItem('pp_look', String(this.look)); } catch { /* ignore */ }
+  /** Save the profile and redraw the menu's hunter (and the googly-eyed box beside it) in what the player now wears. */
+  applyKit() {
+    saveProfile(this.profile);
+    const w = kitToWire(this.profile);
     this.preview.clear();
-    this.previewRig = new HunterRig(this.look);
+    this.previewRig = new HunterRig(w[0], w[1]);
     this.preview.add(this.previewRig.root);
+    // the wardrobe shows eyes and pops on a cardboard box next to the hunter
+    this.showcase.clear();
+    const box = assets.propObject(PROP_INDEX_BOX);
+    const eyes = buildEyes(w[2]);
+    eyes.position.set(0, PROPS[PROP_INDEX_BOX].h + 0.07, PROPS[PROP_INDEX_BOX].d * 0.22);
+    eyes.name = 'eyes';
+    this.showcase.add(box, eyes);
+  }
+  /** The googly-eyed box beside the menu hunter: shown while the wardrobe is open. */
+  showcase = new THREE.Group();
+  showcaseOn = false;
+  /** Preview a catch pop over the showcase box. */
+  previewPop(style: number) {
+    const p = this.showcase.position;
+    this.fx.pop(p.x, p.y + 0.5, p.z, style);
+    this.sfx.play('kill');
   }
 
   // touch devices have no pointer to lock: the game counts as "locked" whenever it is not paused
@@ -469,18 +491,21 @@ export class Game {
       const mine = res.board.find((r) => r.id === this.myId);
       // bank this round's rewards once: results are sent again to a client that reconnects or reloads during them
       const key = `${this.code}:${res.n}:${m.seed}`;
-      if (mine && this.paid !== key) {
-        this.paid = key;
-        const gain = Math.max(10, mine.round), before = xpLevel(this.xp);
-        this.xp += gain;
-        this.coinGain = Math.max(0, (mine.coins | 0) + ((res.final?.find((r) => r.id === this.myId)?.coins ?? 0) | 0));
-        this.coins += this.coinGain;
-        try { localStorage.setItem('pp_xp', String(this.xp)); localStorage.setItem('pp_coins', String(this.coins)); localStorage.setItem('pp_paid', key); } catch { /* ignore */ }
-        this.hud.popup(`+${gain} XP`);
-        if (this.coinGain) this.hud.popup(`+${this.coinGain} coins`);
-        // after the reveal beat, so it does not cover who won
-        if (xpLevel(this.xp) > before) { const lvl = xpLevel(this.xp); window.setTimeout(() => { this.sfx.play('levelup'); this.hud.banner(`LEVEL ${lvl}!`, 'Check the menu for newly unlocked hats.', 'teal', 3200); }, Math.max(0, this.resultsAt - performance.now())); }
-      } else if (!mine) this.coinGain = 0;
+      if (mine && mine.st && this.profile.paid !== key) {
+        const fin = res.final?.find((r) => r.id === this.myId);
+        const rep = bankRound(this.profile, {
+          key, day: utcDay(), team: mine.team, won: mine.team !== 'spec' && (mine.team === 'prop') === (res.winner === 'props'),
+          survived: mine.survived, pts: mine.round, coins: (mine.coins | 0) + ((fin?.coins ?? 0) | 0), st: mine.st,
+          gameOver: !!res.final, place: fin && res.final ? res.final.indexOf(fin) + 1 : 0, players: res.final?.length ?? 0,
+        });
+        saveProfile(this.profile);
+        this.report = rep;
+        this.onBanked(rep);
+        this.hud.popup(`+${rep.xp} XP`);
+        if (rep.coins) this.hud.popup(`+${rep.coins} coins`);
+        // a jingle as the board comes up if the round brought anything new; the panel itself lists what (see Hud.progress)
+        if (rep.levelTo > rep.levelFrom || rep.feats.length || rep.unlocked.length || rep.shift) window.setTimeout(() => this.sfx.play('levelup'), Math.max(0, this.resultsAt - performance.now()) + 300);
+      } else if (!mine) this.report = null;
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
     } else {
@@ -509,7 +534,7 @@ export class Game {
       }
       let e = this.ents.get(r.id);
       // hunters are not told a prop's disguise up front (-1): it arrives with the prop's position once it is in view
-      let wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : 'hunter:' + (r.look | 0)) : r.disguise >= 0 ? 'prop:' + r.disguise : '?';
+      let wantKind = !r.alive || r.team === 'spec' ? '' : r.team === 'hunter' ? (r.quack ? 'duck' : `hunter:${r.kit?.[0] | 0}.${r.kit?.[1] | 0}`) : r.disguise >= 0 ? 'prop:' + r.disguise : '?';
       if (wantKind === '?') wantKind = e && e.kind.startsWith('prop:') ? e.kind : 'prop:' + (PROPS[e?.netType ?? -1] ? e!.netType : -1);
       if (!wantKind) { if (e) { this.scene.remove(e.group); this.ents.delete(r.id); } continue; }
       if (!e) {
@@ -563,7 +588,8 @@ export class Game {
     e.kind = kind; e.rig = null; e.model = null;
     if (kind === 'prop:-1') { e.labelKey = ''; return; } // an unseen prop: nothing to draw yet
     if (kind.startsWith('hunter')) {
-      e.rig = new HunterRig(Number(kind.slice(7)) || 0);
+      const [pi, hi] = kind.slice(7).split('.').map(Number);
+      e.rig = new HunterRig(pi || 0, hi || 0);
       e.model = e.rig.root; e.h = CFG.HUNTER_H;
     } else {
       const type = kind === 'duck' ? DUCK_TYPE : Number(kind.slice(5));
@@ -574,7 +600,7 @@ export class Game {
       if (kind !== 'duck') {
         // googly eyes: hidden until this prop gives itself away (taunt, panic, sneeze, scanner)
         const k = Math.max(0.55, Math.min(1.6, Math.min(def.w, def.h) / 0.6));
-        e.eyes = buildEyes();
+        e.eyes = buildEyes(this.roster.get(e.id)?.kit?.[2] ?? 0);
         e.eyes.position.set(0, def.h + 0.07 * k, def.d * 0.22); // perched on top so they read from any angle
         e.eyes.userData.k = k; e.eyes.scale.setScalar(0.001); e.eyes.visible = false;
         e.group.add(e.eyes);
@@ -711,7 +737,7 @@ export class Game {
         break;
       }
       case 'kill': {
-        this.fx.burst(m.x, m.y + 0.4, m.z, 70, CONFETTI, 6, 7, 1.3, 1.7);
+        this.fx.pop(m.x, m.y + 0.4, m.z, this.roster.get(m.who)?.kit?.[3] ?? 0); // in the caught player's chosen style
         this.fx.floater(m.x, m.y + 1.2, m.z, 'CAUGHT!', '#ff8fa3', 0.6, false, 1.6);
         if (CFG.HAUNT_ON) this.fx.ghost(m.x, m.y + 0.6, m.z, 0.8);
         this.sfx.play('kill', m.who === me || m.by === me ? undefined : [m.x, m.y, m.z]);
@@ -1080,10 +1106,18 @@ export class Game {
       this.preview.rotation.y = 0.35 + Math.sin(this.menuAngle * 0.9) * 0.3;
       this.preview.position.y = Math.abs(Math.sin(this.menuAngle * 2.2)) * 0.04;
       this.previewRig?.pose({ time: this.menuAngle, stepT: 0, move: 0, pitch: 0.25 + Math.sin(this.menuAngle * 1.1) * 0.2, air: false, dizzy: false, kick: 0 });
+      this.showcase.visible = this.showcaseOn;
+      if (this.showcaseOn) {
+        // the box twitches now and then, eyes out, like a prop that cannot keep still
+        const t = this.menuAngle % 3.2, hop = t < 0.35 ? Math.sin((t / 0.35) * Math.PI) : 0;
+        this.showcase.position.y = hop * 0.08; this.showcase.rotation.z = hop * 0.12;
+        const eyes = this.showcase.getObjectByName('eyes');
+        if (eyes) eyes.scale.setScalar(1 + Math.sin(this.menuAngle * 30) * 0.04 * hop);
+      }
       this.viewmodel.visible = false;
       return;
     }
-    this.preview.visible = false;
+    this.preview.visible = false; this.showcase.visible = false;
     const ghost = !this.alive || this.team === 'spec';
     if (ghost !== this.specOn) { if (ghost) this.enterSpectator(); else { this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow'; } }
     // hunters: while the props hide, a free look round the room as it was stocked (it holds no props: the server sends none)
@@ -1487,7 +1521,8 @@ export class Game {
     void ACTIONS;
 
     h.lobby(lobby, { code: this.code, pub: this.pub, roster: [...this.roster.values()], me: this.myId, host: !!this.roster.get(this.myId)?.host, bots: this.lobbyInfo.bots, countdown: Math.max(0, this.lobbyInfo.countdown - (pnow - this.lobbyInfo.at)), canStart: this.lobbyInfo.canStart, map: this.lobbyInfo.map, rounds: this.lobbyInfo.rounds });
-    h.results(this.phase === 'end' && pnow >= this.resultsAt, this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.coinGain, this.coins);
+    h.xpNow = this.profile.xp;
+    h.results(this.phase === 'end' && pnow >= this.resultsAt, this.results, this.myId, this.team, left, MAP_NAMES[this.nextMap] ?? '', this.report, this.profile.coins, this.roster);
     h.scoreboard(this.showScores && this.phase !== 'end', [...this.roster.values()], this.myId);
     void dt;
   }

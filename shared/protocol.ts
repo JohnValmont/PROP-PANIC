@@ -3,10 +3,12 @@
  * High-frequency messages use positional arrays to keep packets compact.
  */
 import type { Phase, Team } from './constants';
+import type { RoundStats, WireKit } from './progress';
 
 // ------------------------------------------------------------------ client -> server
 export type ClientMsg =
-  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string }
+  /** `kit` is what the player wears ([paint, hat, eyes, pop, title], see shared/progress.ts) and `lvl` their level. */
+  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number }
   /** Batched movement commands: [seq, dt, mx, mz, yaw, pitch, buttons, facing]. buttons: 1 jump, 2 dash. */
   | { t: 'in'; c: number[][] }
   /** Fire the blaster. rt = server time the shooter was rendering other players at (lag compensation). */
@@ -28,8 +30,10 @@ export type ClientMsg =
 export interface RosterEntry {
   id: number; name: string; team: Team; alive: boolean; bot: boolean; host: boolean;
   score: number; disguise: number; conn: boolean;
-  /** Hunter cosmetics: colour * 8 + hat. */
-  look: number;
+  /** Cosmetics: [paint, hat, eyes, pop, title] (shared/progress.ts). */
+  kit: WireKit;
+  /** Player level as the player's browser reports it; 0 for bots. */
+  lvl: number;
   /** Round-trip time in ms (0 for bots). */
   ping: number;
   /** Hunter currently serving time as a rubber duck. */
@@ -42,7 +46,7 @@ export interface Results {
   winner: 'props' | 'hunters';
   awards: Award[];
   /** `coins` is what this round paid the player. */
-  board: { id: number; name: string; team: Team; round: number; total: number; survived: boolean; coins: number }[];
+  board: { id: number; name: string; team: Team; round: number; total: number; survived: boolean; coins: number; st: RoundStats }[];
   /** Counts every round the room has played, so a client can bank its rewards exactly once. */
   n: number;
   round: number; rounds: number;

@@ -1,5 +1,42 @@
 # Changelog
 
+## 2.7.0
+
+A proper progression system. Coins finally buy something, and the profile is more than a number.
+
+- **Profile.** Click the price tag on the menu card. Four tabs: Overview (level, title, today's odd jobs, lifetime
+  stats, backup), Wardrobe, Catalogue and Feats. The panel slides in on the right so the robot in the middle stays in
+  view, wearing what you pick.
+- **Level and price tag.** Points are still XP. The curve is unchanged up to level 11 and then needs a flat 3,000 XP
+  a level, so later levels keep coming. Each level pays coins, and the badge is an Emporium price tag that changes its
+  name every few levels (Bargain Bin to Priceless). Level badges show next to names in the lobby, scoreboard and
+  results.
+- **Wardrobe: 47 looks in four slots.** Paint (8 free colours plus Pearl, Midnight, Chrome, Opal and Gilded), hats
+  (the 6 old ones plus Beanie, Traffic Cone, Chef's Hat, Cowboy Hat, Wizard Hat, Viking Helmet, Lampshade, Duck Hat and
+  Halo), googly-eye styles (Wide, Beady, Angry, Sleepy, Lashes, Lovestruck, Shades, Cyclops, Monocle) and the burst
+  everyone sees when you are caught (Feathers, Bubbles, Coin Shower, Glitter, Rainbow, Leaves, Sparks, Sawdust).
+  Nothing in it can give a hiding prop away: the eyes come out only once a prop has given itself away, and the burst
+  comes when it is caught. Looks are bought (150 to 1,200 coins), come with a level, or are earned by a feat. The
+  first click on a price asks to confirm it. A box beside the robot shows your eyes and previews your burst.
+- **Catalogue.** Every disguise has a Hid stamp (survive a round as it, having worn it for the last 20 seconds, so a
+  last-second swap does not count) and a Caught stamp (catch a prop disguised as it). Bronze at 1, silver at 3, gold at
+  10, each paying XP and coins. The 66 objects are filed in five departments; hiding as everything in one earns its
+  look. It is there to make props try new objects instead of always the same few.
+- **Feats and titles.** 24 milestones, from 10 catalogue stamps to level 40. Each pays once and unlocks a title worn
+  next to your name.
+- **Odd jobs.** Three a day, the same for everyone (one as a prop, one as a hunter, one either way), with a bonus for
+  all three. Shown on the menu card and the results panel.
+- **Results panel.** The coin line is replaced by a progress strip: XP and the level bar, coins (play and bonuses),
+  new stamps, unlocks, feats and the day's jobs. The level-up banner that used to sit behind the panel is gone.
+- **Save codes.** Overview → Backup copies the profile as a code to restore in another browser.
+- **Upgrading.** A 2.6 profile (XP, coins, colour and hat) is carried over on first load. The Crown now unlocks at
+  level 20; anyone who had it keeps it.
+- Server: the results carry each player's round stats (catches and what they were disguised as, escapes, bonks,
+  time near a hunter, and the disguise a survivor is credited for). The hello and roster carry a kit and level
+  instead of the packed `look` number, checked for range only (see `SECURITY.md`). A 2.6 client should be reloaded.
+- New test: `npm run test:progress` (in CI) checks the rules directly. The protocol, mechanics, browser and match tests
+  cover the new fields, the 20-second hold, the wardrobe and the progress strip.
+
 ## 2.6.0
 
 A new soundtrack and new sound effects. Still no audio files: everything is synthesised in code, now properly.

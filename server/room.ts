@@ -9,6 +9,7 @@ import { buildMap, BOUNDS, type GameMap } from '../shared/map';
 import { World, aimDir, newBody, rayOBB, type Body, type Cmd } from '../shared/physics';
 import { PROPS, PROP_INDEX, STARTER_PROPS, propBody, type PropDef } from '../shared/props';
 import type { Award, Results, RosterEntry } from '../shared/protocol';
+import { randomKit, type RoundStats, type WireKit } from '../shared/progress';
 import { Bot, NavGrid, botName } from './bots';
 
 const now = () => performance.now();
@@ -30,7 +31,7 @@ const DC_GRACE_MS = 30_000;
 const AFK_MS = 240_000;
 
 function newStats() {
-  return { shots: 0, hits: 0, innocents: 0, kills: 0, bonks: 0, escapes: 0, taunts: 0, bamboozles: 0, near: 0, quacks: 0, diedAt: 0, pts: 0, haunts: 0, spooks: 0 };
+  return { shots: 0, hits: 0, innocents: 0, kills: 0, bonks: 0, escapes: 0, taunts: 0, bamboozles: 0, near: 0, quacks: 0, diedAt: 0, pts: 0, haunts: 0, spooks: 0, caught: [] as number[] };
 }
 
 export interface Decoy { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number; nextHop: number; hopUntil: number; }
@@ -41,7 +42,11 @@ export class Player {
   alive = true;
   body: Body;
   yaw = 0; pitch = 0; facing = 0;
-  disguise = STARTER_PROPS[0];
+  private disguiseNow = STARTER_PROPS[0];
+  /** When the current disguise was put on: a survivor's Catalogue stamp needs it held for CFG.CATALOG_HOLD_MS. */
+  disguiseAt = now();
+  get disguise() { return this.disguiseNow; }
+  set disguise(v: number) { if (v !== this.disguiseNow) { this.disguiseNow = v; this.disguiseAt = now(); } }
   hp = CFG.PROP_HP;
   focus = CFG.FOCUS_MAX;
   quackUntil = 0; panicUntil = 0; ghostUntil = 0; revealUntil = 0; boostUntil = 0;
@@ -51,7 +56,9 @@ export class Player {
   bank = 0.3; bankT = now(); ack = 0;
   score = 0; hunterTurns = 0;
   stats = newStats();
-  look = 0; bonkUntil = 0; nextBonkAt = 0; escapeAt = 0;
+  /** Cosmetics [paint, hat, eyes, pop, title] and level, as the player's browser reported them (validated for range only). */
+  kit: WireKit = [0, 0, 0, 0, 0]; lvl = 0;
+  bonkUntil = 0; nextBonkAt = 0; escapeAt = 0;
   connected = true; dcAt = 0; host = false;
   bot: Bot | null = null;
   hist: number[][] = [];
@@ -171,10 +178,10 @@ export class Room {
   }
 
   // ================================================================ membership
-  addPlayer(name: string, ws: WebSocket | null, bot = false, look = Math.floor(Math.random() * 64)): Player {
+  addPlayer(name: string, ws: WebSocket | null, bot = false, kit: WireKit = randomKit(), lvl = 0): Player {
     const p = new Player(this.nextId++, name, randomBytes(18).toString('base64url'), ws); // the seat token is a bearer credential: unguessable
     if (bot) p.bot = new Bot();
-    p.look = look;
+    p.kit = kit; p.lvl = bot ? 0 : lvl;
     this.players.set(p.id, p);
     if (p.human && ![...this.players.values()].some((q) => q.host)) p.host = true;
     p.disguise = pickOf(this.map.starters);
@@ -257,7 +264,7 @@ export class Room {
     return [...this.players.values()].map((p) => ({
       id: p.id, name: p.name, team: p.team, alive: p.alive, bot: !!p.bot, host: p.host,
       score: Math.round(p.score), disguise: hide && p.team === 'prop' && p.alive ? -1 : p.disguise, conn: p.connected,
-      quack: p.team === 'hunter' && p.quackUntil > this.now, look: p.look, ping: p.bot ? 0 : Math.round(p.rtt / 5) * 5,
+      quack: p.team === 'hunter' && p.quackUntil > this.now, kit: p.kit, lvl: p.lvl, ping: p.bot ? 0 : Math.round(p.rtt / 5) * 5,
     }));
   }
   private sendRoster() {
@@ -431,8 +438,18 @@ export class Room {
     for (const p of played) p.score += p.stats.pts;
     const roundCoins = (p: Player) => Math.max(COINS.round, Math.min(COINS.roundCap, COINS.round + Math.floor(p.stats.pts / COINS.perPoints)))
       + (p.team !== 'spec' && (p.team === 'hunter') === (winner === 'hunters') ? COINS.win : 0); // a hunter who was stood down is on neither side
+    // what each player did, for their profile: lifetime stats, the Catalogue and odd jobs (all banked in the browser)
+    const roundStats = (p: Player): RoundStats => {
+      const s = p.stats, survived = p.team === 'prop' && p.alive;
+      return {
+        sh: s.shots, hi: s.hits, k: s.kills, inn: s.innocents, bk: s.bonks, es: s.escapes, ta: s.taunts, bz: s.bamboozles,
+        nr: Math.round(s.near), qk: s.quacks, sp: s.spooks, hn: s.haunts, ct: s.caught.slice(),
+        hid: survived && t - p.disguiseAt >= CFG.CATALOG_HOLD_MS ? p.disguise : -1,
+        nh: survived && p.hp >= CFG.PROP_HP ? 1 : 0,
+      };
+    };
     const board = played
-      .map((p) => ({ id: p.id, name: p.name, team: p.team, round: Math.round(p.stats.pts), total: Math.round(p.score), survived: p.team === 'prop' && p.alive, coins: roundCoins(p) }))
+      .map((p) => ({ id: p.id, name: p.name, team: p.team, round: Math.round(p.stats.pts), total: Math.round(p.score), survived: p.team === 'prop' && p.alive, coins: roundCoins(p), st: roundStats(p) }))
       .sort((a, b) => b.round - a.round);
     // the last round of a game also settles the game: final standings, and a bonus for finishing and for the podium
     const last = this.round >= this.rounds;
@@ -440,7 +457,6 @@ export class Room {
     const final = last ? played.slice().sort((a, b) => b.score - a.score)
       .map((p, i) => ({ id: p.id, name: p.name, total: Math.round(p.score), coins: COINS.game + (i < paid ? COINS.place[i] : 0), bot: !!p.bot })) : undefined;
     this.event = null; this.world.gravScale = 1; this.pulses = []; this.haunted.clear();
-    void t;
     this.setPhase('end', last ? CFG.FINAL_MS : CFG.END_MS, { winner, awards, board, n: this.played, round: this.round, rounds: this.rounds, final });
   }
 
@@ -577,7 +593,7 @@ export class Room {
       if (victim.hp <= 0) {
         victim.hp = 0; victim.alive = false; victim.stats.diedAt = t;
         if (!this.firstDeath) this.firstDeath = victim.id;
-        p.stats.kills++; p.focus = Math.min(CFG.FOCUS_MAX, p.focus + CFG.FOCUS_KILL);
+        p.stats.kills++; if (p.stats.caught.length < 16) p.stats.caught.push(victim.disguise); p.focus = Math.min(CFG.FOCUS_MAX, p.focus + CFG.FOCUS_KILL);
         this.points(p, SCORE.catch, 'Prop caught!');
         this.broadcast({ t: 'ev', k: 'kill', by: p.id, who: victim.id, ty: victim.disguise, x: r2(victim.body.x), y: r2(victim.body.y), z: r2(victim.body.z) });
         // out of hiding, into haunting: a moment to read the banner, then the ghost may start rattling things

@@ -83,6 +83,7 @@
   <!-- ============================== main menu ============================== -->
   <div id="vig"></div>
   <div id="menu">
+    <div id="profile" class="profile hidden"></div>
     <div class="hero">
       <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
       <div class="tagline">Blend in. Don't get caught.</div>
@@ -94,7 +95,7 @@
       <div id="online"></div>
     </div>
     <div class="menuCard">
-      <div class="lvl"><div class="lvlBadge" id="lvlBadge">1</div><div class="lvlMid"><div class="lvlTop"><span>LEVEL</span><span id="lvlXp"></span></div><div class="lvlBar"><i id="lvlFill"></i></div></div><div class="wallet" title="Coins are earned by playing. Skins and cosmetics to spend them on are on the way."><i class="coin"></i><b id="coinN">0</b></div></div>
+      <button class="lvl" id="profBtn" title="Your profile, wardrobe, catalogue and feats"><div class="lvlBadge" id="lvlBadge">1</div><div class="lvlMid"><div class="lvlTop"><span>PROFILE</span><span id="lvlXp"></span></div><div class="lvlBar"><i id="lvlFill"></i></div></div><div class="wallet" title="Coins: spend them in the wardrobe"><i class="coin"></i><b id="coinN">0</b></div></button>
       <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
       <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
       <div class="row split">
@@ -103,11 +104,7 @@
       </div>
       <div class="row split"><button id="howBtn" class="btn small ghost">How to play</button><button id="setBtn" class="btn small ghost">Settings &amp; controls</button></div>
       <div id="menuError"></div>
-      <div class="custom">
-        <div class="tiny">YOUR HUNTER</div>
-        <div id="swatches" class="swatches"></div>
-        <div id="hats" class="hats"></div>
-      </div>
+      <div id="jobsMini" class="jobsMini" title="Today's odd jobs: open your profile"></div>
       <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Click</kbd>/<kbd>E</kbd> act · <kbd>Q</kbd> <kbd>F</kbd> abilities · <kbd>Shift</kbd> dash · <kbd>T</kbd> taunt</div>
     </div>
   </div>

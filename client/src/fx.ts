@@ -1,5 +1,6 @@
 /** Lightweight visual effects: pooled particles, tracers, expanding rings and floating text. */
 import * as THREE from 'three';
+import { POPS } from '../../shared/progress';
 
 const texCache = new Map<string, THREE.CanvasTexture>();
 
@@ -117,6 +118,12 @@ export class Fx {
     }
     if (this.parts.instanceColor) this.parts.instanceColor.needsUpdate = true;
     this.active = Math.max(this.active, 1);
+  }
+
+  /** The burst when a prop is caught, in the style that player wears (POPS in shared/progress.ts). */
+  pop(x: number, y: number, z: number, style = 0) {
+    const p = POPS[style] ?? POPS[0];
+    this.burst(x, y, z, p.n, p.colors, p.speed, p.up, p.size, p.life, p.grav);
   }
 
   tracer(from: THREE.Vector3, to: THREE.Vector3, color = 0xfff27a) {
