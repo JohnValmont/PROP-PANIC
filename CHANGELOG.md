@@ -1,5 +1,32 @@
 # Changelog
 
+## 2.6.0
+
+A new soundtrack and new sound effects. Still no audio files: everything is synthesised in code, now properly.
+
+- **Real instruments instead of beeps.** Plucked strings and upright bass (Karplus-Strong), marimba, glockenspiel and
+  bells (sums of decaying resonances), an FM electric piano, a reed, a brass section, a warm pad, a synth bass and lead,
+  and a drum kit (kick, snare, clap, hats, shaker, rim, tom, crash, finger snaps, brushes). Notes are rendered into
+  small sample buffers in the background, a few milliseconds at a time.
+- **A composed soundtrack.** Four songs written out note by note with intros, A and B sections, bass lines, voice-led
+  chords, melodies and counter-melodies: *Tumbleton's Theme* (menu, lobby, results), *Tiptoe* (hiding), *Searching*
+  (the hunt) and *Panic!* (the last 30 seconds). Jingles for winning, levelling up and each side's role card; the sad
+  trombone for losing.
+- **Adaptive hunt music.** The hunt track brings in percussion and a marimba ostinato as a hunter and a prop close in
+  on each other, or as the last minute nears, then pizzicato and snare when it gets really close.
+- **Sound effects redone**: a layered blaster, rubber squeaks and a clown horn shaped by vowel resonances, wooden knocks
+  for innocent objects, a referee's whistle to start the hunt, a comedy "awooga" for panic time, a theremin for a
+  spooked hunter, robot footsteps. Frequent sounds get a few variations and a small random detune.
+- **A proper mix**: stereo placement, a music reverb and a room reverb that changes with the map, high-passed reverb
+  returns, a compressor and limiter, and the music dips for a moment under squeaks, taunts and catches so they are
+  heard. Every effect is normalised and DC-free; levels were set by measuring each one.
+- **Sound test** in Settings: play any track (including the hunt at full tension) or effect.
+- `npm run audio:render` renders every track and effect to WAV/MP3 through the game's own engine.
+  `npm run test:audio` (in CI) checks every instrument, effect and song renders clean.
+- Caught before release by the new render and test tools: the reverbs must be generated at the device's own sample
+  rate (otherwise the browser refuses them), a plucked bass carried a DC offset that ate headroom, and several effects
+  peaked well over full scale and were being squashed by the limiter.
+
 ## 2.5.0
 
 The two dead stretches of a round, and a few things hunters were told that they should not have been.

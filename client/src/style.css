@@ -233,6 +233,9 @@ table.board tr.dead td { opacity: 0.55; }
 .bind button { font-family: var(--font); font-weight: 700; font-size: 14px; min-width: 74px; padding: 5px 8px; border-radius: 9px; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.12); color: #fff; cursor: pointer; }
 .bind button.listening { background: var(--yellow); color: var(--ink); border-color: #fff; }
 #closeSettings { display: none; }
+.sndTest { display: flex; gap: 8px; align-items: center; font-size: 15px; font-weight: 600; text-align: left; }
+.sndTest span { flex: 0 0 150px; } .sndTest select { flex: 1; min-width: 0; font-family: var(--font); font-size: 14px; padding: 4px 6px; border-radius: 9px; border: 2px solid rgba(255, 255, 255, 0.4); background: rgba(255, 255, 255, 0.12); color: #fff; }
+.sndTest option { color: #1b2a4a; }
 #pause.menuMode #resumeBtn, #pause.menuMode #leaveBtn { display: none; }
 #pause.menuMode #closeSettings { display: block; }
 .howGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; text-align: left; }
