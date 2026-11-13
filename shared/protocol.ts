@@ -8,7 +8,7 @@ import type { RoundStats, WireKit } from './progress';
 // ------------------------------------------------------------------ client -> server
 export type ClientMsg =
   /** `kit` is what the player wears ([paint, hat, eyes, pop, title], see shared/progress.ts) and `lvl` their level. */
-  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number }
+  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number; /** anonymous browser id, for the admin statistics only */ aid?: string }
   /** Batched movement commands: [seq, dt, mx, mz, yaw, pitch, buttons, facing]. buttons: 1 jump, 2 dash. */
   | { t: 'in'; c: number[][] }
   /** Fire the blaster. rt = server time the shooter was rendering other players at (lag compensation). */

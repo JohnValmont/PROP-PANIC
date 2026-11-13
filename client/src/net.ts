@@ -1,6 +1,22 @@
 /** WebSocket connection with automatic seat-preserving reconnects. */
 export type NetState = 'open' | 'reconnecting' | 'closed';
 
+/**
+ * A random id this browser keeps, so the server's statistics can tell ten visits by one person from ten people.
+ * It says nothing about who the player is.
+ */
+function anonId(): string {
+  try {
+    let id = localStorage.getItem('pp_aid');
+    if (!id || !/^[A-Za-z0-9_-]{8,40}$/.test(id)) {
+      const b = crypto.getRandomValues(new Uint8Array(12));
+      id = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+      localStorage.setItem('pp_aid', id);
+    }
+    return id;
+  } catch { return ''; }
+}
+
 export class Net {
   onMsg: (m: any) => void = () => {};
   onState: (s: NetState, info?: string) => void = () => {};
@@ -23,7 +39,7 @@ export class Net {
   connect(name: string, mode: 'quick' | 'create' | 'join', code: string | undefined, kit: number[], lvl: number) {
     this.close();
     this.name = name; this.wantClose = false; this.welcomed = false; this.tries = 0; this.token = ''; this.code = ''; this.lastErr = '';
-    this.open({ t: 'hello', name, mode, code, kit, lvl });
+    this.open({ t: 'hello', name, mode, code, kit, lvl, aid: anonId() });
   }
 
   /** Try to reclaim the seat saved by a previous page load. Returns false if there is none. */

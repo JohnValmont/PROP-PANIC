@@ -56,6 +56,19 @@ server defends against, how, and what it does not.
 | `PP_MAX_PER_IP` | 32 | Sockets per address. |
 | `PP_NEW_PER_MIN` | 120 | Socket opens per address per minute. |
 | `PP_MAX_ROOMS` | 400 | Private rooms. |
+| `PP_ADMIN_KEY` | none | Password for `/admin` (8+ characters). Unset: the page does not exist. |
+| `SUPABASE_URL`, `SUPABASE_KEY` | none | Where play statistics are kept (`docs/ADMIN.md`). Unset: nothing is sent anywhere. |
+
+## The admin page and statistics
+
+`/admin` is behind HTTP Basic auth with `PP_ADMIN_KEY`, compared as SHA-256 digests in constant time; ten wrong
+passwords lock an address out for 15 minutes. The page has no script, is never cached and asks not to be indexed. Serve
+the game over HTTPS (Render does), or the password crosses the network in the clear.
+
+Statistics hold no names and no addresses: a visit is a random id the browser made up, its start, end, length and
+rounds. The Supabase secret key lives only in the server's environment. The tables have row level security on with no
+policies, so the project's public key can neither read nor write them, and the views use `security_invoker` so they do
+not get round that.
 
 ## Reporting
 

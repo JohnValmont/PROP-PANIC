@@ -145,6 +145,13 @@ The server needs no configuration on Render. Elsewhere, see `SECURITY.md` for th
 behind a proxy (`PP_TRUST_PROXY`), on a second domain (`PP_ORIGINS`) or inside a portal's frame
 (`PP_FRAME_ANCESTORS`).
 
+## Admin page and statistics
+
+Set `PP_ADMIN_KEY` and open `/admin` (any user name, the key as the password) to see who is online, the rooms open,
+and, with a free Supabase project behind it, the history: different players per day, visits and how long they last,
+rounds, peak online, and hunter / prop win rates per map. No names or addresses are stored. Setup, including the SQL to
+paste into Supabase: `docs/ADMIN.md`.
+
 ## How it is built
 
 ```
@@ -187,17 +194,19 @@ npm run test:maps        # both maps: deterministic, free spawns, bot-navigable,
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
 npm run test:audio       # every instrument, effect and song renders clean (finite, unclipped, no DC offset)
 npm run test:progress    # levels, catalogue, feats, odd jobs, wardrobe, banking a round, save codes
+npm run test:stats       # admin page password and lockout, statistics written to (a stand-in for) Supabase
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security and protocol tests on every push.
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security, statistics and protocol tests on every push.
 
 ## Tuning
 
 All gameplay numbers (speeds, damage, cooldowns, chaos rates, phase lengths, every score in `SCORE`, the odds of each
 chaos event in `CHAOS_WEIGHTS`) live in `shared/constants.ts`. The 2.5 systems each have a switch there: `HAUNT_ON`,
-`PREVIEW_ON`, and the stand-in timers `HUNTER_DC_MS` / `HUNTER_AFK_MS`. All of it has only been played against bots:
-`docs/PLAYTEST.md` is the checklist for the first sessions with real people.
+`PREVIEW_ON`, and the stand-in timers `HUNTER_DC_MS` / `HUNTER_AFK_MS`. The game has been played by groups of up to 8
+people; `docs/PLAYTEST.md` is the checklist for watching a session, and the admin page's win rates per map show which way
+real rounds are leaning.

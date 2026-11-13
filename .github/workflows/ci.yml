@@ -19,4 +19,5 @@ jobs:
       - run: npm run test:progress
       - run: npm run test:mechanics
       - run: npm run test:security
+      - run: npm run test:stats
       - run: npm test
