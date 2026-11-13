@@ -1,4 +1,4 @@
-/** Rebindable keyboard controls, saved in the browser. */
+/** Rebindable keyboard and mouse-button controls, saved in the browser. Mouse buttons are stored as 'Mouse<button>'. */
 export const ACTIONS: [id: string, label: string, def: string][] = [
   ['fwd', 'Move forward', 'KeyW'], ['back', 'Move back', 'KeyS'], ['left', 'Move left', 'KeyA'], ['right', 'Move right', 'KeyD'],
   ['jump', 'Jump', 'Space'], ['dash', 'Dash (prop)', 'ShiftLeft'], ['act', 'Become toy (prop)', 'KeyE'],
@@ -32,11 +32,17 @@ export function resetBinds() {
 
 /** Short label for a key code, as shown on HUD buttons. */
 export function keyLabel(code: string): string {
+  if (code.startsWith('Mouse')) return ['L-Click', 'M-Click', 'R-Click', 'Mouse 4', 'Mouse 5'][Number(code.slice(5))] ?? `Mouse ${Number(code.slice(5)) + 1}`;
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
   if (code.startsWith('Arrow')) return { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[code] ?? code;
   const map: Record<string, string> = { Space: 'Space', ShiftLeft: 'Shift', ShiftRight: 'R-Shift', ControlLeft: 'Ctrl', ControlRight: 'R-Ctrl', AltLeft: 'Alt', AltRight: 'R-Alt', CapsLock: 'Caps', Backquote: '`' };
   return map[code] ?? code.replace('Numpad', 'Num ');
+}
+
+/** True when some action is bound to this code (used to let a bound mouse button replace its default use). */
+export function isBound(code: string): boolean {
+  return ACTIONS.some(([id]) => B[id] === code);
 }
 
 loadBinds();
