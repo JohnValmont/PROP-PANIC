@@ -62,19 +62,17 @@ export class ProfileUi {
   constructor(private game: Game) {
     $('profile').addEventListener('click', (e) => this.onClick(e));
     $('profile').addEventListener('change', (e) => this.onChange(e));
-    $('profBtn').onclick = () => this.open('overview');
-    $('jobsMini').onclick = () => this.open('overview');
-    document.addEventListener('keydown', (e) => { if (e.code === 'Escape' && this.openNow) this.close(); });
     this.renderCard();
     // the reset countdown on the card and the jobs list
     setInterval(() => { if (!this.game.inGame) { this.renderCard(); if (this.openNow && this.tab === 'overview') { const el = document.getElementById('jobReset'); if (el) el.textContent = this.resetIn(); } } }, 30_000);
   }
 
   get isOpen() { return this.openNow; }
+  /** Asked to leave the profile (its close button): the menu decides where to go. */
+  onExit: () => void = () => this.close();
 
   open(tab: Tab = this.tab) {
     this.tab = tab; this.openNow = true; this.confirm = '';
-    $('menu').classList.add('prof');
     $('profile').classList.remove('hidden');
     this.game.showcaseOn = true;
     this.render();
@@ -82,7 +80,6 @@ export class ProfileUi {
 
   close() {
     this.openNow = false; this.confirm = '';
-    $('menu').classList.remove('prof');
     $('profile').classList.add('hidden');
     this.game.showcaseOn = false;
   }
@@ -112,7 +109,7 @@ export class ProfileUi {
     const tabs: [Tab, string][] = [['overview', 'Overview'], ['wardrobe', 'Wardrobe'], ['catalogue', 'Catalogue'], ['feats', 'Feats']];
     const body = this.tab === 'overview' ? this.overview() : this.tab === 'wardrobe' ? this.wardrobe() : this.tab === 'catalogue' ? this.catalogue() : this.featsTab();
     $('profile').innerHTML = `<div class="profHead"><div class="profTabs">${tabs.map(([t, l]) => `<button class="ptab${t === this.tab ? ' on' : ''}" data-tab="${t}">${l}</button>`).join('')}</div>`
-      + `<span class="wallet"><i class="coin"></i><b>${n(this.game.profile.coins)}</b></span><button class="btn tiny" data-act="close" title="Close (Esc)">✕</button></div><div class="profBody">${body}</div>`;
+      + `<span class="wallet"><i class="coin"></i><b>${n(this.game.profile.coins)}</b></span><button class="iconBtn" data-act="close" title="Close (Esc)" aria-label="Close">✕</button></div><div class="profBody">${body}</div>`;
   }
 
   // ------------------------------------------------------------------ overview
@@ -213,7 +210,7 @@ export class ProfileUi {
     const wear = t.closest<HTMLElement>('[data-wear]')?.dataset.wear;
     if (wear) { p.kit.title = wear; g.applyKit(); g.sfx.play('click'); this.render(); return; }
     const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
-    if (act === 'close') { this.close(); return; }
+    if (act === 'close') { this.onExit(); return; }
     if (act === 'export') { void this.exportSave(t); return; }
     if (act === 'import') { this.importSave(); return; }
     const id = t.closest<HTMLElement>('[data-item]')?.dataset.item;

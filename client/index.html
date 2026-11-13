@@ -4,6 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
   <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#16213e" />
   <title>PROP PANIC — Blend in. Don't get caught.</title>
   <meta name="description" content="A chaotic multiplayer prop-hunt party game in your browser. Become a rubber duck. Fool your friends. Don't get caught." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -80,83 +83,157 @@
     <div id="chatMenu" class="panel"></div>
   </div>
 
-  <!-- ============================== main menu ============================== -->
+  <!-- ============================== main menu: a full-screen shell with real pages ============================== -->
   <div id="vig"></div>
-  <div id="menu">
-    <div id="profile" class="profile hidden"></div>
-    <div class="hero">
-      <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
-      <div class="tagline">Blend in. Don't get caught.</div>
-      <div class="feats">
-        <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 66 real-world objects, indoors and out. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
-        <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent objects and you turn into a duck.</span></div></div>
-        <div class="feat"><i class="fi f3"></i><div><b>Caught? You are not out</b><span>Come back as a ghost and rattle the furniture until a hunter shoots the wrong thing.</span></div></div>
+  <div id="menu" data-page="play">
+    <header class="mBar">
+      <button class="brand" data-go="play" aria-label="Prop Panic: home"><i class="goo"><b></b></i><span>PROP<em>PANIC</em></span></button>
+      <nav class="mNav" aria-label="Menu">
+        <button class="nav on" data-go="play"><svg viewBox="0 0 24 24"><path d="M8 5v14l11-7z" fill="currentColor" stroke="none"/></svg><span>Play</span></button>
+        <button class="nav" data-go="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profile</span></button>
+        <button class="nav" data-go="settings"><svg viewBox="0 0 24 24"><path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1"/><circle cx="16" cy="6" r="2.4"/><circle cx="10" cy="12" r="2.4"/><circle cx="17.6" cy="18" r="2.4"/></svg><span>Settings</span></button>
+        <button class="nav" data-go="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><circle cx="12" cy="17.2" r=".7" fill="currentColor"/></svg><span>How to play</span></button>
+      </nav>
+      <div class="mRight">
+        <button class="meChip" id="profBtn" title="Your profile, wardrobe, catalogue and feats">
+          <span class="lvlBadge" id="lvlBadge">1</span>
+          <span class="meMid"><b id="meName">Player</b><span class="lvlBar"><i id="lvlFill"></i></span><small id="lvlXp"></small></span>
+          <span class="wallet" title="Coins: spend them in the wardrobe"><i class="coin"></i><b id="coinN">0</b></span>
+        </button>
+        <button class="iconBtn fsBtn" id="fsBtn" title="Full screen" aria-label="Full screen"><svg class="fsOn" viewBox="0 0 24 24"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/></svg><svg class="fsOff" viewBox="0 0 24 24"><path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/></svg></button>
       </div>
-      <div id="online"></div>
-    </div>
-    <div class="menuCard">
-      <button class="lvl" id="profBtn" title="Your profile, wardrobe, catalogue and feats"><div class="lvlBadge" id="lvlBadge">1</div><div class="lvlMid"><div class="lvlTop"><span>PROFILE</span><span id="lvlXp"></span></div><div class="lvlBar"><i id="lvlFill"></i></div></div><div class="wallet" title="Coins: spend them in the wardrobe"><i class="coin"></i><b id="coinN">0</b></div></button>
-      <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
-      <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
-      <div class="row split">
-        <button id="createBtn" class="btn teal">Private room</button>
-        <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
-      </div>
-      <div class="row split"><button id="howBtn" class="btn small ghost">How to play</button><button id="setBtn" class="btn small ghost">Settings &amp; controls</button></div>
-      <div id="menuError"></div>
-      <div id="jobsMini" class="jobsMini" title="Today's odd jobs: open your profile"></div>
-      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Click</kbd>/<kbd>E</kbd> act · <kbd>Q</kbd> <kbd>F</kbd> abilities · <kbd>Shift</kbd> dash · <kbd>T</kbd> taunt</div>
-    </div>
+    </header>
+
+    <main class="mPages">
+      <!-- PLAY -->
+      <section class="page" id="pgPlay">
+        <div class="hero">
+          <h1 class="logo"><span class="l1">PR<i class="goo"><b></b></i>P</span><span class="l2">PANIC</span></h1>
+          <div class="tagline">Blend in. Don't get caught.</div>
+          <div class="feats">
+            <div class="feat"><i class="fi f1"></i><div><b>Become anything</b><span>Hide in plain sight as one of 66 real-world objects. Taunt, drop decoys, bonk hunters on the head.</span></div></div>
+            <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent objects and you turn into a duck.</span></div></div>
+            <div class="feat"><i class="fi f3"></i><div><b>Caught? You are not out</b><span>Come back as a ghost and rattle the furniture until a hunter shoots the wrong thing.</span></div></div>
+          </div>
+          <div id="online"></div>
+        </div>
+        <div class="menuCard playCard">
+          <label class="fieldL" for="nameInput">YOUR NAME</label>
+          <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
+          <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
+          <div class="row split">
+            <button id="createBtn" class="btn teal">Private room</button>
+            <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
+          </div>
+          <div id="menuError"></div>
+          <div id="jobsMini" class="jobsMini" title="Today's odd jobs: open your profile"></div>
+        </div>
+      </section>
+
+      <!-- PROFILE: the panel on the right, the fitting room (your robot in the 3D scene) on the left -->
+      <section class="page" id="pgProfile">
+        <div class="fitting" aria-hidden="true"><div class="fitSign">FITTING ROOM</div><div class="fitHint">Your hunter, as everyone sees them</div></div>
+        <div id="profile" class="profile hidden"></div>
+      </section>
+
+      <!-- SETTINGS: lives here on the menu, and moves into the pause screen during a game -->
+      <section class="page" id="pgSettings">
+        <div id="settings" class="sheet">
+          <div class="sheetHead"><h2>Settings</h2><button class="iconBtn" id="closeSettings" title="Close (Esc)" aria-label="Close">✕</button></div>
+          <div class="sheetMain">
+            <div class="setTabs" role="tablist">
+              <button class="stab on" data-st="video">Video</button><button class="stab" data-st="audio">Audio</button><button class="stab" data-st="controls">Controls</button><button class="stab" data-st="ui">Interface</button>
+            </div>
+            <div class="setBody">
+              <div class="sg" data-sg="video">
+                <div class="opt"><div class="optL"><b>Graphics</b><small>Fast keeps phones and older laptops smooth. Ultra adds sharper shadows and ambient occlusion.</small></div>
+                  <div class="seg" id="gfxSeg"><button data-q="low">Fast</button><button data-q="high">High</button><button data-q="ultra">Ultra</button></div></div>
+                <div class="opt"><div class="optL"><b>Field of view</b><small>Wider shows more of the room.</small></div><div class="optR"><input id="fovRange" type="range" min="60" max="100" step="1" /><output data-for="fovRange"></output></div></div>
+                <div class="opt fsOnly"><div class="optL"><b>Full screen</b><small>Hides the browser bars. Esc leaves it on a computer.</small></div><label class="sw2"><input id="fsToggle" type="checkbox" /><i></i></label></div>
+              </div>
+              <div class="sg" data-sg="audio" hidden>
+                <div class="opt"><div class="optL"><b>Sound</b><small>Mute everything (<kbd>M</kbd>).</small></div><label class="sw2"><input id="soundToggle" type="checkbox" /><i></i></label></div>
+                <div class="opt"><div class="optL"><b>Sound effects</b></div><div class="optR"><input id="volRange" type="range" min="0" max="1" step="0.05" /><output data-for="volRange" data-pct></output></div></div>
+                <div class="opt"><div class="optL"><b>Music</b></div><div class="optR"><input id="musRange" type="range" min="0" max="1" step="0.05" /><output data-for="musRange" data-pct></output></div></div>
+                <div class="opt"><div class="optL"><b>Sound test</b><small>Hear every track and effect.</small></div><div class="optR sndTest"><select id="sndSel"></select><button id="sndPlay" class="btn tiny">▶</button><button id="sndStop" class="btn tiny">■</button></div></div>
+              </div>
+              <div class="sg" data-sg="controls" hidden>
+                <div class="opt"><div class="optL"><b>Look sensitivity</b><small>Mouse and touch.</small></div><div class="optR"><input id="sensRange" type="range" min="0.3" max="3" step="0.05" /><output data-for="sensRange" data-x></output></div></div>
+                <div class="opt"><div class="optL"><b>Invert look up/down</b></div><label class="sw2"><input id="invY" type="checkbox" /><i></i></label></div>
+                <div class="bindsWrap">
+                  <div class="bindsHead"><span>KEY BINDINGS · click one, then press the new key</span><button id="resetBinds" class="btn tiny">Reset</button></div>
+                  <div id="binds"></div>
+                </div>
+              </div>
+              <div class="sg" data-sg="ui" hidden>
+                <div class="opt"><div class="optL"><b>HUD size</b><small>Bigger for phones and TVs, smaller for a busy screen.</small></div><div class="optR"><input id="hudRange" type="range" min="0.7" max="1.4" step="0.05" /><output data-for="hudRange" data-pct></output></div></div>
+                <div class="opt"><div class="optL"><b>Calm menus</b><small>Stops the wobbling and pulsing on menu screens.</small></div><label class="sw2"><input id="calmToggle" type="checkbox" /><i></i></label></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- HOW TO PLAY -->
+      <section class="page" id="pgGuide">
+        <div id="howto" class="sheet">
+          <div class="sheetHead"><h2>How to play</h2><button class="iconBtn" id="howClose" title="Close (Esc)" aria-label="Close">✕</button></div>
+          <div class="sheetScroll">
+            <div class="howGrid">
+              <div class="howCol prop">
+                <h3>If you are a PROP</h3>
+                <ol>
+                  <li><b>Become an object.</b> Aim at one and press <kbd>E</kbd> (or <b>BECOME</b>).</li>
+                  <li><b>Blend in.</b> Stand among objects like you and keep still.</li>
+                  <li><b>Got hit? Run.</b> Three hits and you are caught.</li>
+                </ol>
+                <p>Survive until the timer hits zero.</p>
+              </div>
+              <div class="howCol hunter">
+                <h3>If you are a HUNTER</h3>
+                <ol>
+                  <li><b>Study the room</b> while the props hide. Whatever appears later is a fake.</li>
+                  <li><b>Zap the fakes.</b> Three hits catch a prop.</li>
+                  <li><b>Do not guess.</b> Real objects drain your Focus. At zero you turn into a duck.</li>
+                </ol>
+                <p>Catch every prop before time runs out.</p>
+              </div>
+            </div>
+            <div class="howGhost"><b>Caught?</b> You come back as a ghost. Aim at any object and click to rattle it: if a hunter shoots it, you score.</div>
+            <div class="ctrlGrid">
+              <div class="ctrl kb"><h4>Keyboard &amp; mouse</h4>
+                <div><kbd>WASD</kbd><span>move</span></div><div><kbd>Space</kbd><span>jump</span></div><div><kbd>Click</kbd> <kbd>E</kbd><span>transform / fire</span></div>
+                <div><kbd>Q</kbd><span>decoy / scanner</span></div><div><kbd>F</kbd><span>vanish / shockwave</span></div><div><kbd>Shift</kbd><span>dash (props)</span></div>
+                <div><kbd>T</kbd> <kbd>1-5</kbd><span>taunt</span></div><div><kbd>Right-click</kbd><span>lock rotation / zoom</span></div><div><kbd>Enter</kbd><span>quick chat</span></div>
+                <div><kbd>Tab</kbd><span>scores</span></div><div><kbd>M</kbd><span>mute</span></div><div><kbd>Esc</kbd><span>pause &amp; settings</span></div>
+              </div>
+              <div class="ctrl tc"><h4>Touch</h4>
+                <div><b>Left thumb</b><span>drag anywhere to move</span></div><div><b>Right thumb</b><span>drag to look</span></div>
+                <div><b>Big button</b><span>become / zap: slide on it to aim</span></div><div><b>☰</b><span>pause &amp; settings</span></div>
+              </div>
+            </div>
+            <div class="howMore">Everything else (decoys, taunts, the scanner, chaos events) is explained on screen when it matters.</div>
+            <button id="howGo" class="btn big yellow">Got it</button>
+          </div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <div id="pause" class="overlay hidden">
-    <div class="menuCard small">
+    <div class="menuCard small pauseCard">
       <h2 id="pauseTitle">Paused</h2>
       <button id="resumeBtn" class="btn big yellow">Click to play</button>
-      <div class="row"><button id="gfxBtn" class="btn teal">Graphics: High</button><button id="muteBtn" class="btn teal">Sound: On</button></div>
-      <div class="sliders">
-        <label>Mouse sensitivity <input id="sensRange" type="range" min="0.3" max="3" step="0.05" /></label>
-        <label>Field of view <input id="fovRange" type="range" min="60" max="100" step="1" /></label>
-        <label>Sound effects <input id="volRange" type="range" min="0" max="1" step="0.05" /></label>
-        <label>Music <input id="musRange" type="range" min="0" max="1" step="0.05" /></label>
-        <label>Invert mouse Y <input id="invY" type="checkbox" /></label>
+      <div class="pGrid">
+        <button id="pSetBtn" class="btn teal">Settings</button>
+        <button id="pHowBtn" class="btn ghost">How to play</button>
+        <button id="pFsBtn" class="btn ghost fsOnly">Full screen</button>
+        <button id="muteBtn" class="btn ghost">Sound: On</button>
       </div>
-      <div class="sndTest"><span>Sound test</span><select id="sndSel"></select><button id="sndPlay" class="btn tiny">▶</button><button id="sndStop" class="btn tiny">■</button></div>
-      <div class="bindsHead"><span>KEY BINDINGS — click one, then press the new key</span><button id="resetBinds" class="btn tiny">Reset</button></div>
-      <div id="binds"></div>
       <button id="leaveBtn" class="btn pink">Leave game</button>
-      <button id="closeSettings" class="btn yellow">Done</button>
-      <div class="keys"><kbd>WASD</kbd> move · <kbd>Space</kbd> jump · <kbd>Shift</kbd> dash (props) · <kbd>E</kbd>/<kbd>Click</kbd> transform or fire · <kbd>Q</kbd> decoy / scanner · <kbd>F</kbd> vanish / shockwave · <kbd>T</kbd> or <kbd>1-5</kbd> taunt · <kbd>Right-click</kbd> lock rotation (prop) / zoom (hunter) · <kbd>Enter</kbd> quick chat · <kbd>Tab</kbd> scores · <kbd>M</kbd> mute</div>
+      <div class="keys"><kbd>Esc</kbd> pause · <kbd>Tab</kbd> scores · <kbd>Enter</kbd> quick chat · <kbd>M</kbd> mute</div>
     </div>
-  </div>
-
-  <div id="howto" class="overlay hidden">
-    <div class="menuCard wide">
-      <h2>How to play</h2>
-      <div class="howGrid">
-        <div class="howCol prop">
-          <h3>If you are a PROP</h3>
-          <ol>
-            <li><b>Become an object.</b> Aim at one and press <kbd>E</kbd>.</li>
-            <li><b>Blend in.</b> Stand among objects like you and keep still.</li>
-            <li><b>Got hit? Run.</b> Three hits and you are caught.</li>
-          </ol>
-          <p>Survive until the timer hits zero.</p>
-        </div>
-        <div class="howCol hunter">
-          <h3>If you are a HUNTER</h3>
-          <ol>
-            <li><b>Study the room</b> while the props hide. Whatever appears later is a fake.</li>
-            <li><b>Zap the fakes.</b> Three hits catch a prop.</li>
-            <li><b>Do not guess.</b> Real objects drain your Focus. At zero you turn into a duck.</li>
-          </ol>
-          <p>Catch every prop before time runs out.</p>
-        </div>
-      </div>
-      <div class="howGhost"><b>Caught?</b> You come back as a ghost. Aim at any object and click to rattle it: if a hunter shoots it, you score.</div>
-      <div class="howMore">Everything else (decoys, taunts, the scanner, chaos events) is explained on screen when it matters.</div>
-      <button id="howClose" class="btn big yellow">Got it</button>
-    </div>
+    <div class="sheetSlot"></div>
   </div>
 
   <div id="build"></div>

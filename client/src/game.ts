@@ -242,6 +242,8 @@ export class Game {
     this.resize();
   }
 
+  /** Re-fit the renderer and the HUD to the window (also after the HUD size setting changes). */
+  relayout() { this.resize(); }
   private resize() {
     const w = window.innerWidth, h = window.innerHeight;
     this.renderer.setPixelRatio(this.quality === 'ultra' ? Math.min(window.devicePixelRatio, 2) : this.quality === 'high' ? Math.min(window.devicePixelRatio, 1.5) : 0.85);
@@ -251,7 +253,7 @@ export class Game {
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
     // keep the HUD readable (and non-overlapping) from small windows up to 4K
-    const scale = Math.max(0.5, Math.min(1.5, Math.min(w / 1280, h / 720)));
+    const scale = Math.max(0.5, Math.min(1.5, Math.min(w / 1280, h / 720))) * this.hudScale;
     (this.hud.root.style as any).zoom = String(scale);
   }
 
@@ -295,6 +297,13 @@ export class Game {
   }
 
   onMenu: () => void = () => {};
+  /** Called when the game changes the graphics setting by itself (the low frame rate fallback). */
+  onQuality: () => void = () => {};
+  /** The player's HUD size setting, on top of the automatic fit to the window. */
+  hudScale = Math.max(0.7, Math.min(1.4, Number(localStorage.getItem('pp_hud')) || 1));
+  /** Menu camera: 1 slides the scene left so the robot stands beside the profile panel (the fitting room). */
+  menuShift = 0;
+  private menuShiftNow = 0;
   /** Put back the music that belongs to where the player is (after the sound test played something else). */
   syncMusic() {
     this.sfx.music('none');
@@ -1102,6 +1111,12 @@ export class Game {
       cam.position.set(1.4 + sway * 0.5, 1.5 + Math.sin(this.menuAngle * 0.31) * 0.05, 16.4);
       cam.lookAt(-0.4 + sway * 0.25, 1.22, 8);
       if (cam.fov !== 62) { cam.fov = 62; cam.updateProjectionMatrix(); }
+      // the fitting room: only on screens wide enough to show the robot and the profile panel side by side
+      // (upright phones: nudge the scene right instead, so the robot is not cut off at the left edge)
+      const w = window.innerWidth, h = window.innerHeight, goal = h > w ? -0.36 : this.menuShift && w >= 1000 ? 0.16 : 0;
+      this.menuShiftNow += (goal - this.menuShiftNow) * Math.min(1, dt * 6);
+      if (Math.abs(this.menuShiftNow) > 0.001) { cam.setViewOffset(w, h, this.menuShiftNow * w, 0, w, h); }
+      else if (cam.view?.enabled) { this.menuShiftNow = 0; cam.clearViewOffset(); }
       this.preview.visible = true;
       this.preview.rotation.y = 0.35 + Math.sin(this.menuAngle * 0.9) * 0.3;
       this.preview.position.y = Math.abs(Math.sin(this.menuAngle * 2.2)) * 0.04;
@@ -1118,6 +1133,7 @@ export class Game {
       return;
     }
     this.preview.visible = false; this.showcase.visible = false;
+    if (cam.view?.enabled) { this.menuShiftNow = 0; cam.clearViewOffset(); }
     const ghost = !this.alive || this.team === 'spec';
     if (ghost !== this.specOn) { if (ghost) this.enterSpectator(); else { this.specOn = false; this.specTarget = 0; this.specPov = false; this.specMode = 'follow'; } }
     // hunters: while the props hide, a free look round the room as it was stocked (it holds no props: the server sends none)
@@ -1546,8 +1562,8 @@ export class Game {
       if (!this.fpsChecked && this.slowSecs >= 4) {
         // step down one notch at a time; from ultra there is still somewhere left to go
         this.slowSecs = 0;
-        if (this.quality === 'ultra') { this.setQuality('high'); this.hud.popup('Low frame rate: graphics set to High'); document.getElementById('gfxBtn')!.textContent = 'Graphics: High'; }
-        else { this.fpsChecked = true; if (this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); document.getElementById('gfxBtn')!.textContent = 'Graphics: Fast'; } }
+        if (this.quality === 'ultra') { this.setQuality('high'); this.hud.popup('Low frame rate: graphics set to High'); this.onQuality(); }
+        else { this.fpsChecked = true; if (this.quality === 'high') { this.setQuality('low'); this.hud.popup('Low frame rate: switched to fast graphics'); this.onQuality(); } }
       }
       this.fpsAcc = 0; this.fpsN = 0;
     }
