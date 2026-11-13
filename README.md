@@ -82,15 +82,25 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
 
 ## Game modes and what is coming
 
-The Play card has a **Game mode** row. **Classic Hunt** is the game described above and the only live mode; the
-others (Infection, Copycat, Blitz, Duos, Lights Out) are locked tiles marked *Coming soon*: tapping one shakes it and
-shows what it will be. The **Coming soon** tab in the menu (with a NEW badge until it is opened) lists the upcoming
-modes, maps and features, with a sealed "top secret" map, a share button, and a **Want it** button on each card.
-The private-room lobby carries the same line, for players who arrive by invite link and never see the menu.
+The Play card has a **Game mode** row. **Classic** is the game described above and the only live mode. The others
+sit beside it as boxed games with a swinging *SOON* price tag; tapping one shows what it is, with a link to its box.
+The **Coming soon** tab in the menu (NEW badge until opened) is the stock room: a staff notice, and a shelf of boxed
+modes with hand-drawn box art (SVG, in `client/src/soon.ts`) and a *Coming soon* label clipped to the shelf. Opening a
+box shows how the mode plays, how many players it suits and why it is different; arrows (or ← →) flip through them.
 
-None of it has a date, and the cards only ever say *Coming soon*. **Want it** is kept in the player's browser
-(`pp_wants`) and is not sent anywhere yet, so the page shows no vote counts. The list lives in `client/src/soon.ts`:
-when something ships, remove its card, and bump `SOON_VERSION` whenever the list changes so the NEW badge comes back.
+| Mode | Players | The idea |
+| --- | --- | --- |
+| **Turncoat** | 4–12 | Caught props join the hunters; the last prop faces the whole shop. |
+| **Paranoia** | 3–8 | Free-for-all: every player is an object with a blaster. |
+| **Clearance** | 4–12 | One object everywhere; hunters go on behaviour alone. |
+| **Priceless** | 5–12 | One prop is the Heirloom; the rest guard it. |
+| **Five-Finger Discount** | 4–10 | Props smuggle gold-tagged stock to the till, so they have to move. |
+| **Stopwatch** | 2–4 | Take turns hiding; the faster finder wins. Made for two. |
+
+Each was chosen because it changes what a player decides during a round (not just its length), builds on systems the
+game already has, and works with a small group. None has a date. **Want it** is kept in the player's browser
+(`pp_wants`) and not sent anywhere yet, so no counts are shown. When a mode ships, move it out of `MODES`, and bump
+`SOON_VERSION` whenever the list changes so the NEW badge comes back. The private-room lobby lists the same modes.
 
 ## Progression
 

@@ -115,6 +115,7 @@ document.addEventListener('pointerlockchange', () => {
 document.addEventListener('keydown', (e) => {
   if (e.code !== 'Escape') return;
   if (game.inGame) { if (!game.locked) { if (sheetIn) closeSheet(); else showPause(!pauseOpen); } }
+  else if (page === 'soon' && soonUi.escape()) { /* closed the open box */ }
   else if (page !== 'play') go('play');
 });
 // a pause panel left open (or raised by a reload during the results) must not cover the lobby after a game
@@ -234,6 +235,7 @@ type Page = 'play' | 'profile' | 'settings' | 'guide' | 'soon';
 let page: Page = 'play';
 function go(p: Page, tab?: 'overview') {
   if (p !== 'settings') stopSoundTest();
+  if (p !== 'soon' && page === 'soon') soonUi.closed();
   page = p; menu.dataset.page = p;
   for (const b of menu.querySelectorAll<HTMLElement>('.nav')) b.classList.toggle('on', b.dataset.go === p);
   if (p === 'profile') profileUi.open(tab); else if (profileUi.isOpen) profileUi.close();
