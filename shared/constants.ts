@@ -169,7 +169,7 @@ export const HAT_LEVEL = [1, 1, 2, 3, 5, 8];
 export const xpLevel = (xp: number) => Math.floor(Math.sqrt(Math.max(0, xp) / 150)) + 1;
 export const levelXp = (level: number) => (level - 1) * (level - 1) * 150;
 
-export const TAUNTS = ['Squeak', 'Honk', 'Boing', 'Raspberry', 'Quack'];
+export const TAUNTS = ['Whistle', 'Fweet-fweet', 'Slide whistle', 'Arpeggio', 'Wobble'];
 
 export const QUICK_CHAT = [
   'Nothing to see here.',

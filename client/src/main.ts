@@ -3,6 +3,9 @@ import './style.css';
 import { Game } from './game';
 import { assets } from './assets';
 import { initTouch, isTouchDevice } from './touch';
+import { AudioEngine, renderWav } from './audio';
+import { SFX } from './sound/dsp';
+import { STINGS } from './sound/songs';
 
 declare const __BUILD__: string;
 
@@ -15,7 +18,7 @@ for (const l of document.querySelectorAll<HTMLLinkElement>('link[data-async]')) 
 // debugging and automated tests reach the game through ?debug; normal play exposes nothing on window
 try {
   if (new URLSearchParams(location.search).has('debug')) sessionStorage.setItem('pp_debug', '1'); // survives the URL being rewritten to the room link
-  if (sessionStorage.getItem('pp_debug') === '1') { (window as any).__pp = game; (window as any).__assets = assets; }
+  if (sessionStorage.getItem('pp_debug') === '1') { (window as any).__pp = game; (window as any).__assets = assets; (window as any).__audio = { renderWav, AudioEngine }; }
 } catch { /* storage blocked: no debug handle */ }
 
 const menu = $('menu'), pause = $('pause'), conn = $('conn');
@@ -189,6 +192,23 @@ window.addEventListener('keydown', (e) => {
 renderBinds();
 $('setBtn').onclick = () => { pause.classList.add('menuMode'); $('pauseTitle').textContent = 'Settings'; showPause(true); };
 $('closeSettings').onclick = () => { showPause(false); pause.classList.remove('menuMode'); $('pauseTitle').textContent = 'Paused'; };
+// ---------------------------------------------------------------- sound test: hear every track and effect
+{
+  const sel = $<HTMLSelectElement>('sndSel');
+  const music: [string, string, number][] = [['Menu theme', 'lobby', 0], ['Hiding', 'sneak', 0], ['Hunt (calm)', 'hunt', 0], ['Hunt (close call)', 'hunt', 1], ['Panic time', 'panic', 0]];
+  sel.innerHTML = `<optgroup label="Music">${music.map(([l], i) => `<option value="m${i}">${l}</option>`).join('')}</optgroup>`
+    + `<optgroup label="Effects">${[...Object.keys(STINGS), ...Object.keys(SFX)].map((n) => `<option value="s:${n}">${n}</option>`).join('')}</optgroup>`;
+  let testing = false;
+  $('sndPlay').onclick = () => {
+    game.sfx.unlock();
+    const v = sel.value;
+    if (v.startsWith('m')) { const [, mode, i] = music[Number(v.slice(1))]; game.sfx.music('none'); game.sfx.setIntensity(i); game.sfx.music(mode); testing = true; }
+    else game.sfx.play(v.slice(2));
+  };
+  const stop = () => { if (testing) { testing = false; game.sfx.setIntensity(0); game.syncMusic(); } };
+  $('sndStop').onclick = stop;
+  pause.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('#resumeBtn, #closeSettings, #leaveBtn')) stop(); });
+}
 $('howBtn').onclick = () => $('howto').classList.remove('hidden');
 $('howClose').onclick = () => $('howto').classList.add('hidden');
 if (!localStorage.getItem('pp_seen')) { localStorage.setItem('pp_seen', '1'); $('howto').classList.remove('hidden'); }

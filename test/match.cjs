@@ -81,7 +81,7 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
     await A.waitForFunction(() => document.getElementById('roundsBtn').innerText.includes('3 rounds'), null, { timeout: 4000 }).catch(() => {});
     await A.click('#startBtn');
     await waitPhase(A, 'hiding');
-    await sleep(300);
+    await A.waitForFunction(() => document.getElementById('phaseLabel').textContent.startsWith('ROUND 1/3'), null, { timeout: 8000, polling: 100 }).catch(() => {});
     ok((await text(A, '#phaseLabel')) === 'ROUND 1/3 · HIDE!', 'a three-round game counts its rounds in the header');
     ok((await A.evaluate(() => [...window.__pp.roster.values()].every((r) => r.score === 0))), 'scores start from zero in the new game');
     await waitPhase(A, 'end');

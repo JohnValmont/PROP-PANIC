@@ -4,7 +4,8 @@
 
 Props disguise themselves as everyday objects and hide in plain sight. Hunters have a few minutes to zap
 every fake. It runs in any desktop browser with no install. The objects are photo-scanned, physically based
-models lit by HDR panoramas (about 25 MB, streamed in after the menu appears); all sound is synthesised.
+models lit by HDR panoramas (about 25 MB, streamed in after the menu appears); all sound and music is synthesised in code
+(no audio files), with a composed, adaptive soundtrack.
 
 ![The emporium's furniture hall](docs/screenshots/emporium.png)
 
@@ -146,6 +147,10 @@ test/     protocol test (WebSocket clients) and browser test (two Chromium clien
   optimised by `tools/assets.mjs`. They stream in behind plain placeholders, so the game is playable
   before they arrive and survives a failed download. Hunters, trees, grass and water are generated in
   code; every sound and all music is synthesised with WebAudio.
+- **Sound.** No audio files. Instruments are physical and studio models (plucked strings, struck bars, FM piano,
+  filtered saws, a drum kit) rendered into sample buffers in the background (`client/src/sound/dsp.ts`); the four songs
+  are written out note by note in a compact notation (`client/src/sound/songs.ts`). The hunt music adds layers as
+  tension rises. `npm run audio:render` writes every track and effect to audio files to listen to.
 - **Rendering.** Image-based lighting from HDR panoramas, physically based materials with normal,
   roughness and occlusion maps, soft shadows, bloom and filmic tone mapping. Three tiers: Ultra adds
   screen-space ambient occlusion and 4K shadows; High is the default on integrated graphics; Fast drops
@@ -159,13 +164,14 @@ npm run build && npm run test:e2e   # two real browsers play a full round agains
 npm run build && npm run test:ghost # a late joiner haunts a round of bots, with mouse and keyboard and with touch
 npm run test:maps        # both maps: deterministic, free spawns, bot-navigable, sane prop counts
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
+npm run test:audio       # every instrument, effect and song renders clean (finite, unclipped, no DC offset)
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, build, map, mechanics, security and protocol tests on every push.
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, mechanics, security and protocol tests on every push.
 
 ## Tuning
 

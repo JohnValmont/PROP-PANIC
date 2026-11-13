@@ -289,6 +289,11 @@ export class Game {
   }
 
   onMenu: () => void = () => {};
+  /** Put back the music that belongs to where the player is (after the sound test played something else). */
+  syncMusic() {
+    this.sfx.music('none');
+    this.sfx.music(!this.inGame || this.phase === 'lobby' || this.phase === 'end' ? 'lobby' : this.phase === 'hiding' ? 'sneak' : this.panic ? 'panic' : 'hunt');
+  }
   private preview = new THREE.Group();
 
   /** Change hunter colour/hat; updates the menu preview and is sent with the next join. */
@@ -447,7 +452,8 @@ export class Game {
         else if (this.alive) this.hud.banner('HUNTERS RELEASED!', `Hold your nerve. Taunt [${keyLabel(B.taunt)}] near them for big points.`, '');
       }
     } else if (m.phase === 'end' && m.results) {
-      this.sfx.music('lobby');
+      // the win or lose jingle first, then the theme comes back in under the results
+      this.sfx.music('lobby', prevPhase === 'hunt' ? 3.4 : 0);
       this.world.darkTarget = 0; this.world.stopPoltergeist();
       const res: Results = m.results;
       // straight from a hunt: first a beat in which everyone sees who survived and as what, then the board
@@ -1400,6 +1406,9 @@ export class Game {
     h.freeze(pnow < this.freezeUntil && playing);
     h.revealed(pnow < this.revealedUntil && playing);
 
+    // the hunt music builds as the last minute nears (and, below, as hunter and prop close in on each other)
+    const late = this.phase === 'hunt' ? Math.max(0, Math.min(1, (75_000 - left) / 45_000)) * 0.75 : 0;
+    let tension = late;
     // tension audio: hunters get a warmer/colder meter, props hear their own heartbeat
     if (playing && this.phase === 'hunt') {
       let near = 1e9;
@@ -1412,14 +1421,17 @@ export class Game {
       if (hunter) {
         const v = this.quackedMe ? 0 : Math.max(0, Math.min(1, 1 - (near - 2) / 8));
         h.meter(v);
+        tension = Math.max(tension, v);
         if (v > 0.04 && pnow > this.nextBeep) { this.nextBeep = pnow + 1100 - v * 950; this.sfx.play('beep', undefined, 0.5 + v * 0.6); }
       } else {
         h.meter(null);
         const v = Math.max(0, Math.min(1, 1 - (near - 2) / 8));
+        tension = Math.max(tension, v);
         if (v > 0.04 && pnow > this.nextHeart) { this.nextHeart = pnow + 1050 - v * 650; this.sfx.play('heart', undefined, 0.5 + v * 0.7); }
         document.getElementById('vignette')!.classList.toggle('heart', v > 0.5);
       }
     } else h.meter(null);
+    this.sfx.setIntensity(tension);
 
     // countdown ticks
     const sec = Math.ceil(left / 1000);
