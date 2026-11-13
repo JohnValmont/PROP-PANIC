@@ -334,4 +334,6 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => {
   flushStats().finally(() => setTimeout(() => process.exit(0), 300));
 });
 
-server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''}`));
+// on Render the public address is RENDER_EXTERNAL_URL; "localhost" there only confuses people reading the deploy log
+const PUBLIC_URL = process.env.RENDER_EXTERNAL_URL || `http://localhost:${PORT}`;
+server.listen(PORT, () => console.log(`PROP PANIC server listening on port ${PORT} (${PUBLIC_URL})${process.env.PP_FAST ? ' (fast test mode)' : ''}`));
