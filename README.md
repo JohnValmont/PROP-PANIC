@@ -80,6 +80,18 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
   are always three rounds; the host of a private room can pick 1, 3, 5, 7 or 10.
 - Refreshing the page or a short network drop puts you back in your seat.
 
+## Game modes and what is coming
+
+The Play card has a **Game mode** row. **Classic Hunt** is the game described above and the only live mode; the
+others (Infection, Copycat, Blitz, Duos, Lights Out) are locked tiles marked *Coming soon*: tapping one shakes it and
+shows what it will be. The **Coming soon** tab in the menu (with a NEW badge until it is opened) lists the upcoming
+modes, maps and features, with a sealed "top secret" map, a share button, and a **Want it** button on each card.
+The private-room lobby carries the same line, for players who arrive by invite link and never see the menu.
+
+None of it has a date, and the cards only ever say *Coming soon*. **Want it** is kept in the player's browser
+(`pp_wants`) and is not sent anywhere yet, so the page shows no vote counts. The list lives in `client/src/soon.ts`:
+when something ships, remove its card, and bump `SOON_VERSION` whenever the list changes so the NEW badge comes back.
+
 ## Progression
 
 Click the price tag on the menu card to open your profile. Everything a round earns is listed on the results panel.

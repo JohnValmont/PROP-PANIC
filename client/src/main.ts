@@ -143,7 +143,9 @@ for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#hud bu
 import { ROUND_CHOICES } from '../../shared/constants';
 import type { Quality } from './game';
 import { ProfileUi } from './profileUi';
+import { SoonUi } from './soon';
 const profileUi = new ProfileUi(game);
+const soonUi = new SoonUi(game);
 game.onMenu = () => profileUi.render();
 game.onBanked = () => profileUi.renderCard();
 
@@ -227,8 +229,8 @@ function syncSettings() {
   sync();
 }
 
-// ---------------------------------------------------------------- menu pages: Play, Profile, Settings, How to play
-type Page = 'play' | 'profile' | 'settings' | 'guide';
+// ---------------------------------------------------------------- menu pages: Play, Profile, Settings, How to play, Coming soon
+type Page = 'play' | 'profile' | 'settings' | 'guide' | 'soon';
 let page: Page = 'play';
 function go(p: Page, tab?: 'overview') {
   if (p !== 'settings') stopSoundTest();
@@ -236,6 +238,7 @@ function go(p: Page, tab?: 'overview') {
   for (const b of menu.querySelectorAll<HTMLElement>('.nav')) b.classList.toggle('on', b.dataset.go === p);
   if (p === 'profile') profileUi.open(tab); else if (profileUi.isOpen) profileUi.close();
   if (p === 'settings') syncSettings();
+  if (p === 'soon') soonUi.opened();
   game.menuShift = p === 'profile' ? 1 : 0;
 }
 menu.addEventListener('click', (e) => {
@@ -247,6 +250,7 @@ $('jobsMini').onclick = () => go('profile', 'overview');
 profileUi.onExit = () => go('play');
 $('closeSettings').onclick = () => { if (sheetIn) closeSheet(); else go('play'); };
 $('howClose').onclick = $('howGo').onclick = () => { if (sheetIn) closeSheet(); else go('play'); };
+$('soonClose').onclick = () => go('play');
 // your name on the chip in the top bar
 const meName = () => { $('meName').textContent = nameInput.value.trim() || 'Player'; };
 nameInput.addEventListener('input', meName); meName();
@@ -255,7 +259,7 @@ $('roundsBtn').onclick = () => game.net.send({ t: 'rounds', n: ROUND_CHOICES[(RO
 // soft tick when the pointer moves onto anything clickable
 let lastHover: Element | null = null;
 document.addEventListener('mouseover', (e) => {
-  const el = (e.target as HTMLElement).closest?.('.btn, .ptab, .item, .bind button') ?? null;
+  const el = (e.target as HTMLElement).closest?.('.btn, .ptab, .item, .bind button, .mode, .want, .soonChip, .soonTeaser') ?? null;
   if (el && el !== lastHover && !(el as HTMLButtonElement).disabled) game.sfx.play('hover');
   lastHover = el;
 });
