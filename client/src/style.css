@@ -403,7 +403,7 @@ button.lvl:hover { border-color: rgba(255, 255, 255, 0.5); background: rgba(0, 0
 .stamp { display: inline-block; flex: 0 0 auto; width: 19px; height: 19px; line-height: 15px; text-align: center; border-radius: 50%; font-style: normal; font-size: 10px; font-weight: 700; border: 2px dashed rgba(255, 255, 255, 0.28); color: rgba(255, 255, 255, 0.35); }
 .stamp.g1 { border: 2px solid #c98a4b; background: #8a5a2b; color: #ffe1c2; } .stamp.g2 { border: 2px solid #e8eef5; background: #8e9aab; color: #fff; } .stamp.g3 { border: 2px solid #fff3b0; background: #e0a526; color: #3a2600; box-shadow: 0 0 8px rgba(255, 209, 102, 0.7); }
 .gs.g2 { color: #d9e2ec; font-weight: 700; } .gs.g3 { color: var(--yellow); font-weight: 700; }
-.feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.profile .feats { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
 .feat2 { background: rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; border: 2px solid transparent; }
 .feat2.done { border-color: rgba(46, 196, 182, 0.7); background: rgba(46, 196, 182, 0.12); }
 .fh { display: flex; justify-content: space-between; align-items: center; gap: 6px; } .feat2 small { opacity: 0.8; font-size: 12.5px; }
@@ -435,3 +435,14 @@ button.lvl:hover { border-color: rgba(255, 255, 255, 0.5); background: rgba(0, 0
 .job.done { opacity: 0.6; } .job.now { opacity: 1; background: var(--teal); font-weight: 700; }
 @keyframes ppPop { from { transform: scale(0.5); } 60% { transform: scale(1.25); } }
 @keyframes ppFade { from { opacity: 0; } }
+
+/* ---------- the menu's "in the workshop" teaser ---------- */
+.soon { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; }
+.soonHead { font-size: 12px; font-weight: 700; letter-spacing: 0.12em; text-shadow: 0 2px 0 var(--ink); display: flex; align-items: center; gap: 8px; }
+.soonHead span { font-size: 10px; letter-spacing: 0.08em; background: var(--pink); border-radius: 6px; padding: 2px 7px; text-transform: uppercase; animation: soonBlink 2.4s ease-in-out infinite; }
+.soonGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.soonCard { position: relative; background: rgba(20, 22, 60, 0.6); border: 2px dashed rgba(255, 255, 255, 0.32); border-radius: 14px; padding: 7px 10px; display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+.soonCard em { font-style: normal; font-size: 9.5px; font-weight: 700; letter-spacing: 0.1em; color: var(--yellow); }
+.soonCard b { font-size: 15px; } .soonCard span { font-size: 12px; opacity: 0.8; line-height: 1.2; }
+@keyframes soonBlink { 50% { filter: brightness(1.35); } }
+@media (max-width: 900px), (max-height: 760px) { .soon { display: none; } }
