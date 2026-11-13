@@ -80,6 +80,28 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
   are always three rounds; the host of a private room can pick 1, 3, 5, 7 or 10.
 - Refreshing the page or a short network drop puts you back in your seat.
 
+## Game modes and what is coming
+
+The Play card has a **Game mode** row. **Classic** is the game described above and the only live mode. The others
+sit beside it as boxed games with a swinging *SOON* price tag; tapping one shows what it is, with a link to its box.
+The **Coming soon** tab in the menu (NEW badge until opened) is the stock room: a staff notice, and a shelf of boxed
+modes with hand-drawn box art (SVG, in `client/src/soon.ts`) and a *Coming soon* label clipped to the shelf. Opening a
+box shows how the mode plays, how many players it suits and why it is different; arrows (or ← →) flip through them.
+
+| Mode | Players | The idea |
+| --- | --- | --- |
+| **Turncoat** | 4–12 | Caught props join the hunters; the last prop faces the whole shop. |
+| **Paranoia** | 3–8 | Free-for-all: every player is an object with a blaster. |
+| **Clearance** | 4–12 | One object everywhere; hunters go on behaviour alone. |
+| **Priceless** | 5–12 | One prop is the Heirloom; the rest guard it. |
+| **Five-Finger Discount** | 4–10 | Props smuggle gold-tagged stock to the till, so they have to move. |
+| **Stopwatch** | 2–4 | Take turns hiding; the faster finder wins. Made for two. |
+
+Each was chosen because it changes what a player decides during a round (not just its length), builds on systems the
+game already has, and works with a small group. None has a date. **Want it** is kept in the player's browser
+(`pp_wants`) and not sent anywhere yet, so no counts are shown. When a mode ships, move it out of `MODES`, and bump
+`SOON_VERSION` whenever the list changes so the NEW badge comes back. The private-room lobby lists the same modes.
+
 ## Progression
 
 Click the price tag on the menu card to open your profile. Everything a round earns is listed on the results panel.

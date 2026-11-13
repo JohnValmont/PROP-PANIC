@@ -75,6 +75,7 @@
       <button id="roundsBtn" class="btn small ghost">Game length: 3 rounds</button>
       <div id="lobbyStatus"></div>
       <button id="startBtn" class="btn big yellow">START GAME</button>
+      <div id="lobbySoon" class="lobbySoon"></div>
       <div class="tiny dim">Run around, press <kbd>E</kbd> on objects to transform, <kbd>T</kbd> to taunt.</div>
     </div>
 
@@ -93,6 +94,7 @@
         <button class="nav" data-go="profile"><svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg><span>Profile</span></button>
         <button class="nav" data-go="settings"><svg viewBox="0 0 24 24"><path d="M4 6h9M19 6h1M4 12h3M13 12h7M4 18h11M21 18h-1"/><circle cx="16" cy="6" r="2.4"/><circle cx="10" cy="12" r="2.4"/><circle cx="17.6" cy="18" r="2.4"/></svg><span>Settings</span></button>
         <button class="nav" data-go="guide"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.2a2.5 2.5 0 1 1 3.4 2.3c-.6.3-1 .8-1 1.5v.6"/><circle cx="12" cy="17.2" r=".7" fill="currentColor"/></svg><span>How to play</span></button>
+        <button class="nav navSoon" data-go="soon"><svg viewBox="0 0 24 24"><rect x="3.5" y="9" width="17" height="11.5" rx="1.5"/><path d="M2.5 6.5h19V9h-19zM12 6.5v14"/><path d="M12 6.3C10.6 3.4 7 2.9 7 4.8 7 6.3 9.6 6.4 12 6.3c2.4.1 5-.0 5-1.5 0-1.9-3.6-1.4-5 1.5z"/></svg><span class="nLong">Coming soon</span><span class="nShort">Soon</span><i class="newDot">NEW</i></button>
       </nav>
       <div class="mRight">
         <button class="meChip" id="profBtn" title="Your profile, wardrobe, catalogue and feats">
@@ -115,11 +117,15 @@
             <div class="feat"><i class="fi f2"></i><div><b>Hunt the fakes</b><span>Scan, shockwave and zap. Shoot too many innocent objects and you turn into a duck.</span></div></div>
             <div class="feat"><i class="fi f3"></i><div><b>Caught? You are not out</b><span>Come back as a ghost and rattle the furniture until a hunter shoots the wrong thing.</span></div></div>
           </div>
+          <button id="soonTeaser" class="soonTeaser" data-go="soon"></button>
           <div id="online"></div>
         </div>
         <div class="menuCard playCard">
           <label class="fieldL" for="nameInput">YOUR NAME</label>
           <input id="nameInput" maxlength="16" placeholder="Your name" autocomplete="off" spellcheck="false" />
+          <div class="modeHead"><span class="fieldL">GAME MODE</span><button class="modeMore" data-go="soon">More on the way <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button></div>
+          <div id="modes" class="modes" role="group" aria-label="Game mode"></div>
+          <div id="modeInfo" class="modeInfo" aria-live="polite"></div>
           <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
           <div class="row split">
             <button id="createBtn" class="btn teal">Private room</button>
@@ -215,6 +221,15 @@
             <div class="howMore">Everything else (decoys, taunts, the scanner, chaos events) is explained on screen when it matters.</div>
             <button id="howGo" class="btn big yellow">Got it</button>
           </div>
+        </div>
+      </section>
+
+      <!-- COMING SOON: modes, maps and features on the way (client/src/soon.ts) -->
+      <section class="page" id="pgSoon">
+        <div id="soon" class="sheet">
+          <div class="sheetHead"><h2>Coming soon</h2><button class="iconBtn" id="soonClose" title="Close (Esc)" aria-label="Close">✕</button></div>
+          <div class="sheetScroll" id="soonBody"></div>
+          <div class="unbox" id="unbox" hidden></div>
         </div>
       </section>
     </main>
