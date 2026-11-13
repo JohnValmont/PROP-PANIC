@@ -39,12 +39,14 @@ async function main() {
     if (FINAL && !fs.existsSync(path.join(dir, 'log.json'))) { while (fs.existsSync(path.join(dir, `${String(keep).padStart(5, '0')}.jpg`))) keep++; keep = Math.max(0, keep - 1); }
     for (const f of fs.readdirSync(dir)) if (f === 'log.json' || (f.endsWith('.jpg') && parseInt(f, 10) >= keep)) fs.unlinkSync(path.join(dir, f));
     if (keep) console.log(`${shot.name}: resuming at frame ${keep}`);
+    let spliced = keep > 0, start = 0;
+    retry: for (;;) {
     await D.reset();
     await shot.setup(D);
     // warm-up: a few rendered frames so shadow maps and post-processing have caught up after a fast-forward
     await client.eval(() => { window.__pp.renderEvery = 1; });
     for (let w = 0; w < 3; w++) { D.i = -1; D.t = 0; if (shot.frame) await shot.frame(D, -1, 0); await stepWorld(server, client, DT); }
-    const start = await client.eval(() => window.__vt.t);
+    start = await client.eval(() => window.__vt.t);
     for (let i = 0; i < frames; i++) {
       const rec = i >= keep && (i % EVERY === 0 || i === frames - 1);
       const warm = i < keep && i >= keep - 3; // render (not saved) just before resuming, so shadows and post-processing are current
@@ -53,7 +55,24 @@ async function main() {
       if (shot.frame) await shot.frame(D, i, i / FPS);
       await stepWorld(server, client, DT);
       if (rec) await client.grab(path.join(dir, `${String(i).padStart(5, '0')}.jpg`), FINAL ? 93 : 80);
+      // before splicing onto frames from an earlier run, check that this run really is replaying the same footage:
+      // a shot whose bots act on their own may not replay identically in a fresh session
+      if (spliced && i === keep - 1) {
+        const probe = path.join(dir, 'probe.jpg');
+        await client.grab(probe, 93);
+        const db = psnr(probe, path.join(dir, `${String(i).padStart(5, '0')}.jpg`));
+        fs.unlinkSync(probe);
+        if (db < 30) {
+          console.log(`${shot.name}: the replay differs from the saved frames (PSNR ${db.toFixed(1)} dB), filming it again from the start`);
+          for (const f of fs.readdirSync(dir)) if (f.endsWith('.jpg')) fs.unlinkSync(path.join(dir, f));
+          keep = 0; spliced = false;
+          continue retry;
+        }
+        console.log(`${shot.name}: replay matches the saved frames (PSNR ${db.toFixed(1)} dB)`);
+      }
       if (FINAL && i % 30 === 0) process.stdout.write(`  ${shot.name} ${i}/${frames} ${((Date.now() - t0) / 1000).toFixed(0)}s\n`);
+    }
+    break;
     }
     const log = await client.eval((s) => window.__log.filter((e) => e.t >= s).map((e) => ({ ...e, t: +((e.t - s) / 1000).toFixed(3) })), start);
     fs.writeFileSync(path.join(dir, 'log.json'), JSON.stringify({ seconds: shot.seconds, fps: FPS, every: EVERY, log }, null, 1));
@@ -61,6 +80,13 @@ async function main() {
     console.log(`${shot.name} [${q}]: ${frames} frames in ${((Date.now() - t0) / 1000).toFixed(0)}s`, client.errors.length ? client.errors.splice(0) : '');
   }
   await browser.close(); server.stop();
+}
+
+/** Peak signal-to-noise ratio between two images, in dB (identical renders give 40+ through JPEG). */
+function psnr(a, b) {
+  const r = require('node:child_process').spawnSync('ffmpeg', ['-hide_banner', '-i', a, '-i', b, '-lavfi', 'psnr', '-f', 'null', '-'], { encoding: 'utf8' });
+  const m = /average:(inf|[\d.]+)/.exec(r.stderr);
+  return !m ? 0 : m[1] === 'inf' ? 99 : Number(m[1]);
 }
 
 function makeContext(server, client) {
