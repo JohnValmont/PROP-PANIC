@@ -4,7 +4,7 @@
  */
 import { PROPS } from '../shared/props';
 import {
-  DEPARTMENTS, EYES, FEATS, FEAT_INDEX, HATS, ITEMS, JOBS, KIT_LIMITS, PAINTS, POPS, STAMPS_MAX, bankRound, buyItem, cleanKit, equip, exportCode,
+  CHARS, DEPARTMENTS, EYES, FEATS, GUNS, KIT, TRAILS, FEAT_INDEX, HATS, ITEMS, JOBS, KIT_LIMITS, PAINTS, POPS, STAMPS_MAX, bankRound, buyItem, cleanKit, equip, exportCode,
   importCode, jobsFor, stampCount, kitToWire, levelCoins, levelStep, levelXp, migrateLegacy, newProfile, owns, sanitizeProfile, xpLevel,
   type RoundInput, type RoundStats,
 } from '../shared/progress';
@@ -37,7 +37,7 @@ console.log('content is consistent');
   const all = DEPARTMENTS.flatMap((d) => d.props);
   ok(all.length === PROPS.length && new Set(all).size === PROPS.length && all.every((id) => T(id) >= 0), `the five departments hold all ${PROPS.length} disguises exactly once`);
   ok(STAMPS_MAX === PROPS.length * 2, `${STAMPS_MAX} stamps in all`);
-  const ids = [...PAINTS, ...HATS, ...EYES, ...POPS].map((i) => i.id);
+  const ids = [...PAINTS, ...HATS, ...EYES, ...POPS, ...CHARS, ...GUNS, ...TRAILS].map((i) => i.id);
   ok(new Set(ids).size === ids.length && Object.keys(ITEMS).length === ids.length, `${ids.length} wardrobe items with unique ids`);
   const featItems = Object.values(ITEMS).filter((i) => 'feat' in i.how);
   ok(featItems.every((i) => { const f = FEATS[FEAT_INDEX[(i.how as { feat: string }).feat]]; return f && f.reward.item === i.id; }), 'every feat-only item is the reward of the feat that unlocks it');
@@ -155,7 +155,26 @@ console.log('storage, migration, save codes');
 console.log('server kit check');
 {
   const lim = KIT_LIMITS();
-  ok(JSON.stringify(cleanKit(null)) === '[0,0,0,0,0]' && JSON.stringify(cleanKit([1e9, -4, 2.7, 'x', NaN, 99])) === JSON.stringify([lim[0] - 1, 0, 2, 0, 0]), 'anything becomes a kit within range');
+  ok(JSON.stringify(cleanKit(null)) === '[0,0,0,0,0,0,0,0]' && JSON.stringify(cleanKit([1e9, -4, 2.7, 'x', NaN, 99, 1e9, -1])) === JSON.stringify([lim[0] - 1, 0, 2, 0, 0, lim[5] - 1, lim[6] - 1, 0]), 'anything becomes a kit within range');
+  ok(JSON.stringify(cleanKit([3, 2, 1, 0, 0])) === '[3,2,1,0,0,0,0,0]', 'a kit from an older client (no character, blaster or trail) gets the defaults');
+  ok(lim[KIT.char] === CHARS.length && lim[KIT.gun] === GUNS.length && lim[KIT.trail] === TRAILS.length, 'the hunter slots are on the wire');
+}
+
+console.log('hunter looks');
+{
+  const p = newProfile();
+  ok(p.kit.char === CHARS[0].id && p.kit.gun === GUNS[0].id && p.kit.trail === TRAILS[0].id && owns(p, CHARS[0].id) && owns(p, 'char.robot'), 'a new profile is the free character with the free blaster; the robot is free too');
+  ok(!equip(p, 'char.mascot') && !buyItem(p, 'char.mascot').ok, 'a character must be bought before it can be worn');
+  p.coins = 5000;
+  ok(buyItem(p, 'char.mascot').ok && equip(p, 'char.mascot') && p.coins === 1000 && kitToWire(p)[KIT.char] === CHARS.findIndex((c) => c.id === 'char.mascot'), 'buy and wear a character, and it goes on the wire');
+  ok(buyItem(p, 'gun.banana').ok && equip(p, 'gun.banana') && kitToWire(p)[KIT.gun] === GUNS.findIndex((g) => g.id === 'gun.banana'), 'buy and wear a blaster');
+  ok(!owns(p, 'gun.golden') && !owns(p, 'char.agent'), 'feat blasters and characters are not for sale');
+  p.feats.push('champion', 'bloodhound');
+  ok(owns(p, 'gun.golden') && owns(p, 'char.agent'), 'the feat unlocks them (also for players who earned it before 2.12)');
+  const back = sanitizeProfile(JSON.parse(JSON.stringify(p)));
+  ok(back.kit.char === 'char.mascot' && back.kit.gun === 'gun.banana', 'the hunter kit survives a save and load');
+  const old = sanitizeProfile({ xp: 0, coins: 0, kit: { paint: PAINTS[2].id, hat: HATS[0].id } });
+  ok(old.kit.char === CHARS[0].id && old.kit.gun === GUNS[0].id && old.kit.paint === PAINTS[2].id, 'a 2.11 profile gets the default character and blaster, keeping its paint');
 }
 
 console.log(failures ? `\n${failures} FAILED` : '\nall progression checks passed');

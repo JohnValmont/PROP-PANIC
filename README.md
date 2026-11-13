@@ -109,7 +109,9 @@ Click the price tag on the menu card to open your profile. Everything a round ea
 | Part | What it is |
 | --- | --- |
 | **Level and price tag** | Every point you score is XP. Each level pays coins, and every few levels your price tag gets a new name: Bargain Bin, Knick-Knack, Curio, Collectible, Antique, Heirloom, Priceless. Your level shows next to your name in the lobby, on the scoreboard and on the results. |
-| **Wardrobe** | Spend coins on looks: paints and hats for your hunter robot, googly-eye styles, and the burst everyone sees when you are caught. None of them can give a hiding prop away: the eyes only come out when a prop has already given itself away (a taunt, a panic, the scanner), and the burst comes when there is nothing left to hide. 47 looks; some are bought, some come with levels, some can only be earned. |
+| **Characters** | Nine hunters to play as, from the Night Guard and the original Securibot to Granny Tumbleton, Mall Santa and Barnaby Bear. Same skeleton, size and hit box for all: a character is only a look. |
+| **Hunter locker** | Blasters you can see in your hand (13, from the Zapper to a Banana, a Wet Fish and Finger Guns), zap trails, hats and paint. Every blaster fires the same shot. |
+| **Prop wardrobe** | Googly-eye styles, and the burst everyone sees when you are caught. None of them can give a hiding prop away: the eyes only come out when a prop has already given itself away (a taunt, a panic, the scanner), and the burst comes when there is nothing left to hide. |
 | **Catalogue** | Every one of the 66 disguises has two stamps: **Hid** (survive a round disguised as it, and have worn it for the last 20 seconds) and **Caught** (catch a prop disguised as it). Stamps turn silver at 3 and gold at 10; every new grade pays XP and coins. Objects are filed in five departments of the Emporium; hiding as everything in one earns that department's look. |
 | **Feats** | 24 milestones (50 catches, 20 great escapes, every catalogue stamp, turned into a duck 10 times...). Each pays out once and unlocks its name as a **title** worn next to yours. |
 | **Odd jobs** | Three small goals a day, the same for everyone (one as a prop, one as a hunter, one either way). Each pays coins and XP; all three pay a bonus. |
@@ -132,7 +134,7 @@ The server works out what each round pays (`COINS` in `shared/constants.ts`) and
 
 On top of that, from the profile rules (`shared/progress.ts`): each level pays 20 + 5 per level (up to 150), a new
 catalogue stamp 5 (silver 10, gold 25), an odd job 40-80, all three jobs 75 more, and some feats 50-500. Prices in
-the wardrobe run from 150 to 1,200.
+the wardrobe run from 150 to 1,200, blasters and trails from 250 to 2,500, and characters from 800 to 4,000.
 
 ### Where the profile lives
 

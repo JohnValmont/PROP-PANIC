@@ -1,5 +1,31 @@
 # Changelog
 
+## 2.12.0
+
+Hunters get characters, blasters you can see in their hands, and a locker of their own.
+
+- **Characters.** A new Characters tab with nine hunters: Night Guard (the new default), Securibot 3000 (the old robot,
+  still free), Granny Tumbleton, The Janitor, Pest Control, Inspector Gumshoe, Agent Zero, Mall Santa and Barnaby Bear.
+  All of them share one skeleton, so the size, speed, hit box and animation are the same for everyone. Your paint
+  colours their uniform. Rarity (common, rare, epic, legendary) is only a label and a frame colour.
+- **Blasters.** 13 of them, held in the hand: Zapper, Super Soaker, Plunger Popper, Banana, Hair Dryer, Baguette, Retro
+  Raygun, Duck Cannon, Leaf Blower, Wet Fish, TV Remote, Finger Guns and the Golden Zapper. Two-handed ones are held
+  with both hands. Every blaster fires the same shot with the same rules; the look, the muzzle flash and a little extra
+  sound on your own shot are the only differences.
+- **Zap trails.** Eight tracer styles (Laser Red, Plasma Blue, Bubbles, Confetti, Rainbow...) that everyone sees.
+- **First person shows your hand.** The blaster is held in your character's hand, sleeve and all, and the other hand
+  comes in for two-handed blasters. Watching through a hunter's eyes as a ghost shows their arms and blaster.
+- **Shots leave the muzzle.** Tracers start from the blaster you can see (yours on screen, or the one in another
+  hunter's hand) instead of from a point in the hunter's chest.
+- **Fix:** the blaster was held upside down in third person (grip up). The robot's ball hand hid it.
+- **Profile tabs:** Overview, Characters, Hunter locker (blasters, zap trails, hats, paint), Prop wardrobe (eyes,
+  catch pop), Catalogue, Feats. Characters, blasters and hats have 3D thumbnails, rendered once in a separate small
+  WebGL context. Wearing a blaster, trail or character makes the fitting-room hunter fire a test shot.
+- **Earned, not bought:** Agent Zero (Bloodhound), TV Remote (Sharpshooter), Golden Zapper (Champion), Gold Rush trail
+  (Collector). Players who already have those feats get them straight away.
+- **Wire format:** the kit grows from 5 to 8 numbers (character, blaster, trail appended). An older client's five-number
+  kit still works and gets the defaults. Bots dress at random from everything.
+
 ## 2.8.0
 
 An admin page, so whoever runs the server can see how the game is actually being played.

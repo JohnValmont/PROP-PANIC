@@ -1,22 +1,31 @@
 /**
- * The profile screen on the main menu (Overview, Wardrobe, Catalogue, Feats) and the summary on the menu card.
+ * The profile screen on the main menu (Overview, Characters, Hunter locker, Prop wardrobe, Catalogue, Feats)
+ * and the summary on the menu card.
  * Pure DOM: reads and changes `game.profile` through the rules in shared/progress.ts, then saves via game.applyKit().
  */
 import {
-  DEPARTMENTS, FEATS, FEAT_INDEX, GRADES, GRADE_NAMES, ITEMS, POPS, SLOTS, STAMPS_MAX, buyItem, equip, exportCode, gradeOf, importCode,
-  jobsFor, levelXp, msToNextDay, owns, rankOf, rollJobs, stampCount, unlockText, utcDay, xpLevel, type Item, type Paint, type Pop, type Slot,
+  CHARS, DEPARTMENTS, FEATS, FEAT_INDEX, GRADES, GRADE_NAMES, GUNS, HATS, ITEMS, KIT, POPS, SLOTS, STAMPS_MAX, buyItem, equip, exportCode, gradeOf, importCode,
+  jobsFor, kitToWire, levelXp, msToNextDay, owns, rankOf, rollJobs, stampCount, unlockText, utcDay, xpLevel,
+  type Char, type Gun, type Item, type Paint, type Pop, type Slot, type Trail,
 } from '../../shared/progress';
+import { HunterRig, buildGun, buildHat, buildViewmodel, paintMat } from './hunter';
+import { Thumbs } from './thumbs';
 import { PROPS, PROP_INDEX } from '../../shared/props';
 import { esc } from './hud';
 import type { Game } from './game';
 
 const $ = (id: string) => document.getElementById(id) as HTMLElement;
 const n = (v: number) => Math.floor(v).toLocaleString('en-US');
-type Tab = 'overview' | 'wardrobe' | 'catalogue' | 'feats';
+type Tab = 'overview' | 'chars' | 'hunter' | 'props' | 'catalogue' | 'feats';
+const HUNTER_SLOTS: Slot[] = ['gun', 'trail', 'hat', 'paint'];
+const PROP_SLOTS: Slot[] = ['eyes', 'pop'];
 
 const SLOT_INFO: Record<Slot, [label: string, hint: string]> = {
-  paint: ['Paint', 'Your robot\'s finish. Everyone sees it while you hunt.'],
-  hat: ['Hats', 'Worn by your robot while you hunt.'],
+  char: ['Characters', 'Who you are when you hunt. Every character has the same size, speed and hit box: it is only a look.'],
+  gun: ['Blasters', 'What you zap with. Every blaster fires the same shot with the same rules; only the look and the flash change.'],
+  trail: ['Zap trails', 'The streak your shots leave. Everyone in the room sees it.'],
+  paint: ['Paint', 'Your uniform colour (or the robot\'s finish), and the trim on your blaster.'],
+  hat: ['Hats', 'Worn by your character while you hunt.'],
   eyes: ['Eyes', 'Pop out of your disguise only when you taunt, panic or get scanned, so they never give you away.'],
   pop: ['Catch pop', 'The burst everyone sees when you get caught. Go out in style.'],
 };
@@ -41,6 +50,9 @@ function eyeIcon(id: string): string {
   return `<svg viewBox="0 0 32 24" class="ico">${s}</svg>`;
 }
 
+const thumbs = new Thumbs();
+const TIER_NAME = { common: 'Common', rare: 'Rare', epic: 'Epic', legendary: 'Legendary' };
+
 function itemIcon(it: Item): string {
   if (it.slot === 'paint') {
     const p = it as Paint;
@@ -49,7 +61,17 @@ function itemIcon(it: Item): string {
   }
   if (it.slot === 'eyes') return eyeIcon(it.id);
   if (it.slot === 'pop') return `<span class="dots">${(it as Pop).colors.slice(0, 5).map((c) => `<i style="background:${hex(c)}"></i>`).join('')}</span>`;
-  return `<span class="hatIco">${esc(it.name.split(' ')[0].slice(0, 1))}</span>`;
+  if (it.slot === 'trail') {
+    const t = it as Trail, cols = t.colors.length > 1 ? t.colors : [t.colors[0], t.colors[0]];
+    const spark = (t.spark ?? []).slice(0, 4).map((c, i) => `<i style="background:${hex(c)};left:${12 + i * 22}%;top:${i % 2 ? 6 : 62}%"></i>`).join('');
+    return `<span class="trailIco" style="--h:${(5 * t.width).toFixed(1)}px"><b style="background:linear-gradient(90deg,${cols.map(hex).join(',')})"></b>${spark}</span>`;
+  }
+  return '';
+}
+
+/** A thumbnail <img> that fills in when the 3D render is ready. */
+function thumbImg(key: string, url: string, cls: string): string {
+  return `<img class="${cls}" data-thumb="${esc(key)}" alt=""${url ? ` src="${url}"` : ''}>`;
 }
 
 export class ProfileUi {
@@ -58,6 +80,25 @@ export class ProfileUi {
   /** An item awaiting a second click to confirm the purchase. */
   private confirm = '';
   private openNow = false;
+
+  /** The tile picture for an item: a 3D render for characters, blasters and hats, else a drawn icon. */
+  private icon(it: Item): string {
+    const w = kitToWire(this.game.profile), paint = w[KIT.paint];
+    if (it.slot === 'char') {
+      const ci = CHARS.indexOf(it as Char), key = `c${ci}.${paint}.${w[KIT.hat]}.${w[KIT.gun]}`;
+      return thumbImg(key, thumbs.get(key, () => { const r = new HunterRig(paint, w[KIT.hat], ci, w[KIT.gun]); r.pose({ time: 0, stepT: 0, move: 0, pitch: 0.2, air: false, dizzy: false, kick: 0 }); return r.root; }, 'char'), 'thumb tall');
+    }
+    if (it.slot === 'gun') {
+      // finger guns are just a hand: show it in your character's hand and sleeve
+      const gi = GUNS.indexOf(it as Gun), hand = it.id === 'gun.fingers', key = hand ? `g${gi}.${paint}.${w[KIT.char]}` : `g${gi}.${paint}`;
+      return thumbImg(key, thumbs.get(key, () => hand ? buildViewmodel(paint, w[KIT.char], gi) : buildGun(gi, paintMat(paint)), 'gun'), 'thumb wide');
+    }
+    if (it.slot === 'hat') {
+      const hi = HATS.indexOf(it), key = `h${hi}.${paint}`;
+      return thumbImg(key, thumbs.get(key, () => buildHat(hi, paintMat(paint)), 'hat'), 'thumb');
+    }
+    return itemIcon(it);
+  }
 
   constructor(private game: Game) {
     $('profile').addEventListener('click', (e) => this.onClick(e));
@@ -74,7 +115,6 @@ export class ProfileUi {
   open(tab: Tab = this.tab) {
     this.tab = tab; this.openNow = true; this.confirm = '';
     $('profile').classList.remove('hidden');
-    this.game.showcaseOn = true;
     this.render();
   }
 
@@ -106,8 +146,11 @@ export class ProfileUi {
   render() {
     this.renderCard();
     if (!this.openNow) return;
-    const tabs: [Tab, string][] = [['overview', 'Overview'], ['wardrobe', 'Wardrobe'], ['catalogue', 'Catalogue'], ['feats', 'Feats']];
-    const body = this.tab === 'overview' ? this.overview() : this.tab === 'wardrobe' ? this.wardrobe() : this.tab === 'catalogue' ? this.catalogue() : this.featsTab();
+    const tabs: [Tab, string][] = [['overview', 'Overview'], ['chars', 'Characters'], ['hunter', 'Hunter locker'], ['props', 'Prop wardrobe'], ['catalogue', 'Catalogue'], ['feats', 'Feats']];
+    // the googly-eyed box beside the hunter only matters for the prop's looks
+    this.game.showcaseOn = this.tab === 'props';
+    const t = this.tab;
+    const body = t === 'overview' ? this.overview() : t === 'chars' ? this.characters() : t === 'hunter' ? this.wardrobe(HUNTER_SLOTS) : t === 'props' ? this.wardrobe(PROP_SLOTS) : t === 'catalogue' ? this.catalogue() : this.featsTab();
     $('profile').innerHTML = `<div class="profHead"><div class="profTabs">${tabs.map(([t, l]) => `<button class="ptab${t === this.tab ? ' on' : ''}" data-tab="${t}">${l}</button>`).join('')}</div>`
       + `<span class="wallet"><i class="coin"></i><b>${n(this.game.profile.coins)}</b></span><button class="iconBtn" data-act="close" title="Close (Esc)" aria-label="Close">✕</button></div><div class="profBody">${body}</div>`;
   }
@@ -137,7 +180,8 @@ export class ProfileUi {
       + `<div class="dim small">${p.jobs.shift ? 'Full shift done: bonus paid. ' : 'Finish all three for a 75-coin bonus. '}Everyone gets the same three jobs each day (UTC).</div></div>`
       + `<div class="sect"><div class="sectHead"><span>HOW IT WORKS</span></div><ul class="how">`
       + `<li><b>Level:</b> every point you score is XP. Each level pays coins and raises your price tag.</li>`
-      + `<li><b>Wardrobe:</b> spend coins on looks. None of them can give a hiding prop away.</li>`
+      + `<li><b>Characters and the Hunter locker:</b> who you hunt as and what you zap with. Looks only: every hunter plays the same.</li>`
+      + `<li><b>Prop wardrobe:</b> googly eyes and catch pops. None of them can give a hiding prop away.</li>`
       + `<li><b>Catalogue:</b> a stamp for every object you survive as, and every one you catch.</li>`
       + `<li><b>Feats:</b> milestones that pay out and give you a title to wear.</li></ul></div>`
       + `<div class="sect"><div class="sectHead"><span>LIFETIME</span><small>since ${new Date(p.since).toLocaleDateString()}</small></div><div class="stats">${stats.map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div></div>`
@@ -145,18 +189,38 @@ export class ProfileUi {
       + `<div class="row"><button class="btn small teal" data-act="export">Copy save code</button><button class="btn small ghost" data-act="import">Restore from a code</button></div></div>`;
   }
 
-  // ------------------------------------------------------------------ wardrobe
-  private wardrobe(): string {
+  /** The buy / wear / locked label on a tile. */
+  private state(it: Item): string {
+    const p = this.game.profile, have = owns(p, it.id), on = p.kit[it.slot] === it.id, price = 'price' in it.how ? it.how.price : 0;
+    return on ? '<em class="st on">WEARING</em>'
+      : have ? '<em class="st">WEAR</em>'
+      : price ? (this.confirm === it.id ? `<em class="st buy go">BUY FOR ${n(price)}?</em>` : `<em class="st buy${p.coins < price ? ' poor' : ''}"><i class="coin"></i>${n(price)}</em>`)
+      : `<em class="st lock">${esc(unlockText(it))}</em>`;
+  }
+
+  // ------------------------------------------------------------------ characters
+  private characters(): string {
+    const p = this.game.profile, ownedN = CHARS.filter((c) => owns(p, c.id)).length;
+    const cards = CHARS.map((c) => {
+      const have = owns(p, c.id), on = p.kit.char === c.id;
+      return `<div class="charCard t-${c.tier}${on ? ' on' : ''}${have ? '' : ' locked'}" data-item="${c.id}">${this.icon(c)}`
+        + `<span class="tier">${TIER_NAME[c.tier]}</span><b class="cname">${esc(c.name)}</b><small class="blurb">${esc(c.blurb)}</small>${this.state(c)}</div>`;
+    }).join('');
+    return `<div class="dim small">${SLOT_INFO.char[1]} Your paint colours their uniform. <b>${ownedN}/${CHARS.length}</b> owned.</div><div class="chars">${cards}</div>`
+      + `<div class="dim small">Rarity is just a label. Some characters can only be earned through feats.</div>`;
+  }
+
+  // ------------------------------------------------------------------ hunter locker and prop wardrobe
+  private wardrobe(slotList: Slot[]): string {
     const p = this.game.profile;
-    const slots = (Object.keys(SLOTS) as Slot[]).map((s) => `<button class="ptab sm${s === this.slot ? ' on' : ''}" data-slot="${s}">${SLOT_INFO[s][0]}</button>`).join('');
+    if (!slotList.includes(this.slot)) this.slot = slotList[0];
+    const slots = slotList.map((s) => `<button class="ptab sm${s === this.slot ? ' on' : ''}" data-slot="${s}">${SLOT_INFO[s][0]}</button>`).join('');
     const items = SLOTS[this.slot].map((it) => {
-      const have = owns(p, it.id), on = p.kit[it.slot] === it.id, price = 'price' in it.how ? it.how.price : 0;
-      const state = on ? '<em class="st on">WEARING</em>'
-        : have ? '<em class="st">WEAR</em>'
-        : price ? (this.confirm === it.id ? `<em class="st buy go">BUY FOR ${n(price)}?</em>` : `<em class="st buy${p.coins < price ? ' poor' : ''}"><i class="coin"></i>${n(price)}</em>`)
-        : `<em class="st lock">${esc(unlockText(it))}</em>`;
+      const have = owns(p, it.id), on = p.kit[it.slot] === it.id;
       const pv = it.slot === 'pop' ? `<span class="pv" data-pv="${POPS.indexOf(it as Pop)}" title="Preview">▶</span>` : '';
-      return `<div class="item${on ? ' on' : ''}${have ? '' : ' locked'}" data-item="${it.id}">${itemIcon(it)}<span class="iname">${esc(it.name)}</span>${state}${pv}</div>`;
+      const tier = (it as Gun).tier ? ` t-${(it as Gun).tier}` : '';
+      const tip = (it as Gun).blurb ? ` title="${esc((it as Gun).blurb)}"` : '';
+      return `<div class="item${tier}${on ? ' on' : ''}${have ? '' : ' locked'}" data-item="${it.id}"${tip}>${this.icon(it)}<span class="iname">${esc(it.name)}</span>${this.state(it)}${pv}</div>`;
     }).join('');
     const ownedN = SLOTS[this.slot].filter((it) => owns(p, it.id)).length;
     return `<div class="slotTabs">${slots}</div><div class="dim small">${SLOT_INFO[this.slot][1]} <b>${ownedN}/${SLOTS[this.slot].length}</b> owned.</div><div class="items">${items}</div>`
@@ -216,15 +280,15 @@ export class ProfileUi {
     const id = t.closest<HTMLElement>('[data-item]')?.dataset.item;
     if (!id) return;
     const it = ITEMS[id];
+    const show = () => { if (it.slot === 'pop') g.previewPop(POPS.indexOf(it as Pop)); else if (it.slot === 'gun' || it.slot === 'trail' || it.slot === 'char') g.previewShot(); };
     if (owns(p, id)) {
-      equip(p, id); this.confirm = ''; g.applyKit(); g.sfx.play('click');
-      if (it.slot === 'pop') g.previewPop(POPS.indexOf(it as Pop));
+      equip(p, id); this.confirm = ''; g.applyKit(); g.sfx.play('click'); show();
     } else if ('price' in it.how) {
       if (this.confirm !== id) { this.confirm = id; g.sfx.play(p.coins >= it.how.price ? 'click' : 'deny'); }
       else {
         const r = buyItem(p, id);
         this.confirm = '';
-        if (r.ok) { equip(p, id); g.applyKit(); g.sfx.play('levelup'); if (it.slot === 'pop') g.previewPop(POPS.indexOf(it as Pop)); }
+        if (r.ok) { equip(p, id); g.applyKit(); g.sfx.play('levelup'); show(); }
         else { g.sfx.play('deny'); this.toast(r.why ?? ''); }
       }
     } else { g.sfx.play('deny'); this.toast(`Unlocks at: ${unlockText(it)}`); }
