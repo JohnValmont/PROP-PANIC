@@ -1,5 +1,17 @@
 # Changelog
 
+## 2.8.0
+
+An admin page, so whoever runs the server can see how the game is actually being played.
+
+- **`/admin`**, behind a password (`PP_ADMIN_KEY`): humans online, rooms open, and totals since the server started.
+- **History in Supabase (free).** With `SUPABASE_URL` and `SUPABASE_KEY` set, every visit, every round and the number
+  online every five minutes are written in batches, and the page shows different players, visits, hours played, a
+  30-day table (players, visits, average visit, rounds, peak online) and hunter / prop win rates per map. Visits still
+  open when the server stops are written before it exits. `docs/ADMIN.md` has the setup and the SQL.
+- No names or addresses are kept: each browser makes up a random id (`pp_aid`) so one person's ten visits count once.
+- New test: `npm run test:stats` (in CI).
+
 ## 2.7.0
 
 A proper progression system. Coins finally buy something, and the profile is more than a number.

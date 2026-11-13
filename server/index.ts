@@ -2,6 +2,7 @@
  * PROP PANIC server: one Node process that serves the built client and hosts every game room.
  *   GET /            static client (dist/client)
  *   GET /health      liveness + room counts
+ *   GET /admin       private statistics page (only when PP_ADMIN_KEY is set; see docs/ADMIN.md)
  *   WS  /ws          game protocol (see shared/protocol.ts)
  *
  * Everything that arrives from the network is treated as hostile: see SECURITY.md for the threat model.
@@ -16,6 +17,8 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { CFG } from '../shared/constants';
 import { cleanKit } from '../shared/progress';
 import { Room, type Player } from './room';
+import { handleAdmin } from './admin';
+import { cleanAid, flush as flushStats, observe } from './stats';
 
 const PORT = Number(process.env.PORT ?? 8080);
 const STATIC_DIR = path.resolve(process.env.PP_STATIC ?? path.resolve(process.cwd(), 'dist/client'));
@@ -186,6 +189,7 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ ok: true, rooms: rooms.size, humans }));
       return;
     }
+    if (handleAdmin(req, res, url.pathname, clientIp(req), rooms, securityHeaders(req))) return;
     serveStatic(req, res, url);
   } catch {
     // a malformed request line or path must never take the process down
@@ -277,7 +281,7 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
       }
       // what a player wears and their level come from their browser: checked for shape and range, not ownership (SECURITY.md)
       const lvl = typeof m.lvl === 'number' && Number.isFinite(m.lvl) ? Math.max(1, Math.min(999, Math.floor(m.lvl))) : 1;
-      player = info.player = room.addPlayer(cleanName(m.name), ws, false, cleanKit(m.kit), lvl);
+      player = info.player = room.addPlayer(cleanName(m.name), ws, false, cleanKit(m.kit), lvl, cleanAid(m.aid));
     } catch (e) {
       // a handler bug must cost one connection, never the whole server
       console.error('[ws] message handler failed', e);
@@ -306,10 +310,12 @@ setInterval(() => {
 
 // ---------------------------------------------------------------- main loop
 setInterval(() => {
+  let humans = 0;
   for (const [code, r] of rooms) {
     try { r.tick(); } catch (e) { console.error(`[room ${code}] tick failed`, e); }
-    if (r.closed) rooms.delete(code);
+    if (r.closed) rooms.delete(code); else humans += r.humans;
   }
+  observe(humans, rooms.size);
 }, 1000 / CFG.TICK);
 
 // ---------------------------------------------------------------- lifecycle
@@ -319,9 +325,13 @@ let stopping = false;
 for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => {
   if (stopping) return;
   stopping = true;
+  // everyone still here ends their visit now, and the statistics get one last chance to reach the database
+  for (const r of rooms.values()) for (const p of r.players.values()) if (p.human) r.endSession(p);
   for (const ws of wss.clients) { try { ws.close(1012, 'restart'); } catch { /* ignore */ } }
   server.close();
-  setTimeout(() => process.exit(0), 400).unref();
+  const exit = setTimeout(() => process.exit(0), 5000);
+  exit.unref();
+  flushStats().finally(() => setTimeout(() => process.exit(0), 300));
 });
 
 server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''}`));

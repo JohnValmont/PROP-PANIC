@@ -5,12 +5,13 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { CFG, CHAOS_WEIGHTS, COINS, F, NEAR_RANGE, QUICK_CHAT, ROUNDS_DEFAULT, ROUND_CHOICES, SCORE, TAUNTS, TAUNT_RANGE, type Phase, type Team } from '../shared/constants';
-import { buildMap, BOUNDS, type GameMap } from '../shared/map';
+import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../shared/map';
 import { World, aimDir, newBody, rayOBB, type Body, type Cmd } from '../shared/physics';
 import { PROPS, PROP_INDEX, STARTER_PROPS, propBody, type PropDef } from '../shared/props';
 import type { Award, Results, RosterEntry } from '../shared/protocol';
 import { randomKit, type RoundStats, type WireKit } from '../shared/progress';
 import { Bot, NavGrid, botName } from './bots';
+import { recordRound, recordSession } from './stats';
 
 const now = () => performance.now();
 const r2 = (v: number) => Math.round(v * 100) / 100;
@@ -72,6 +73,8 @@ export class Player {
   /** Decoys this hunter has laid eyes on this round. Until then the hunter's client is told nothing about them. */
   knownDecoys = new Set<number>();
   playing = false; // took part in the current round
+  /** For the admin statistics: an anonymous id the browser made up, when this seat was taken, and rounds played in it. */
+  aid = ''; joinedAt = Date.now(); roundsPlayed = 0;
 
   constructor(public id: number, public name: string, public token: string, public ws: WebSocket | null) {
     const d = propBody(PROPS[this.disguise]);
@@ -120,6 +123,7 @@ export class Room {
   private lastProp = false;
   private roundProps = 0;
   private huntAt = 0;
+  private roundAt = Date.now();
   now = now();
 
   constructor(public code: string, public isPublic: boolean) {
@@ -178,10 +182,10 @@ export class Room {
   }
 
   // ================================================================ membership
-  addPlayer(name: string, ws: WebSocket | null, bot = false, kit: WireKit = randomKit(), lvl = 0): Player {
+  addPlayer(name: string, ws: WebSocket | null, bot = false, kit: WireKit = randomKit(), lvl = 0, aid = ''): Player {
     const p = new Player(this.nextId++, name, randomBytes(18).toString('base64url'), ws); // the seat token is a bearer credential: unguessable
     if (bot) p.bot = new Bot();
-    p.kit = kit; p.lvl = bot ? 0 : lvl;
+    p.kit = kit; p.lvl = bot ? 0 : lvl; p.aid = bot ? '' : aid;
     this.players.set(p.id, p);
     if (p.human && ![...this.players.values()].some((q) => q.host)) p.host = true;
     p.disguise = pickOf(this.map.starters);
@@ -236,10 +240,17 @@ export class Room {
 
   removePlayer(p: Player) {
     if (!this.players.delete(p.id)) return;
+    if (p.human) this.endSession(p);
     if (p.host) { p.host = false; const next = [...this.players.values()].find((q) => q.human && q.connected); if (next) next.host = true; }
     for (const d of this.decoys.filter((o) => o.owner === p.id)) this.popDecoy(d, null);
     this.rosterDirty = true;
     if (p.human) this.balanceBots();
+  }
+
+  /** A human's visit is over (left for good, idle, or the server is stopping): record it for the admin page. */
+  endSession(p: Player) {
+    const t = Date.now();
+    recordSession({ aid: p.aid, started_at: new Date(p.joinedAt).toISOString(), ended_at: new Date(t).toISOString(), seconds: Math.round((t - p.joinedAt) / 1000), rounds: p.roundsPlayed, public: this.isPublic });
   }
 
   private balanceBots() {
@@ -390,8 +401,10 @@ export class Room {
     const hunters = new Set(order.slice(0, nH));
     for (const p of this.players.values()) { p.stats = newStats(); p.playing = false; p.alive = false; p.team = 'spec'; p.sight.clear(); p.knownDecoys.clear(); }
     // props first so hunters never share a spawn with them
+    this.roundAt = Date.now();
     for (const p of all) {
       p.playing = true;
+      if (p.human) p.roundsPlayed++;
       if (!hunters.has(p)) { p.disguise = pickOf(this.map.starters); this.spawnProp(p); }
     }
     for (const p of hunters) { p.hunterTurns++; this.spawnHunter(p); }
@@ -456,6 +469,11 @@ export class Room {
     const paid = Math.min(COINS.place.length, played.length - 1); // last place never takes a podium bonus
     const final = last ? played.slice().sort((a, b) => b.score - a.score)
       .map((p, i) => ({ id: p.id, name: p.name, total: Math.round(p.score), coins: COINS.game + (i < paid ? COINS.place[i] : 0), bot: !!p.bot })) : undefined;
+    recordRound({
+      at: new Date().toISOString(), public: this.isPublic, map: MAP_NAMES[this.mapId] ?? String(this.mapId), winner,
+      humans: played.filter((p) => p.human).length, bots: played.filter((p) => p.bot).length,
+      human_hunters: played.filter((p) => p.human && p.team === 'hunter').length, seconds: Math.round((Date.now() - this.roundAt) / 1000),
+    });
     this.event = null; this.world.gravScale = 1; this.pulses = []; this.haunted.clear();
     this.setPhase('end', last ? CFG.FINAL_MS : CFG.END_MS, { winner, awards, board, n: this.played, round: this.round, rounds: this.rounds, final });
   }
