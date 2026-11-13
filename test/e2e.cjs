@@ -211,8 +211,12 @@ async function main() {
     ok(((await H.textContent('#results h2').catch(() => '')) ?? '').includes('HUNTERS WIN') && await P.isVisible('#results'), 'both clients show the results screen: hunters win');
     const hs = await state(H);
     ok(hs.roster.find((r) => r.id === hs.id).score >= 250 || (await H.textContent('#results')).includes('+'), 'hunter was awarded points for the catch');
-    const paid = [await H.evaluate(() => window.__pp.coins), await P.evaluate(() => window.__pp.coins)];
-    ok(paid[0] > paid[1] && paid[1] >= 5 && await H.isVisible('#results .coinRow') && !(await H.isVisible('#results .final')), `both players are paid coins for round 1 of 3, the winning hunter more (${paid.join(' vs ')})`);
+    // what the server paid for play (bonuses for levels, stamps and jobs come on top, and differ between new profiles)
+    const paid = [await H.evaluate(() => window.__pp.report?.coinsPlay ?? 0), await P.evaluate(() => window.__pp.report?.coinsPlay ?? 0)];
+    const wallets = [await H.evaluate(() => window.__pp.profile.coins === window.__pp.report?.coins), await P.evaluate(() => window.__pp.profile.coins === window.__pp.report?.coins)];
+    ok(paid[0] > paid[1] && paid[1] >= 5 && wallets.every(Boolean) && await H.isVisible('#results .prog') && !(await H.isVisible('#results .final')), `both players are paid coins for round 1 of 3, the winning hunter more (${paid.join(' vs ')})`);
+    const caughtStamp = await H.evaluate(() => window.__pp.report.stamps.some((s) => s.side === 1));
+    ok(caughtStamp && (await H.textContent('#results .prog')).includes('Caught:'), "the hunter's catch is stamped in the catalogue and shown on the results panel");
     await shot(H, '06-results.png');
 
     console.log('round 2');

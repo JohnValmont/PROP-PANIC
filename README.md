@@ -80,15 +80,25 @@ Any host that runs a Node container and allows WebSockets works. Set `PORT` if n
   are always three rounds; the host of a private room can pick 1, 3, 5, 7 or 10.
 - Refreshing the page or a short network drop puts you back in your seat.
 
-## Progression and looks
+## Progression
 
-Points earned each round become XP (stored in the browser). Levels unlock hunter hats; vest colour is
-free to choose. Both are cosmetic only and visible to everyone in the match.
+Click the price tag on the menu card to open your profile. Everything a round earns is listed on the results panel.
 
-### Coins
+| Part | What it is |
+| --- | --- |
+| **Level and price tag** | Every point you score is XP. Each level pays coins, and every few levels your price tag gets a new name: Bargain Bin, Knick-Knack, Curio, Collectible, Antique, Heirloom, Priceless. Your level shows next to your name in the lobby, on the scoreboard and on the results. |
+| **Wardrobe** | Spend coins on looks: paints and hats for your hunter robot, googly-eye styles, and the burst everyone sees when you are caught. None of them can give a hiding prop away: the eyes only come out when a prop has already given itself away (a taunt, a panic, the scanner), and the burst comes when there is nothing left to hide. 47 looks; some are bought, some come with levels, some can only be earned. |
+| **Catalogue** | Every one of the 66 disguises has two stamps: **Hid** (survive a round disguised as it, and have worn it for the last 20 seconds) and **Caught** (catch a prop disguised as it). Stamps turn silver at 3 and gold at 10; every new grade pays XP and coins. Objects are filed in five departments of the Emporium; hiding as everything in one earns that department's look. |
+| **Feats** | 24 milestones (50 catches, 20 great escapes, every catalogue stamp, turned into a duck 10 times...). Each pays out once and unlocks its name as a **title** worn next to yours. |
+| **Odd jobs** | Three small goals a day, the same for everyone (one as a prop, one as a hunter, one either way). Each pays coins and XP; all three pay a bonus. |
 
-Coins are the currency for cosmetics. Nothing is on sale yet: this release adds the earning side and the wallet.
-The server works out every payout (`COINS` in `shared/constants.ts`) and sends it with the results:
+Why it is built this way: the Catalogue only pays for surviving as something *new*, which nudges players away from always
+hiding as the same handful of best objects, and that keeps hunting fresh. Coins come from playing well, not from
+playing long: the server pays at most 50 coins a round (95 on the last round of a game).
+
+### Earning coins
+
+The server works out what each round pays (`COINS` in `shared/constants.ts`) and sends it with the results:
 
 | When | Coins |
 | --- | --- |
@@ -98,9 +108,20 @@ The server works out every payout (`COINS` in `shared/constants.ts`) and sends i
 | Last round, for finishing the game | +15 |
 | Last round, 1st / 2nd / 3rd in the game | +30 / +20 / +10 (last place never gets one) |
 
-The wallet is kept in the browser, like XP, because there are no accounts. Anyone can edit their own balance
-with the browser's developer tools. That is harmless while coins buy nothing; before they buy anything other
-players can see, or anything sold for real money, the wallet has to move to the server behind a login.
+On top of that, from the profile rules (`shared/progress.ts`): each level pays 20 + 5 per level (up to 150), a new
+catalogue stamp 5 (silver 10, gold 25), an odd job 40-80, all three jobs 75 more, and some feats 50-500. Prices in
+the wardrobe run from 150 to 1,200.
+
+### Where the profile lives
+
+In the browser, as one record (`pp_profile`), because there are no accounts. **Overview → Backup** copies a save code
+that restores it in another browser. A 2.6 profile (XP, coins and look) is carried over on first load; a player who
+had the Crown keeps it, though it now unlocks at level 20.
+
+Anyone can edit their own profile with the browser's developer tools. The server only checks that what a player
+wears is a valid item, not that they own it (`SECURITY.md`). Nothing is sold for money and every look is cosmetic,
+so that is an acceptable trade until there are accounts. All the rules are pure functions in `shared/progress.ts`,
+so they can move to the server behind a login without a rewrite.
 
 ## Controls
 
@@ -127,7 +148,7 @@ behind a proxy (`PP_TRUST_PROXY`), on a second domain (`PP_ORIGINS`) or inside a
 ## How it is built
 
 ```
-shared/   deterministic map generator, AABB character physics, prop catalog, protocol
+shared/   deterministic map generator, AABB character physics, prop catalog, protocol, progression rules
 server/   Node + ws: rooms, matchmaking, round flow, hit detection, abilities, bots
 client/   Three.js + Vite: rendering, prediction, HUD, synthesised audio
 test/     protocol test (WebSocket clients) and browser test (two Chromium clients)
@@ -165,13 +186,14 @@ npm run build && npm run test:ghost # a late joiner haunts a round of bots, with
 npm run test:maps        # both maps: deterministic, free spawns, bot-navigable, sane prop counts
 npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, checked directly on the server
 npm run test:audio       # every instrument, effect and song renders clean (finite, unclipped, no DC offset)
+npm run test:progress    # levels, catalogue, feats, odd jobs, wardrobe, banking a round, save codes
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, mechanics, security and protocol tests on every push.
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security and protocol tests on every push.
 
 ## Tuning
 

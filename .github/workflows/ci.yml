@@ -16,6 +16,7 @@ jobs:
       - run: npm run build
       - run: npm run test:audio
       - run: npm run test:maps
+      - run: npm run test:progress
       - run: npm run test:mechanics
       - run: npm run test:security
       - run: npm test

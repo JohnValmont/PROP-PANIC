@@ -43,6 +43,7 @@ function play(mode: 'quick' | 'create' | 'join') {
   const code = codeInput.value.trim().toUpperCase();
   if (mode === 'join' && code.length !== 4) { err.textContent = 'Enter the 4-letter room code.'; return; }
   game.sfx.unlock(); game.sfx.play('click');
+  if (profileUi.isOpen) profileUi.close();
   setBusy(true);
   game.join(name, mode, code);
 }
@@ -123,23 +124,12 @@ $('copyLink').onclick = async () => {
 // HUD buttons give focus straight back so game keys can't re-trigger them
 for (const b of Array.from(document.querySelectorAll<HTMLButtonElement>('#hud button, #pause button'))) b.addEventListener('click', () => b.blur());
 
-// ---------------------------------------------------------------- profile: level, hunter colour and hat
-import { HATS, HAT_LEVEL, HUNTER_COLORS, ROUND_CHOICES, levelXp, xpLevel } from '../../shared/constants';
-function renderProfile() {
-  const lvl = xpLevel(game.xp), lo = levelXp(lvl), hi = levelXp(lvl + 1);
-  $('lvlBadge').textContent = String(lvl);
-  $('coinN').textContent = game.coins.toLocaleString('en-US');
-  $('lvlXp').textContent = `${Math.round(game.xp - lo)} / ${hi - lo} XP`;
-  $('lvlFill').style.width = `${Math.min(100, ((game.xp - lo) / (hi - lo)) * 100)}%`;
-  const color = game.look >> 3, hat = game.look & 7;
-  $('swatches').innerHTML = HUNTER_COLORS.map((c, i) => `<div class="sw${i === color ? ' on' : ''}" data-c="${i}" style="background:#${c.toString(16).padStart(6, '0')}"></div>`).join('');
-  $('hats').innerHTML = HATS.map((h, i) => `<button class="hat${i === hat ? ' on' : ''}" data-h="${i}" ${lvl < HAT_LEVEL[i] ? 'disabled' : ''}>${h}${lvl < HAT_LEVEL[i] ? ` · Lv ${HAT_LEVEL[i]}` : ''}</button>`).join('');
-}
-$('swatches').onclick = (e) => { const c = (e.target as HTMLElement).dataset.c; if (c !== undefined) { game.setLook(Number(c) * 8 + (game.look & 7)); game.sfx.play('click'); renderProfile(); } };
-$('hats').onclick = (e) => { const h = (e.target as HTMLElement).dataset.h; if (h !== undefined) { game.setLook((game.look >> 3) * 8 + Number(h)); game.sfx.play('click'); renderProfile(); } };
-if (xpLevel(game.xp) < HAT_LEVEL[game.look & 7]) game.setLook((game.look >> 3) * 8);
-renderProfile();
-game.onMenu = renderProfile;
+// ---------------------------------------------------------------- profile: level, wardrobe, catalogue, feats, odd jobs
+import { ROUND_CHOICES } from '../../shared/constants';
+import { ProfileUi } from './profileUi';
+const profileUi = new ProfileUi(game);
+game.onMenu = () => profileUi.render();
+game.onBanked = () => profileUi.renderCard();
 
 // ---------------------------------------------------------------- settings sliders
 const sens = $<HTMLInputElement>('sensRange'), fov = $<HTMLInputElement>('fovRange'), vol = $<HTMLInputElement>('volRange');
@@ -156,7 +146,7 @@ $('roundsBtn').onclick = () => game.net.send({ t: 'rounds', n: ROUND_CHOICES[(RO
 // soft tick when the pointer moves onto anything clickable
 let lastHover: Element | null = null;
 document.addEventListener('mouseover', (e) => {
-  const el = (e.target as HTMLElement).closest?.('.btn, .hat, .sw, .bind button') ?? null;
+  const el = (e.target as HTMLElement).closest?.('.btn, .ptab, .item, .bind button') ?? null;
   if (el && el !== lastHover && !(el as HTMLButtonElement).disabled) game.sfx.play('hover');
   lastHover = el;
 });

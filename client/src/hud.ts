@@ -1,6 +1,10 @@
 /** DOM overlay: timers, role card, abilities, feed, banners, lobby/results panels. No game logic lives here. */
 import { QUICK_CHAT, type Phase, type Team } from '../../shared/constants';
 import type { Results, RosterEntry } from '../../shared/protocol';
+import { FEATS, FEAT_INDEX, GRADE_NAMES, ITEMS, SHIFT_BONUS, STAMP_SIDES, levelXp, rankOf, titleName, type Report } from '../../shared/progress';
+import { PROPS } from '../../shared/props';
+
+const PROPS_NAME = (i: number) => PROPS[i]?.name ?? 'something';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 export const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -210,6 +214,12 @@ export class Hud {
 
   ghostTint(on: boolean) { $('ghostTint').classList.toggle('on', on); }
 
+  /** A player's name with their level badge in front and their title (a feat) after it. */
+  private ident(name: string, r?: { lvl?: number; kit?: number[] }): string {
+    const lvl = r?.lvl ?? 0, title = titleName(r?.kit?.[4] ?? 0);
+    return `${lvl > 0 ? `<span class="lv" title="Level ${lvl} · ${esc(rankOf(lvl).name)}">${lvl}</span>` : ''}${esc(name)}${title ? `<span class="ttl">${esc(title)}</span>` : ''}`;
+  }
+
   private tags(r: { team: Team; bot?: boolean }, alive = true): string {
     return (r.team === 'hunter' ? '<span class="tag h">HUNTER</span>' : r.team === 'prop' ? (alive ? '<span class="tag p">PROP</span>' : '<span class="tag b">CAUGHT</span>') : '<span class="tag s">WATCHING</span>') + (r.bot ? '<span class="tag b">BOT</span>' : '');
   }
@@ -228,7 +238,7 @@ export class Hud {
     const games = o.rounds === 1 ? 'a single round' : `${o.rounds} rounds`;
     const rt = `Game length: ${o.rounds === 1 ? '1 round' : games}`;
     if (rb.textContent !== rt) rb.textContent = rt;
-    const html = o.roster.map((r) => `<div class="pl${r.id === o.me ? ' me' : ''}"><span>${esc(r.name)}${r.bot ? ' <span class="tag b">BOT</span>' : ''}${r.host ? ' <span class="tag s">HOST</span>' : ''}</span><small>${r.score || ''}</small></div>`).join('');
+    const html = o.roster.map((r) => `<div class="pl${r.id === o.me ? ' me' : ''}"><span>${this.ident(r.name, r)}${r.bot ? ' <span class="tag b">BOT</span>' : ''}${r.host ? ' <span class="tag s">HOST</span>' : ''}</span><small>${r.score || ''}</small></div>`).join('');
     const lp = $('lobbyPlayers');
     if (lp.innerHTML !== html) lp.innerHTML = html;
     $('lobbyBots').style.display = !o.pub && o.host ? 'flex' : 'none';
@@ -246,33 +256,50 @@ export class Hud {
     el.style.display = show ? 'flex' : 'none';
     if (!show || !roster) return;
     const rows = roster.slice().sort((a, b) => b.score - a.score).map((r) =>
-      `<tr class="${r.id === me ? 'me' : ''}${r.alive ? '' : ' dead'}"><td>${esc(r.name)}${this.tags(r, r.alive)}${r.conn ? '' : ' <span class="tag b">OFFLINE</span>'}</td><td class="n dim">${r.bot ? '' : `${r.ping | 0} ms`}</td><td class="n">${r.score}</td></tr>`).join('');
+      `<tr class="${r.id === me ? 'me' : ''}${r.alive ? '' : ' dead'}"><td>${this.ident(r.name, r)}${this.tags(r, r.alive)}${r.conn ? '' : ' <span class="tag b">OFFLINE</span>'}</td><td class="n dim">${r.bot ? '' : `${r.ping | 0} ms`}</td><td class="n">${r.score}</td></tr>`).join('');
     el.innerHTML = `<h2>Scoreboard</h2><table class="board"><tr><th>PLAYER</th><th style="text-align:right">PING</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>`;
   }
 
-  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '', coinGain = 0, wallet = 0) {
+  results(show: boolean, res?: Results, me?: number, myTeam?: Team, msLeft = 0, nextMap = '', report: Report | null = null, wallet = 0, roster?: Map<number, RosterEntry>) {
     const el = $('results');
     el.style.display = show ? 'flex' : 'none';
     if (!show || !res) return;
-    const key = JSON.stringify(res.board.map((b) => b.id)) + res.winner + res.n + '|' + coinGain;
+    const key = JSON.stringify(res.board.map((b) => b.id)) + res.winner + res.n + '|' + (report ? report.xp + ':' + report.coins : '');
     if (el.dataset.key !== key) {
       el.dataset.key = key;
       const won = (res.winner === 'props' && myTeam === 'prop') || (res.winner === 'hunters' && myTeam === 'hunter');
       const title = res.winner === 'props' ? 'PROPS WIN!' : 'HUNTERS WIN!';
       const sub = myTeam === 'spec' ? (res.final ? 'You watched this one. You are in the next game!' : 'You watched this one. You are in next round!') : won ? 'Nicely done.' : res.winner === 'props' ? 'The props got away this time.' : 'Every last prop was found.';
       const awards = res.awards.map((a) => `<div class="award"><div class="at">${esc(a.title.toUpperCase())}</div><div class="an">${esc(a.name)}</div><div class="ad">${esc(a.detail)}</div></div>`).join('');
-      const rows = res.board.map((r) => `<tr class="${r.id === me ? 'me' : ''}"><td>${esc(r.name)}${this.tags(r, r.survived || r.team !== 'prop')}</td><td class="n">${r.round >= 0 ? '+' : ''}${r.round}</td><td class="n">${r.total}</td></tr>`).join('');
+      const rows = res.board.map((r) => `<tr class="${r.id === me ? 'me' : ''}"><td>${this.ident(r.name, roster?.get(r.id))}${this.tags(r, r.survived || r.team !== 'prop')}</td><td class="n">${r.round >= 0 ? '+' : ''}${r.round}</td><td class="n">${r.total}</td></tr>`).join('');
       // after the last round the game is settled too: who won it, and the final standings
       const f = res.final;
       const podium = f ? `<div class="final"><div class="finalT">GAME OVER · ${res.rounds === 1 ? '1 ROUND' : `${res.rounds} ROUNDS`}</div><div class="champ">${esc(f[0]?.name ?? '')} wins the game</div><div class="places">${f.slice(0, 3).map((r, i) => `<div class="place p${i}${r.id === me ? ' me' : ''}"><b>${i + 1}</b><span>${esc(r.name)}</span><small>${r.total}</small></div>`).join('')}</div></div>` : '';
-      const mine = f?.find((r) => r.id === me), rank = f && mine ? f.indexOf(mine) + 1 : 0;
-      const pay = coinGain > 0 ? `<div class="coinRow"><i class="coin"></i><b>+${coinGain} coins</b>${mine ? ` <span>round ${coinGain - mine.coins} + game bonus ${mine.coins}${rank ? ` (place ${rank})` : ''}</span>` : ''}<em>Wallet: ${wallet.toLocaleString('en-US')}</em></div>` : '';
+      const pay = report ? this.progress(report, wallet) : '';
       el.innerHTML = `<h2 class="${res.winner}">${title}</h2><div class="resSub">${sub}</div>${podium}${awards && (!f || res.board.length <= 6) ? `<div class="awards">${awards}</div>` : ''}<table class="board"><tr><th>PLAYER</th><th style="text-align:right">ROUND</th><th style="text-align:right">TOTAL</th></tr>${rows}</table>${pay}<div class="nextIn" id="nextIn"></div>`;
     }
     const n = document.getElementById('nextIn');
     const secs = Math.max(0, Math.ceil(msLeft / 1000));
     if (n) n.textContent = res.final ? `Back to the lobby in ${secs}…` : `Round ${res.round + 1} of ${res.rounds} in ${secs}…${nextMap ? ` on ${nextMap}.` : ''} Roles rotate!`;
   }
+
+  /** Under the board: what this round did for the player's profile. */
+  private progress(r: Report, wallet: number): string {
+    const lo = levelXp(r.levelTo), hi = levelXp(r.levelTo + 1), pct = Math.min(100, Math.max(0, ((this.xpNow - lo) / (hi - lo)) * 100));
+    const up = r.levelTo > r.levelFrom;
+    const chips: string[] = [];
+    for (const f of r.feats) chips.push(`<span class="chip ft">FEAT · ${esc(FEATS[FEAT_INDEX[f]]?.name ?? f)} · new title</span>`);
+    if (r.shift) chips.push(`<span class="chip ft">FULL SHIFT · all three odd jobs · +${SHIFT_BONUS.coins}</span>`);
+    for (const st of r.stamps.slice(0, 4)) chips.push(`<span class="chip g${st.grade}">${st.grade === 1 ? 'NEW STAMP' : GRADE_NAMES[st.grade].toUpperCase()} · ${STAMP_SIDES[st.side]}: ${esc(PROPS_NAME(st.prop))}</span>`);
+    if (r.stamps.length > 4) chips.push(`<span class="chip g1">+${r.stamps.length - 4} more stamps</span>`);
+    for (const id of r.unlocked) chips.push(`<span class="chip un">UNLOCKED · ${esc(ITEMS[id].name)}</span>`);
+    const jobs = r.jobs.map((j) => `<span class="job${j.done ? ' done' : ''}${j.doneNow ? ' now' : ''}" title="${esc(j.text)}">${j.done ? '✓' : `${j.have}/${j.goal}`} ${esc(j.text)}</span>`).join('');
+    return `<div class="prog"><div class="progTop"><span class="lv big${up ? ' up' : ''}">${r.levelTo}</span><div class="progMid"><div class="progLine"><b>+${r.xp} XP</b><span>${up ? `LEVEL UP · ${esc(rankOf(r.levelTo).name)}` : esc(rankOf(r.levelTo).name)}</span></div><div class="lvlBar"><i style="width:${pct.toFixed(1)}%"></i></div></div>`
+      + `<div class="progCoins"><span><i class="coin"></i> <b>+${r.coins}</b></span><small>${r.coins > r.coinsPlay ? `${r.coinsPlay} play + ${r.coins - r.coinsPlay} bonus` : 'coins'} · wallet ${wallet.toLocaleString('en-US')}</small></div></div>`
+      + `${chips.length ? `<div class="chips">${chips.join('')}</div>` : ''}<div class="jobs"><span class="jobsT">ODD JOBS</span>${jobs}</div></div>`;
+  }
+  /** The player's XP right now, set by the game before results are drawn (for the level bar). */
+  xpNow = 0;
 
   chatMenu(show: boolean) {
     const el = $('chatMenu');

@@ -13,13 +13,13 @@ async function main() {
   const room = new Room('TEST', false);
   const sent: any[] = [];
   const ws = { readyState: 1, send: (s: string) => { const m = JSON.parse(s); if (m.t === 'ev') sent.push(m); }, close() {} } as any;
-  const a = room.addPlayer('A', ws, false, 9), b = room.addPlayer('B', ws, false, 0), c = room.addPlayer('C', ws, false, 0);
+  const a = room.addPlayer('A', ws, false, [3, 9, 2, 1, 0], 7), b = room.addPlayer('B', ws, false), c = room.addPlayer('C', ws, false);
   room.startRound();
   await sleep(80); room.tick();
   ok(room.phase === 'hunt', 'round reaches the hunt phase');
   const all = [a, b, c];
   const hunter = all.find((p) => p.team === 'hunter')!, props = all.filter((p) => p.team === 'prop');
-  ok(props.length === 2 && room.roster().find((r) => r.id === a.id)!.look === 9, 'roles assigned; cosmetic look is carried in the roster');
+  ok(props.length === 2 && room.roster().find((r) => r.id === a.id)!.kit[1] === 9 && room.roster().find((r) => r.id === a.id)!.lvl === 7, 'roles assigned; kit and level are carried in the roster');
 
   // bonk: a prop falling onto the hunter's head stuns the hunter and bounces the prop
   const p = props[0];
@@ -52,7 +52,7 @@ async function main() {
   {
     const r2 = new Room('RECO', false);
     const w2 = { readyState: 1, send() {}, close() {} } as any;
-    const q = r2.addPlayer('Q', w2, false, 0);
+    const q = r2.addPlayer('Q', w2, false);
     r2.onMessage(q, { t: 'in', c: [[900, 0.02, 0, 1, 0, 0, 0, 0]] });
     ok(q.ack === 900, 'inputs are acknowledged in order');
     r2.reattach(q.token, w2);
@@ -181,8 +181,8 @@ async function main() {
     const ends: any[] = [], lobbies: any[] = [];
     const w = { readyState: 1, send: (s: string) => { const m = JSON.parse(s); if (m.t === 'phase' && m.phase === 'end') ends.push(m); if (m.t === 'lobby') lobbies.push(m); }, close() {} } as any;
     const quiet = { readyState: 1, send() {}, close() {} } as any; // only the host's socket records, or every message would be counted three times
-    const host = g.addPlayer('H', w, false, 0), guest = g.addPlayer('I', quiet, false, 0);
-    g.addPlayer('J', quiet, false, 0);
+    const host = g.addPlayer('H', w, false), guest = g.addPlayer('I', quiet, false);
+    g.addPlayer('J', quiet, false);
     ok(g.roundsPref === 3, 'a game is three rounds unless the host says otherwise');
     g.onMessage(host, { t: 'rounds', n: 4 }); g.onMessage(host, { t: 'rounds', n: 'x' }); g.onMessage(host, { t: 'rounds', n: 1e9 });
     ok(g.roundsPref === 3, 'a game length that is not on offer is refused');
@@ -191,7 +191,7 @@ async function main() {
     g.onMessage(host, { t: 'rounds', n: 5 }); g.onMessage(host, { t: 'rounds', n: 3 });
     ok(g.roundsPref === 3 && lobbies.at(-1)?.rounds === 3 && lobbies.some((m) => m.rounds === 5), 'the host can change it, and the lobby is told');
     const pub = new Room('PUBL', true);
-    const ph = pub.addPlayer('P', quiet, false, 0);
+    const ph = pub.addPlayer('P', quiet, false);
     pub.onMessage(ph, { t: 'rounds', n: 10 });
     ok(pub.roundsPref === 3, 'public games are always three rounds');
 
@@ -226,6 +226,29 @@ async function main() {
     for (let i = 0; i < 200 && g.phase !== 'lobby'; i++) { await sleep(5); g.tick(); }
     ok(ends.length === 4 && ends[3].results.final && ends[3].results.n === 4 && ends[3].rounds === 1 && g.phase === 'lobby', 'a one-round game ends after its only round, even if the host changes the length while it runs');
     ok(g.roundsPref === 10, 'the change applies to the next game');
+  }
+
+  // ---- 2.7: a survivor's disguise goes in the Catalogue only if it was worn for the last CATALOG_HOLD_MS
+  {
+    const hold = CFG.CATALOG_HOLD_MS;
+    CFG.HIDE_MS = 15; CFG.HUNT_MS = 160; CFG.END_MS = 15; CFG.CATALOG_HOLD_MS = 80;
+    const r = new Room('CATL', false);
+    const ends: any[] = [];
+    const w = { readyState: 1, send: (s: string) => { const m = JSON.parse(s); if (m.t === 'phase' && m.phase === 'end') ends.push(m); }, close() {} } as any;
+    const quiet = { readyState: 1, send() {}, close() {} } as any;
+    r.addPlayer('K', w, false); r.addPlayer('L', quiet, false); r.addPlayer('M', quiet, false);
+    r.startRound();
+    for (let i = 0; i < 200 && r.phase !== 'hunt'; i++) { await sleep(5); r.tick(); }
+    const props = [...r.players.values()].filter((p) => p.team === 'prop');
+    const keep = props[0], swap = props[1];
+    for (let i = 0; i < 200 && r.phaseEnds - r.now > 40; i++) { await sleep(5); r.tick(); }
+    swap.disguise = PROPS.findIndex((d, i) => i !== swap.disguise && d.h < 1); // a last-moment change of disguise
+    for (let i = 0; i < 200 && !ends.length; i++) { await sleep(5); r.tick(); }
+    const row = (id: number) => ends[0]?.results.board.find((b: any) => b.id === id);
+    ok(row(keep.id)?.survived && row(keep.id).st.hid === keep.disguise, `a disguise worn all round is credited (${PROPS[keep.disguise]?.name})`);
+    ok(row(swap.id)?.survived && row(swap.id).st.hid === -1, 'a disguise put on at the last moment is not');
+    ok(row(keep.id)?.st.nh === 1, 'a prop that was never hit is marked untouched');
+    CFG.CATALOG_HOLD_MS = hold;
   }
 
   console.log(failures ? `\n${failures} FAILED` : '\nAll mechanics checks passed.');

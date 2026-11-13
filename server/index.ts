@@ -14,6 +14,7 @@ import { randomInt } from 'node:crypto';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CFG } from '../shared/constants';
+import { cleanKit } from '../shared/progress';
 import { Room, type Player } from './room';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -274,8 +275,9 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
         if (rooms.size >= LIMITS.rooms * 2) return fail('Server is busy, try again soon.');
         room = findPublic();
       }
-      const look = typeof m.look === 'number' && Number.isFinite(m.look) ? Math.max(0, Math.min(63, m.look | 0)) : 0;
-      player = info.player = room.addPlayer(cleanName(m.name), ws, false, look);
+      // what a player wears and their level come from their browser: checked for shape and range, not ownership (SECURITY.md)
+      const lvl = typeof m.lvl === 'number' && Number.isFinite(m.lvl) ? Math.max(1, Math.min(999, Math.floor(m.lvl))) : 1;
+      player = info.player = room.addPlayer(cleanName(m.name), ws, false, cleanKit(m.kit), lvl);
     } catch (e) {
       // a handler bug must cost one connection, never the whole server
       console.error('[ws] message handler failed', e);

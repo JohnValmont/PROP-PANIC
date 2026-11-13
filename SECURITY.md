@@ -32,10 +32,13 @@ server defends against, how, and what it does not.
   it tells them nothing about living props.
 - **Aim assistance.** A modified client can aim perfectly at whatever it has identified.
 - **Teammates sharing information** over voice chat or a second screen (spectators and props see everything).
-- **Cosmetic unlocks and coins.** Level, hat unlocks and the coin wallet live in the browser's storage; there are
-  no accounts to check them against. The server decides how many coins a round pays, but the running balance is
-  the client's word. They affect looks only. A shop that sells anything for coins needs accounts and a
-  server-side balance first.
+- **The profile: level, coins, wardrobe, catalogue, feats.** All of it lives in the browser's storage; there are no
+  accounts to check it against. The server decides how many coins a round pays and what each player did in it, but
+  the running totals, and what a player owns, are the client's word. A modified client can wear any look, any title
+  and any level badge. The server checks only that the kit and level are in range (`cleanKit`), so nothing malformed
+  reaches other players. Every item is cosmetic and nothing is sold for money, which is why this is acceptable for
+  now. Before anything is sold for real money, or a look or title is meant to prove something, the profile has to
+  move to the server behind a login. The rules in `shared/progress.ts` are pure so that move is not a rewrite.
 - **Volumetric denial of service.** The limits above handle abusive clients, not a flood of traffic; that needs
   a network-level service in front (the host's, or a CDN).
 - **Per-address limits behind shared addresses.** Behind a proxy the server reads `CF-Connecting-IP` or the

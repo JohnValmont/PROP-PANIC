@@ -112,6 +112,11 @@ export const CFG = {
   /** The beat between the last second of a round and the results panel, while the survivors are shown off. */
   REVEAL_BEAT_MS: 3_000,
   ROLE_CARD_MS: 2_800,
+
+  // ---- 2.7: progression
+  /** A survivor's disguise earns its Catalogue stamp only if they had worn it this long when the round ended,
+   *  so a swap in the last second does not count. */
+  CATALOG_HOLD_MS: 20_000,
 };
 
 /**
@@ -162,12 +167,7 @@ export type Team = 'prop' | 'hunter' | 'spec';
 /** Entity flag bits used in snapshots. */
 export const F = { ALIVE: 1, PANIC: 2, QUACK: 4, GHOST: 8, DASH: 16, REVEAL: 32, DIZZY: 64 };
 
-/** Hunter cosmetics. A player's look is colour * 8 + hat. Hats unlock with player level (client-side, cosmetic only). */
-export const HUNTER_COLORS = [0xff6b35, 0x2ec4b6, 0xef476f, 0x9b5de5, 0xffd166, 0x118ab2, 0x06d6a0, 0x495057];
-export const HATS = ['Cap', 'Hard Hat', 'Party Hat', 'Propeller', 'Top Hat', 'Crown'];
-export const HAT_LEVEL = [1, 1, 2, 3, 5, 8];
-export const xpLevel = (xp: number) => Math.floor(Math.sqrt(Math.max(0, xp) / 150)) + 1;
-export const levelXp = (level: number) => (level - 1) * (level - 1) * 150;
+/** Cosmetics, levels, the Catalogue, feats and odd jobs live in shared/progress.ts. */
 
 export const TAUNTS = ['Whistle', 'Fweet-fweet', 'Slide whistle', 'Arpeggio', 'Wobble'];
 
