@@ -14,7 +14,9 @@ A new soundtrack and new sound effects. Still no audio files: everything is synt
   trombone for losing.
 - **Adaptive hunt music.** The hunt track brings in percussion and a marimba ostinato as a hunter and a prop close in
   on each other, or as the last minute nears, then pizzicato and snare when it gets really close.
-- **Sound effects redone**: a layered blaster, rubber squeaks and a clown horn shaped by vowel resonances, wooden knocks
+- **Taunts are whistles**: five clear whistles, every one rising from low to high (a plain rising whistle, "fweet-fweet",
+  a slide whistle, a whistled arpeggio, a rise with a wobble), so a hunter knows a taunt the moment they hear it.
+- **Sound effects redone**: a layered blaster, rubber squeaks shaped by vowel resonances, wooden knocks
   for innocent objects, a referee's whistle to start the hunt, a comedy "awooga" for panic time, a theremin for a
   spooked hunter, robot footsteps. Frequent sounds get a few variations and a small random detune.
 - **A proper mix**: stereo placement, a music reverb and a room reverb that changes with the map, high-passed reverb

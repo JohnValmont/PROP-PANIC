@@ -11,7 +11,7 @@ const OUT = path.resolve(process.argv[2] || path.join(__dirname, '..', 'test', '
 const PORT = 8089;
 const JOBS = [
   ['menu-theme', 'lobby', 72, 0], ['hiding', 'sneak', 40, 0], ['hunt-calm', 'hunt', 45, 0], ['hunt-close-call', 'hunt', 45, 1],
-  ['panic-time', 'panic', 26, 0], ['all-sound-effects', 'sfx-all', 150, 0],
+  ['panic-time', 'panic', 26, 0], ['all-sound-effects', 'sfx-all', 150, 0], ['taunts', 'sfx:taunt0,taunt1,taunt2,taunt3,taunt4', 6, 0],
 ];
 
 (async () => {

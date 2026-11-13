@@ -12,13 +12,13 @@ import { SONGS, STINGS, compile, type Compiled } from './sound/songs';
 type Pos = [number, number, number] | undefined;
 
 /** Sounds that are notes in a key: never detune them at random. */
-const TUNED = new Set(['count', 'reveal', 'points', 'ready', 'go', 'chaos', 'lose', 'kill', 'spook']);
+const TUNED = new Set(['taunt3', 'count', 'reveal', 'points', 'ready', 'go', 'chaos', 'lose', 'kill', 'spook']);
 /** Sounds with a few renders to rotate through, so repeats do not sound mechanical. */
 const VARIANTS: Record<string, number> = { squeak: 3, step: 3, stepSoft: 3, bonk: 3, shoot: 2, hit: 2, taunt0: 2, taunt4: 2, land: 2 };
 /** Sounds that pull the music down for a moment so they are heard (the multiplier the music drops to). */
 const DUCK: Record<string, number> = { squeak: 0.45, taunt0: 0.5, taunt1: 0.5, taunt2: 0.5, taunt3: 0.5, taunt4: 0.5, kill: 0.5, spook: 0.45, alarm: 0.4, go: 0.6, haunt: 0.6, lose: 0.35, win: 0.3 };
 /** Level trims, from measuring every effect (`npm run audio:render`): frequent sounds sit lower, key moments higher. */
-const LEVEL: Record<string, number> = { shoot: 2.4, hit: 1.6, squeak: 1.6, taunt3: 1.7, thud: 1.2, tick: 2, hover: 0.5, deny: 0.55, ready: 0.6, count: 0.8, click: 1.2, tock: 1.4, points: 0.45, heart: 0.8 };
+const LEVEL: Record<string, number> = { shoot: 2.4, hit: 1.6, squeak: 1.6, thud: 1.2, tick: 2, hover: 0.5, deny: 0.55, ready: 0.6, count: 0.8, click: 1.2, tock: 1.4, points: 0.45, heart: 0.8 };
 const PITCHED = new Set(['marimba', 'glock', 'bell', 'epiano', 'pizz', 'harp', 'dbass', 'pbass', 'reed', 'brass', 'pad', 'lead']);
 
 /** A generated reverb tail (at the context's own rate: a convolver insists on it). */
@@ -390,10 +390,10 @@ export async function renderWav(what: string, seconds: number, intensity = 1): P
   e.musicBus.gain.value = 1;
   let order: string[] | undefined;
   if (SONGS[what]) e.song(what, 0.05, intensity)!.pump(seconds);
-  else if (what === 'sfx-all') {
+  else if (what === 'sfx-all' || what.startsWith('sfx:')) {
     order = [];
     let t = 0.3;
-    for (const name of [...Object.keys(SFX), ...Object.keys(STINGS)]) {
+    for (const name of what === 'sfx-all' ? [...Object.keys(SFX), ...Object.keys(STINGS)] : what.slice(4).split(',')) {
       if (t > seconds - 1) break;
       e.fire(name, t, 0.9);
       order.push(`${t.toFixed(3)} s  ${name}`);

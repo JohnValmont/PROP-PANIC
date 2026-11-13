@@ -356,6 +356,31 @@ function chime(notes: number[], gap: number, s: number, inst = 'glock'): Float32
   notes.forEach((m, i) => mix(out, INSTRUMENTS[inst].make(m, s + i), i * gap, 0.6));
   return out;
 }
+/**
+ * A whistle: an almost pure tone (a touch of second harmonic) with breath noise following the pitch. `parts` are
+ * [from Hz, to Hz, seconds] glided smoothly; a part with 0 Hz is a gap. `glide` > 0 slurs between steady notes.
+ */
+function whistle(parts: [number, number, number][], seed: number, vib = 0.006, vibHz = 5.5, glide = 0): Float32Array {
+  const total = parts.reduce((t, p) => t + p[2], 0) + 0.06;
+  const out = buf(total), R = rnd(seed), breath = new SVF('bp', 1000, 7);
+  let ph = 0, t0 = 0, prevF = parts[0][0];
+  for (const [f0, f1, d] of parts) {
+    const o = Math.round(t0 * SR), n = Math.round(d * SR);
+    if (f0 > 0) for (let i = 0; i < n && o + i < out.length; i++) {
+      const t = i / SR, k = t / d, e = k * k * (3 - 2 * k); // ease in and out
+      let f = f0 * Math.pow(f1 / f0, e);
+      if (glide && t < glide) f = prevF + (f - prevF) * (t / glide);
+      f *= 1 + vib * Math.sin(TAU * vibHz * (t0 + t)) * Math.min(1, t / 0.12);
+      const env = Math.min(1, t / 0.025) * Math.min(1, (d - t) / 0.04);
+      const tone = Math.sin(TAU * ph) + 0.06 * Math.sin(2 * TAU * ph);
+      out[o + i] = tone * env + breath.run(R() * 2 - 1, f) * env * 0.18; // just a breath of air: it should sound clear
+      ph = (ph + f / SR) % 1;
+    }
+    if (f1 > 0) prevF = f1;
+    t0 += d;
+  }
+  return out;
+}
 function quack(f0: number, s: number): Float32Array {
   const b = tone({ f0, f1: f0 * 0.7, dur: 0.16, wave: 'saw', a: 0.005, d: 0.08, s: 0.4 });
   formants(b, [[900, 5, 1], [1700, 6, 0.7], [2900, 6, 0.25]]);
@@ -388,11 +413,12 @@ const RAW_SFX: Record<string, (s: number) => Float32Array> = {
   /** Changing shape: a soft puff and a few sparkles. */
   poof: (s) => { const R = rnd(s); return cat([whoosh(0.32, 500, 2800, s), 0, 0.8], ...[0, 1, 2].map((k) => [tone({ f0: 3000 + R() * 3000, dur: 0.12, d: 0.04 }), 0.08 + k * 0.05, 0.12] as [Float32Array, number, number])); },
   // ---- taunts
-  taunt0: (s) => cat([squeakToy(760, 0.22, s), 0], [squeakToy(820, 0.2, s + 1), 0.26]),
-  taunt1: (s) => { const h = () => { const b = cat([tone({ f0: 370, f1: 350, dur: 0.22, wave: 'saw', a: 0.008, s: 0.9, d: 1 }), 0], [tone({ f0: 466, f1: 440, dur: 0.22, wave: 'saw', a: 0.008, s: 0.9, d: 1 }), 0, 0.8]); formants(b, [[1100, 3, 1], [2400, 4, 0.5]]); return softclip(b, 2.5); }; void s; return cat([h(), 0], [h(), 0.27]); },
-  taunt2: (s) => cat([tone({ f0: 190, f1: 560, dur: 0.55, a: 0.004, d: 0.3, vib: 0.12, vibHz: 20 }), 0], [pluck(98, 0.9, 0.8, 0.998, s), 0, 0.4]),
-  taunt3: (s) => { const R = rnd(s), b = buf(0.6); let p = 0; for (let i = 0; i < b.length; i++) { const t = i / SR, f = 80 + 25 * R() + 20 * Math.sin(TAU * 7 * t); b[i] = saw(p, f / SR) * (0.6 + 0.4 * Math.sin(TAU * 31 * t)) * ad(t, 0.02, 0.35); p = (p + f / SR) % 1; } formants(b, [[550, 2, 1], [1300, 3, 0.4]]); return softclip(b, 2); },
-  taunt4: (s) => cat([quack(460, s), 0], [quack(420, s + 1), 0.2]),
+  // taunts: clear whistles, every one rising from low to high so a hunter learns the sound at once
+  taunt0: (s) => whistle([[780, 2100, 0.55]], s, 0.006),                                          // a clean rising whistle
+  taunt1: (s) => whistle([[880, 1500, 0.17], [0, 0, 0.07], [1050, 2250, 0.3]], s, 0.005),          // "fweet, FWEET"
+  taunt2: (s) => whistle([[520, 2500, 0.95]], s, 0.012, 6.5),                                      // a long slide whistle
+  taunt3: (s) => whistle([[784, 784, 0.1], [988, 988, 0.1], [1175, 1175, 0.1], [1568, 1568, 0.32]], s, 0.004, 0, 0.035), // a whistled arpeggio up
+  taunt4: (s) => whistle([[700, 1850, 0.35], [1850, 1900, 0.4]], s, 0.016, 7),                     // up, then hold it with a wobble
   squeak: (s) => squeakToy(1050 + (s % 3) * 70, 0.17, s),
   // ---- hunter gadgets
   pulse: () => cat([tone({ f0: 620, f1: 1700, dur: 0.75, a: 0.01, d: 0.35, fm: { ratio: 2.01, index: 1.2, d: 0.2 } }), 0, 0.7], [tone({ f0: 1760, dur: 0.6, a: 0.002, d: 0.2 }), 0, 0.3]),
