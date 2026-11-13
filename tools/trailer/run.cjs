@@ -33,7 +33,12 @@ async function main() {
     // the final render films only what the edit uses (plus a few frames of slack)
     const frames = FINAL && USED[shot.name] ? Math.min(Math.round(shot.seconds * FPS), Math.ceil(USED[shot.name] * FPS) + 4) : Math.round(shot.seconds * FPS);
     if (FINAL && fs.existsSync(path.join(dir, 'log.json')) && fs.readdirSync(dir).filter((f) => f.endsWith('.jpg')).length >= frames) { console.log(`${shot.name}: already rendered`); continue; }
-    for (const f of fs.readdirSync(dir)) if (f.endsWith('.jpg') || f === 'log.json') fs.unlinkSync(path.join(dir, f));
+    // resume inside a shot: the capture is deterministic, so frames already on disk are replayed without being
+    // rendered and filming carries on from the first missing one (the last saved frame is redone, in case it was cut short)
+    let keep = 0;
+    if (FINAL && !fs.existsSync(path.join(dir, 'log.json'))) { while (fs.existsSync(path.join(dir, `${String(keep).padStart(5, '0')}.jpg`))) keep++; keep = Math.max(0, keep - 1); }
+    for (const f of fs.readdirSync(dir)) if (f === 'log.json' || (f.endsWith('.jpg') && parseInt(f, 10) >= keep)) fs.unlinkSync(path.join(dir, f));
+    if (keep) console.log(`${shot.name}: resuming at frame ${keep}`);
     await D.reset();
     await shot.setup(D);
     // warm-up: a few rendered frames so shadow maps and post-processing have caught up after a fast-forward
@@ -41,8 +46,9 @@ async function main() {
     for (let w = 0; w < 3; w++) { D.i = -1; D.t = 0; if (shot.frame) await shot.frame(D, -1, 0); await stepWorld(server, client, DT); }
     const start = await client.eval(() => window.__vt.t);
     for (let i = 0; i < frames; i++) {
-      const rec = i % EVERY === 0 || i === frames - 1;
-      await client.eval((r) => { window.__pp.renderEvery = r ? 1 : 1e9; }, rec);
+      const rec = i >= keep && (i % EVERY === 0 || i === frames - 1);
+      const warm = i < keep && i >= keep - 3; // render (not saved) just before resuming, so shadows and post-processing are current
+      await client.eval((r) => { window.__pp.renderEvery = r ? 1 : 1e9; }, rec || warm);
       D.i = i; D.t = i / FPS;
       if (shot.frame) await shot.frame(D, i, i / FPS);
       await stepWorld(server, client, DT);

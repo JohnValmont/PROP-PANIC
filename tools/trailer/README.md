@@ -51,6 +51,6 @@ node tools/trailer/compose.cjs video /tmp/trailer/final /tmp/trailer/prop-panic-
 The end card prints the game's address (`url` in `edit.cjs`; `TRAILER_URL` overrides it, and an empty value leaves it off).
 
 A single shot can be re-rendered on its own (`run.cjs final <dir> haunt`). The final render skips shots that are
-already complete, so an interrupted run picks up where it stopped. Shots are staged on fixed map seeds
+already complete and replays the frames a half-finished shot already has, so an interrupted run picks up at the frame where it stopped. Shots are staged on fixed map seeds
 (309 for the emporium, 202 for the meadow): a change to the map generator or the prop catalogue can move
 things, so preview first.
