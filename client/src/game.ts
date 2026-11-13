@@ -130,6 +130,9 @@ export class Game {
   private fovNow = 78; private fovPunch = 0; private zoomK = 1; private muzzleT = 0;
   private hitch = 0;
   private frameN = 0;
+  // connection quality: app-level ping every second, so the HUD can tell network lag apart from a slow device
+  private pingOut = new Map<number, number>(); private pingNextAt = 0; private pingSent = 0;
+  private rtt = -1; private jitter = 0; private pingLog: boolean[] = []; private netHudAt = 0; private badNetSince = 0; private badNetWarnAt = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !assets.lite, powerPreference: 'high-performance' });
@@ -400,6 +403,7 @@ export class Game {
       case 'welcome':
         this.myId = m.id; this.code = m.code; this.pub = m.pub; this.inGame = true;
         this.haveOffset = false; this.seq = 0; this.pending.length = 0; this.outbox.length = 0;
+        this.pingOut.clear(); this.pingLog.length = 0; this.rtt = -1; this.jitter = 0; this.pingNextAt = 0;
         this.joinCard = true;
         this.hud.show(true);
         // private lobbies need the mouse for Start / bots / invite, so only public games grab it straight away
@@ -408,6 +412,7 @@ export class Game {
       case 'phase': this.onPhase(m); break;
       case 'roster': this.onRoster(m.p); break;
       case 's': this.onSnap(m); break;
+      case 'pong': this.onPong(m.c); break;
       case 'ev': this.onEvent(m); break;
       case 'cd': this.cd = { decoy: m.decoy, ghost: m.ghost, taunt: m.taunt, pulse: m.pulse, shock: m.shock, haunt: m.haunt ?? 0 }; break;
       case 'lobby': this.lobbyInfo = { bots: m.bots, countdown: m.countdown, canStart: m.canStart, at: performance.now(), map: m.map | 0, rounds: m.rounds | 0 || ROUNDS_DEFAULT }; break;
@@ -571,6 +576,47 @@ export class Game {
     }
     e.group.add(e.model);
     e.labelKey = '';
+  }
+
+  private onPong(c: number) {
+    const sentAt = this.pingOut.get(c);
+    if (sentAt === undefined) return; // already written off as lost, or from a previous connection
+    this.pingOut.delete(c);
+    const ms = Math.min(999, performance.now() - sentAt);
+    if (this.rtt < 0) this.rtt = ms;
+    else { this.jitter += (Math.abs(ms - this.rtt) - this.jitter) * 0.25; this.rtt += (ms - this.rtt) * 0.35; }
+    this.logPing(true);
+  }
+
+  private logPing(ok: boolean) { this.pingLog.push(ok); if (this.pingLog.length > 20) this.pingLog.shift(); }
+
+  /** Sends a ping each second, writes off unanswered ones and refreshes the HUD's connection badge. */
+  private updateNet(t: number) {
+    if (!this.inGame) return;
+    for (const [c, at] of this.pingOut) if (t - at > 2500) { this.pingOut.delete(c); this.logPing(false); }
+    if (t >= this.pingNextAt) {
+      this.pingNextAt = t + 1000;
+      const c = ++this.pingSent;
+      this.pingOut.set(c, performance.now());
+      this.net.send({ t: 'ping', c });
+    }
+    if (t - this.netHudAt < 250) return;
+    this.netHudAt = t;
+    const lost = this.pingLog.filter((ok) => !ok).length;
+    const loss = this.pingLog.length ? Math.round((lost / this.pingLog.length) * 100) : 0;
+    // nothing back for a while: the connection is stalled, whatever the last good reading was
+    let oldest = Infinity; for (const at of this.pingOut.values()) oldest = Math.min(oldest, at);
+    const stalled = t - oldest > 2000;
+    this.hud.setNet(stalled ? -1 : Math.round(this.rtt), loss, Math.round(this.fps));
+    const slowDevice = this.fps < 30 && !document.hidden; // a starved main thread reads replies late and inflates ping
+    const bad = stalled || this.rtt >= 200 || loss >= 10 || this.jitter >= 60 || slowDevice;
+    if (!bad) { this.badNetSince = 0; return; }
+    if (!this.badNetSince) this.badNetSince = t;
+    if (t - this.badNetSince > 4000 && t - this.badNetWarnAt > 45000) {
+      this.badNetWarnAt = t;
+      const why = stalled ? 'Connection stalled: the server is not answering' : slowDevice ? `Low frame rate (${Math.round(this.fps)} FPS): your device is causing the lag, not the network` : loss >= 10 ? `Unstable connection: ${loss}% packet loss` : this.jitter >= 60 ? 'Unstable connection: ping is jumping around' : `High ping (${Math.round(this.rtt)} ms): expect lag`;
+      this.hud.popup(why, true);
+    }
   }
 
   private onSnap(m: any) {
@@ -1458,6 +1504,7 @@ export class Game {
       }
       this.fpsAcc = 0; this.fpsN = 0;
     }
+    this.updateNet(t);
 
     if (this.inGame && this.hasMe && this.alive && this.team !== 'spec') {
       this.acc += dt;

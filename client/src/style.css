@@ -99,6 +99,18 @@ kbd { background: rgba(255, 255, 255, 0.16); border-radius: 6px; padding: 1px 6p
 #chaosBar i { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #9b5de5, #f15bb5, #fee440); transition: width 0.25s; }
 #chaosWrap.hot { animation: pulse 0.4s ease-in-out infinite alternate; }
 
+#netStat { position: absolute; top: 8px; right: 12px; z-index: 5; display: flex; align-items: center; gap: 6px; padding: 3px 9px; border-radius: 10px; background: rgba(10, 14, 30, 0.55); font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; pointer-events: none; white-space: nowrap; --net: #3ddc6a; }
+#netStat.ok { --net: #a6e04a; } #netStat.meh { --net: #ffc531; } #netStat.bad, #netStat.dead { --net: #ff4d4d; }
+#netStat.dead { animation: netBlink 0.8s steps(2) infinite; }
+@keyframes netBlink { 50% { opacity: 0.45; } }
+#netStat .bars { display: flex; align-items: flex-end; gap: 2px; height: 13px; }
+#netStat .bars i { width: 3px; border-radius: 1px; background: rgba(255, 255, 255, 0.22); }
+#netStat .bars i:nth-child(1) { height: 25%; } #netStat .bars i:nth-child(2) { height: 50%; } #netStat .bars i:nth-child(3) { height: 75%; } #netStat .bars i:nth-child(4) { height: 100%; }
+#netStat .bars i.on { background: var(--net); }
+#netMs { color: var(--net); }
+#netLoss { color: #ff8a8a; } #netLoss:empty { display: none; }
+#netFps { opacity: 0.7; font-weight: 600; } #netFps.low { color: #ff8a8a; opacity: 1; }
+body.touch #netStat { right: 66px; top: 14px; }
 #feed { position: absolute; top: 76px; right: 16px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; max-width: 380px; }
 .feedItem { background: rgba(27, 42, 74, 0.82); border-radius: 12px; padding: 5px 12px; font-size: 15px; font-weight: 600; animation: feedIn 0.25s ease-out, fadeOut 0.6s 5.4s forwards; border-left: 5px solid #fff; }
 .feedItem.kill { border-color: var(--pink); } .feedItem.good { border-color: var(--teal); } .feedItem.chaos { border-color: var(--purple); } .feedItem.chat { border-color: var(--yellow); font-weight: 400; }
