@@ -45,6 +45,24 @@ export class Hud {
     if (txt !== this.lastTimer) { this.lastTimer = txt; $('timer').textContent = txt; }
   }
 
+  private netKey = '';
+  /** Ping badge: signal bars coloured by latency, plus packet loss and FPS so a player can tell network lag from a slow device. ms < 0 = no reply. */
+  setNet(ms: number, loss: number, fps: number) {
+    const key = `${ms}|${loss}|${fps}`;
+    if (key === this.netKey) return;
+    this.netKey = key;
+    const lvl = ms < 0 ? 'dead' : ms < 60 && loss < 5 ? 'good' : ms < 100 && loss < 10 ? 'ok' : ms < 200 && loss < 20 ? 'meh' : 'bad';
+    const bars = { good: 4, ok: 3, meh: 2, bad: 1, dead: 0 }[lvl];
+    const el = $('netStat');
+    el.className = lvl;
+    el.querySelectorAll<HTMLElement>('.bars i').forEach((b, i) => b.classList.toggle('on', i < bars));
+    $('netMs').textContent = ms < 0 ? 'NO SIGNAL' : `${ms} ms`;
+    $('netLoss').textContent = loss > 0 && ms >= 0 ? `${loss}% loss` : '';
+    const f = $('netFps');
+    f.textContent = `${fps} FPS`;
+    f.classList.toggle('low', fps < 30);
+  }
+
   setCounts(props: number) { $('propsAlive').textContent = String(props); }
   setChaos(v: number) { ($('chaosBar').firstElementChild as HTMLElement).style.width = `${v}%`; $('chaosWrap').classList.toggle('hot', v >= 85); }
 
