@@ -83,9 +83,11 @@ export function initTouch(game: Game, openMenu: () => void) {
       on = !on; el.classList.toggle('down', on); game.touchAlt(on);
     }, { passive: false });
   }
-  // phones: go full screen and sideways on the first tap of a button (browsers only allow it from a tap)
+  // phones: go full screen and sideways on the tap that starts or resumes play (browsers only allow it from a tap);
+  // the menu itself works upright, so browsing it does not force the phone sideways
   document.addEventListener('touchend', (e) => {
-    if (document.fullscreenElement || !(e.target as HTMLElement)?.closest?.('button')) return;
+    if (document.fullscreenElement || localStorage.getItem('pp_autofs') === '0') return;
+    if (!(e.target as HTMLElement)?.closest?.('#touch button, .playCard .btn, #resumeBtn, #startBtn, #hud button')) return;
     const el = document.documentElement as any;
     try {
       const p = (el.requestFullscreen ?? el.webkitRequestFullscreen)?.call(el, { navigationUI: 'hide' });
