@@ -7,14 +7,19 @@ import { AudioEngine, renderWav } from './audio';
 import { SFX } from './sound/dsp';
 import { STINGS } from './sound/songs';
 import { Lineup, type Intent } from './lineup';
+import { Account } from './account';
 import type { Mode } from './net';
 
 declare const __BUILD__: string;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
+// optional sign-in: first, because coming back from the sign-in page rewrites the address (and the room link in it)
+const account = new Account();
 try { assets.lite = localStorage.getItem('pp_quality') === 'low'; } catch { /* default */ }
 await assets.init(); // the asset manifest: which models, textures and skies exist
 const game = new Game($<HTMLCanvasElement>('c'));
+game.account = account;
+game.useProfile();
 // the web font loads without blocking first paint: switch it on once it has arrived
 for (const l of document.querySelectorAll<HTMLLinkElement>('link[data-async]')) { if (l.sheet) l.media = 'all'; else l.addEventListener('load', () => { l.media = 'all'; }); }
 // debugging and automated tests reach the game through ?debug; normal play exposes nothing on window
@@ -40,7 +45,7 @@ function setBusy(b: boolean) {
 
 /** What the last Play / Private room / Join press asked for: if the server is full, the line keeps it. */
 let lastIntent: Intent = { mode: 'quick', code: '' };
-function play(mode: Mode, pass?: string) {
+async function play(mode: Mode, pass?: string) {
   if (connecting) return;
   const name = nameInput.value.trim() || 'Player';
   try { localStorage.setItem('pp_name', name); } catch { /* private mode */ }
@@ -51,7 +56,9 @@ function play(mode: Mode, pass?: string) {
   go('play');
   setBusy(true);
   if (mode === 'practice') err.textContent = 'Setting up the practice room…';
-  game.join(name, mode, code, pass);
+  // signed in: the server banks this game's rounds into the account (a guest's browser banks its own)
+  const auth = mode !== 'practice' && account.on ? (await account.token()) ?? undefined : undefined;
+  game.join(name, mode, code, pass, auth);
 }
 
 $('quickBtn').onclick = () => play('quick');
@@ -189,6 +196,8 @@ const profileUi = new ProfileUi(game);
 const soonUi = new SoonUi(game);
 game.onMenu = () => profileUi.render();
 game.onBanked = () => profileUi.renderCard();
+profileUi.account = account;
+account.onChange = () => { game.useProfile(); profileUi.render(); };
 
 // ---------------------------------------------------------------- settings
 const sens = $<HTMLInputElement>('sensRange'), fov = $<HTMLInputElement>('fovRange'), vol = $<HTMLInputElement>('volRange');
@@ -374,6 +383,8 @@ let stopSoundTest = () => {};
 // first visit: open on How to play (unless arriving through an invite link, which should go straight to Join)
 if (!localStorage.getItem('pp_seen')) { store('pp_seen', '1'); if (!roomParam && !resuming) go('guide'); }
 $('build').textContent = `build ${__BUILD__}`;
+// whether accounts are on, a sign-in coming back, and the account's profile: none of it holds up the menu
+void account.init().then(() => { if (account.returned && !game.inGame) go('profile', 'overview'); });
 
 // first interaction unlocks audio and starts the menu tune
 window.addEventListener('pointerdown', () => { game.sfx.unlock(); if (!game.inGame) game.sfx.music('lobby'); }, { once: true });

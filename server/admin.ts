@@ -10,6 +10,7 @@ import type http from 'node:http';
 import { timingSafeEqual, createHash } from 'node:crypto';
 import type { Room } from './room';
 import { live, query, statsEnabled } from './stats';
+import { accountsEnabled, acctLive } from './accounts';
 
 const KEY = (process.env.PP_ADMIN_KEY ?? '').trim();
 export const adminEnabled = KEY.length >= 8;
@@ -93,7 +94,7 @@ th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line)}th{co
 td{font-variant-numeric:tabular-nums}.muted{color:var(--muted);font-size:13px}.warn{color:var(--warn)}code{color:var(--accent)}
 @media (max-width:600px){table{display:block;overflow-x:auto}}
 </style></head><body>
-<h1>Prop Panic admin</h1><p class="muted">Refreshes every 30 s · server up ${ago(live.startedAt)} · database ${statsEnabled ? 'connected' : 'not set up'}${live.writeErrors ? ` · ${live.writeErrors} failed writes (last: ${esc(live.lastError)})` : ''}</p>
+<h1>Prop Panic admin</h1><p class="muted">Refreshes every 30 s · server up ${ago(live.startedAt)} · database ${statsEnabled ? 'connected' : 'not set up'}${live.writeErrors ? ` · ${live.writeErrors} failed writes (last: ${esc(live.lastError)})` : ''} · accounts ${accountsEnabled ? `on (${acctLive.cached} profiles in memory, ${acctLive.saves} saves${acctLive.writeErrors ? `, ${acctLive.writeErrors} errors, last: ${esc(acctLive.lastError)}` : ''})` : 'off'}</p>
 <h2>Right now</h2>
 <div class="cards">
   <div class="card"><b>${humans}</b>humans online</div>

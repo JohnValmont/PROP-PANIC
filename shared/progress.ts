@@ -1,10 +1,10 @@
 /**
  * Progression: level and rank, coins and the wardrobe, the Catalogue, feats (wearable titles) and odd jobs.
  *
- * Everything here is plain data and pure functions. The client banks each round with `bankRound` and keeps
- * the profile in the browser; the server only validates what a player wears (`cleanKit`). Keeping the rules
- * in one shared, side-effect-free module means they can move behind a login on the server later without a
- * rewrite, and that `test/progress.ts` can check them directly.
+ * Everything here is plain data and pure functions. A guest's browser banks each round with `bankRound` and keeps
+ * the profile in its storage, and the server only validates what a guest wears (`cleanKit`). For a signed-in
+ * player the server runs the very same functions on the copy it keeps (server/accounts.ts), so the two can never
+ * disagree about the rules, and `test/progress.ts` checks them directly.
  *
  * The one-line pitch, as the profile screen tells it:
  *   play rounds → XP raises your level and price tag; coins buy looks in the wardrobe;
@@ -13,6 +13,7 @@
  */
 import { PROPS } from './props';
 import { rng } from './rng';
+import type { Results } from './protocol';
 
 // ============================================================================ level and rank
 
@@ -283,6 +284,24 @@ export function equip(p: Profile, id: string): boolean {
   return true;
 }
 
+/**
+ * A change a player makes in the profile screen: buy (and wear) an item, wear one they own, or pick a title
+ * (an empty id takes it off). The browser applies it at once and, for a signed-in player, the server applies the
+ * same change to its own copy and sends that back, so both sides go through this one function.
+ */
+export type Change = { op: 'buy' | 'equip' | 'title'; id: string };
+export function applyChange(p: Profile, c: Change): { ok: boolean; why?: string } {
+  if (!c || typeof c.id !== 'string') return { ok: false, why: 'Nothing to change.' };
+  if (c.op === 'buy') { const r = buyItem(p, c.id); if (r.ok) equip(p, c.id); return r; }
+  if (c.op === 'equip') return equip(p, c.id) ? { ok: true } : { ok: false, why: ITEMS[c.id] ? 'You do not own that yet.' : 'No such item.' };
+  if (c.op === 'title') {
+    if (c.id !== '' && !p.feats.includes(c.id)) return { ok: false, why: 'Earn that feat first.' };
+    p.kit.title = c.id;
+    return { ok: true };
+  }
+  return { ok: false, why: 'Unknown change.' };
+}
+
 /** How to get an item, in a few words. */
 export function unlockText(it: Item): string {
   const h = it.how;
@@ -428,6 +447,21 @@ export function rollJobs(p: Profile, day: string) {
 }
 
 // ============================================================================ banking a round
+
+/**
+ * What one player's row in a round's results means for their profile: the same reading in the browser (guests)
+ * and on the server (signed-in players). Null when the player did not take part in the round.
+ */
+export function roundInput(res: Results, id: number, key: string, day: string): RoundInput | null {
+  const mine = res.board.find((r) => r.id === id);
+  if (!mine || !mine.st) return null;
+  const fin = res.final?.find((r) => r.id === id);
+  return {
+    key, day, team: mine.team, won: mine.team !== 'spec' && (mine.team === 'prop') === (res.winner === 'props'),
+    survived: mine.survived, pts: mine.round, coins: (mine.coins | 0) + ((fin?.coins ?? 0) | 0), st: mine.st,
+    gameOver: !!res.final, place: fin && res.final ? res.final.indexOf(fin) + 1 : 0, players: res.final?.length ?? 0,
+  };
+}
 
 export interface Report {
   xp: number; coins: number; coinsPlay: number;

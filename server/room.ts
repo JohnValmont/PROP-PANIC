@@ -27,6 +27,14 @@ function sameToken(a: string, b: string): boolean {
 }
 
 const DUCK = PROP_INDEX['duck'];
+
+/**
+ * Set by server/index.ts so rooms stay free of account code (this file also runs in the browser for practice games):
+ * after each round, the signed-in players' rounds are banked into their accounts.
+ */
+export const roomHooks = {
+  roundOver: (_room: Room, _results: Results) => {},
+};
 const PUBLIC_FILL = 5;
 const DC_GRACE_MS = 30_000;
 const AFK_MS = 240_000;
@@ -57,8 +65,13 @@ export class Player {
   bank = 0.3; bankT = now(); ack = 0;
   score = 0; hunterTurns = 0;
   stats = newStats();
-  /** Cosmetics [paint, hat, eyes, pop, title] and level, as the player's browser reported them (validated for range only). */
+  /**
+   * Cosmetics [paint, hat, eyes, pop, title, ...] and level. A guest's come from their browser (validated for range
+   * only); a signed-in player's come from the profile the server keeps for their account.
+   */
   kit: WireKit = [0, 0, 0, 0, 0]; lvl = 0;
+  /** The account this seat belongs to (server/accounts.ts), or '' for a guest or a bot. */
+  uid = '';
   bonkUntil = 0; nextBonkAt = 0; escapeAt = 0;
   connected = true; dcAt = 0; host = false;
   bot: Bot | null = null;
@@ -155,6 +168,11 @@ export class Room {
     const s = JSON.stringify(msg);
     for (const p of this.players.values()) if (!filter || filter(p)) this.out(p, s);
   }
+  /** For the account glue: a message to one player. */
+  tell(p: Player, msg: object) { this.send(p, msg); }
+  /** A signed-in player's look or level changed (bought something, levelled up): everyone sees it on the next roster. */
+  setLook(p: Player, kit: WireKit, lvl: number) { p.kit = kit; p.lvl = lvl; this.rosterDirty = true; }
+
   private toast(p: Player, msg: string) { this.send(p, { t: 'ev', k: 'toast', msg }); }
 
   /** A hunter who is in the round: the one audience that the props' secrets are kept from. */
@@ -182,10 +200,10 @@ export class Room {
   }
 
   // ================================================================ membership
-  addPlayer(name: string, ws: WebSocket | null, bot = false, kit: WireKit = randomKit(), lvl = 0, aid = ''): Player {
+  addPlayer(name: string, ws: WebSocket | null, bot = false, kit: WireKit = randomKit(), lvl = 0, aid = '', uid = ''): Player {
     const p = new Player(this.nextId++, name, randomBytes(18).toString('base64url'), ws); // the seat token is a bearer credential: unguessable
     if (bot) p.bot = new Bot();
-    p.kit = kit; p.lvl = bot ? 0 : lvl; p.aid = bot ? '' : aid;
+    p.kit = kit; p.lvl = bot ? 0 : lvl; p.aid = bot ? '' : aid; p.uid = bot ? '' : uid;
     this.players.set(p.id, p);
     if (p.human && ![...this.players.values()].some((q) => q.host)) p.host = true;
     p.disguise = pickOf(this.map.starters);
@@ -199,7 +217,7 @@ export class Room {
     } else { p.alive = false; p.team = 'spec'; }
 
     if (p.human) {
-      this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now });
+      this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now, acct: p.uid ? 1 : 0 });
       this.sendState(p);
       this.balanceBots();
     }
@@ -224,7 +242,7 @@ export class Room {
         if (p.ws && p.ws !== ws) { try { p.ws.close(); } catch { /* ignore */ } }
         p.ws = ws; p.connected = true; p.dcAt = 0; p.bank = 0.3; p.bankT = now();
         p.ack = 0; // a reconnecting client numbers its inputs from 1 again: keeping the old count would ignore them all
-        this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now });
+        this.send(p, { t: 'welcome', id: p.id, token: p.token, code: this.code, pub: this.isPublic, now: this.now, acct: p.uid ? 1 : 0 });
         this.sendState(p);
         this.rosterDirty = true;
         return p;
@@ -451,7 +469,8 @@ export class Room {
     for (const p of played) p.score += p.stats.pts;
     const roundCoins = (p: Player) => Math.max(COINS.round, Math.min(COINS.roundCap, COINS.round + Math.floor(p.stats.pts / COINS.perPoints)))
       + (p.team !== 'spec' && (p.team === 'hunter') === (winner === 'hunters') ? COINS.win : 0); // a hunter who was stood down is on neither side
-    // what each player did, for their profile: lifetime stats, the Catalogue and odd jobs (all banked in the browser)
+    // what each player did, for their profile: lifetime stats, the Catalogue and odd jobs (banked by a guest's browser,
+    // or by the server for a signed-in player: see roomHooks)
     const roundStats = (p: Player): RoundStats => {
       const s = p.stats, survived = p.team === 'prop' && p.alive;
       return {
@@ -475,7 +494,9 @@ export class Room {
       human_hunters: played.filter((p) => p.human && p.team === 'hunter').length, seconds: Math.round((Date.now() - this.roundAt) / 1000),
     });
     this.event = null; this.world.gravScale = 1; this.pulses = []; this.haunted.clear();
-    this.setPhase('end', last ? CFG.FINAL_MS : CFG.END_MS, { winner, awards, board, n: this.played, round: this.round, rounds: this.rounds, final });
+    const results: Results = { winner, awards, board, n: this.played, round: this.round, rounds: this.rounds, final };
+    this.setPhase('end', last ? CFG.FINAL_MS : CFG.END_MS, results);
+    roomHooks.roundOver(this, results);
   }
 
   // ================================================================ input

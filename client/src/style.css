@@ -405,6 +405,16 @@ button.lvl:hover { border-color: rgba(255, 255, 255, 0.5); background: rgba(0, 0
 .fh { display: flex; justify-content: space-between; align-items: center; gap: 6px; } .feat2 small { opacity: 0.8; font-size: 12.5px; }
 .fp { display: flex; gap: 8px; align-items: center; } .fp .lvlBar { flex: 1; margin: 0; } .fp span { font-size: 12px; font-weight: 700; }
 .fr { font-size: 12px; opacity: 0.85; }
+/* optional account (Overview): sign-in buttons in each provider's own colours, and a cloud mark on the menu chip */
+.sect.acct { border: 2px solid rgba(46, 196, 182, 0.55); } .sect.acct.warn { border-color: var(--yellow); }
+.sect.acct .row { flex-wrap: wrap; }
+.btn.prov { display: inline-flex; align-items: center; gap: 8px; }
+.btn.prov-discord { background: #5865f2; color: #fff; } .btn.prov-google { background: #fff; color: #1f1f1f; }
+.btn.prov-github { background: #24292f; color: #fff; } .btn.prov-twitch { background: #9146ff; color: #fff; }
+.btn.ghost.danger { color: #ffb3c4; }
+.acctErr { background: rgba(239, 71, 111, 0.22); border-left: 3px solid var(--pink); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+.meChip.acct { position: relative; }
+.meChip.acct::after { content: ''; position: absolute; right: -4px; top: -4px; width: 12px; height: 12px; border-radius: 50%; background: var(--teal); border: 2px solid #fff; }
 .profToast { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); background: var(--ink); border: 2px solid #fff; border-radius: 12px; padding: 7px 14px; font-weight: 600; font-size: 14px; pointer-events: none; animation: ppFade 0.2s ease-out both; }
 @media (max-width: 900px) {
   .chars { grid-template-columns: repeat(auto-fill, minmax(138px, 1fr)); } .thumb.tall { width: 100px; height: 124px; }

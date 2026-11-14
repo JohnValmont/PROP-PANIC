@@ -2,12 +2,15 @@
  * The profile screen on the main menu (Overview, Characters, Hunter locker, Prop wardrobe, Catalogue, Feats)
  * and the summary on the menu card.
  * Pure DOM: reads and changes `game.profile` through the rules in shared/progress.ts, then saves via game.applyKit().
+ * When signed in, each change is also sent to the server (client/src/account.ts), whose answer is the final word.
  */
 import {
-  CHARS, DEPARTMENTS, FEATS, FEAT_INDEX, GRADES, GRADE_NAMES, GUNS, HATS, ITEMS, KIT, POPS, SLOTS, STAMPS_MAX, buyItem, equip, exportCode, gradeOf, importCode,
-  jobsFor, kitToWire, levelXp, msToNextDay, owns, rankOf, rollJobs, stampCount, unlockText, utcDay, xpLevel,
-  type Char, type Gun, type Item, type Paint, type Pop, type Slot, type Trail,
+  CHARS, DEPARTMENTS, FEATS, FEAT_INDEX, GRADES, GRADE_NAMES, GUNS, HATS, ITEMS, KIT, POPS, SLOTS, STAMPS_MAX, applyChange, exportCode, gradeOf, importCode,
+  jobsFor, kitToWire, levelXp, msToNextDay, newProfile, owns, rankOf, rollJobs, stampCount, unlockText, utcDay, xpLevel,
+  type Change, type Char, type Gun, type Item, type Paint, type Pop, type Slot, type Trail,
 } from '../../shared/progress';
+import { PROVIDER_NAMES, type Account } from './account';
+import { saveProfile } from './profile';
 import { HunterRig, buildGun, buildHat, buildViewmodel, paintMat } from './hunter';
 import { Thumbs } from './thumbs';
 import { PROPS, PROP_INDEX } from '../../shared/props';
@@ -80,6 +83,10 @@ export class ProfileUi {
   /** An item awaiting a second click to confirm the purchase. */
   private confirm = '';
   private openNow = false;
+  /** Optional sign-in (set by main). */
+  account: Account | null = null;
+  /** An account request is under way: its buttons are disabled meanwhile. */
+  private busy = false;
 
   /** The tile picture for an item: a 3D render for characters, blasters and hats, else a drawn icon. */
   private icon(it: Item): string {
@@ -134,6 +141,9 @@ export class ProfileUi {
     const p = this.game.profile, lvl = xpLevel(p.xp), lo = levelXp(lvl), hi = levelXp(lvl + 1), rank = rankOf(lvl);
     $('lvlBadge').innerHTML = `<b>${lvl}</b><small>${esc(rank.name)}</small>`;
     $('coinN').textContent = n(p.coins);
+    const on = !!this.account?.on;
+    $('profBtn').classList.toggle('acct', on);
+    $('profBtn').title = on ? 'Your profile, saved to your account' : 'Your profile, wardrobe, catalogue and feats';
     $('lvlXp').textContent = `${n(p.xp - lo)} / ${n(hi - lo)} XP`;
     $('lvlFill').style.width = `${Math.min(100, ((p.xp - lo) / (hi - lo)) * 100)}%`;
     const day = utcDay();
@@ -169,7 +179,7 @@ export class ProfileUi {
       ['Great escapes', n(L.escapes)], ['Head bonks', n(L.bonks)], ['Decoys that worked', n(L.decoys)], ['Hunters spooked', n(L.spooks)],
       ['Turned into a duck', n(L.ducks)], ['Taunts', n(L.taunts)], ['Best round', n(L.best)], ['Points, all time', n(L.points)],
     ];
-    return `<div class="ovTop"><div class="bigTag"><b>${lvl}</b><small>${esc(rank.name)}</small></div><div class="ovMid">`
+    return this.accountSect() + `<div class="ovTop"><div class="bigTag"><b>${lvl}</b><small>${esc(rank.name)}</small></div><div class="ovMid">`
       + `<div class="ovName">Level ${lvl} · ${esc(rank.name)}</div><div class="lvlBar"><i style="width:${Math.min(100, ((p.xp - lo) / (hi - lo)) * 100)}%"></i></div>`
       + `<div class="dim small">${n(p.xp - lo)} / ${n(hi - lo)} XP to level ${lvl + 1}${rank.next ? ` · <b>${esc(rank.next)}</b> at level ${rank.nextAt}` : ''}</div>`
       + `<label class="titleSel">Title <select data-act="title"><option value="">None</option>${titles.map((f) => `<option value="${f.id}"${p.kit.title === f.id ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}</select>`
@@ -185,8 +195,75 @@ export class ProfileUi {
       + `<li><b>Catalogue:</b> a stamp for every object you survive as, and every one you catch.</li>`
       + `<li><b>Feats:</b> milestones that pay out and give you a title to wear.</li></ul></div>`
       + `<div class="sect"><div class="sectHead"><span>LIFETIME</span><small>since ${new Date(p.since).toLocaleDateString()}</small></div><div class="stats">${stats.map(([k, v]) => `<div><small>${k}</small><b>${v}</b></div>`).join('')}</div></div>`
-      + `<div class="sect"><div class="sectHead"><span>BACKUP</span></div><div class="dim small">Your profile lives in this browser only. Copy a save code to move it to another browser or keep it safe.</div>`
-      + `<div class="row"><button class="btn small teal" data-act="export">Copy save code</button><button class="btn small ghost" data-act="import">Restore from a code</button></div></div>`;
+      + (this.account?.on
+        ? `<div class="sect"><div class="sectHead"><span>BACKUP</span></div><div class="dim small">Your account's profile is kept on the server. A save code is a copy of it as a guest profile, for a browser where you do not sign in.</div>`
+          + `<div class="row"><button class="btn small teal" data-act="export">Copy save code</button></div></div>`
+        : `<div class="sect"><div class="sectHead"><span>BACKUP</span></div><div class="dim small">Your profile lives in this browser only. Copy a save code to move it to another browser or keep it safe.</div>`
+          + `<div class="row"><button class="btn small teal" data-act="export">Copy save code</button><button class="btn small ghost" data-act="import">Restore from a code</button></div></div>`);
+  }
+
+  // ------------------------------------------------------------------ account (optional)
+  private accountSect(): string {
+    const a = this.account;
+    if (!a || a.state === 'off') return '';
+    const dis = this.busy ? ' disabled' : '';
+    const err = a.error ? `<div class="acctErr">${esc(a.error)}</div>` : '';
+    const sect = (head: string, body: string, cls = '') => `<div class="sect acct${cls}"><div class="sectHead"><span>${head}</span></div>${body}</div>`;
+    if (a.state === 'guest') {
+      const btns = (a.cfg?.providers ?? []).map((pv) => `<button class="btn small prov prov-${esc(pv)}" data-act="signin" data-prov="${esc(pv)}"${dis}>Continue with ${esc(PROVIDER_NAMES[pv] ?? pv)}</button>`).join('');
+      return sect('SAVE YOUR PROGRESS · OPTIONAL', `<div class="dim small">Right now your profile lives only in this browser. Clearing its data, a private window or another device starts you again at level 1. `
+        + `Sign in to keep it on the server and pick it up anywhere. You never need an account to play.</div>${err}<div class="row">${btns}</div>`
+        + `<div class="dim small">Kept: your profile and an account id. Your name and email are never shown to other players; you choose your in-game name as before.</div>`);
+    }
+    if (a.state === 'loading') return sect('ACCOUNT', `<div class="dim small">Loading your account…</div>`);
+    if (a.state === 'error') {
+      return sect('ACCOUNT', `<div class="dim small">Signed in as <b>${esc(a.who)}</b>.</div>${err}<div class="row"><button class="btn small teal" data-act="retry"${dis}>Try again</button><button class="btn small ghost" data-act="signout"${dis}>Sign out</button></div>`, ' warn');
+    }
+    if (a.state === 'choose') {
+      const g = this.game.guest, lvl = xpLevel(g.xp), has = g.xp > 0 || g.coins > 0 || g.life.rounds > 0;
+      return sect('NEW ACCOUNT', `<div class="dim small">Signed in as <b>${esc(a.who)}</b>. This account has no profile yet.</div>${err}`
+        + (has ? `<div class="dim small">Bring this browser's profile into it? <b>Level ${lvl}</b>, ${n(g.coins)} coins, ${stampCount(g)} stamps, ${g.feats.length} feats. `
+          + `It can be brought in only once, and this browser then starts a fresh guest profile.</div>`
+          + `<div class="row"><button class="btn small teal" data-act="startImport"${dis}>Bring my progress</button><button class="btn small ghost" data-act="startFresh"${dis}>Start fresh</button><button class="btn small ghost" data-act="signout"${dis}>Cancel</button></div>`
+          : `<div class="row"><button class="btn small teal" data-act="startFresh"${dis}>Start my profile</button><button class="btn small ghost" data-act="signout"${dis}>Cancel</button></div>`), ' warn');
+    }
+    return sect('ACCOUNT', `<div class="dim small">Signed in as <b>${esc(a.who)}</b>. Your profile is saved on the server after every round, and goes wherever you sign in. `
+      + `Practice games while you wait in line are not saved to it.</div>${err}`
+      + `<div class="row"><button class="btn small ghost" data-act="signout"${dis}>Sign out</button><button class="btn small ghost danger" data-act="deleteAcct"${dis}>Delete account</button></div>`);
+  }
+
+  private async accountAct(act: string, el: HTMLElement) {
+    const a = this.account, g = this.game;
+    if (!a || this.busy) return;
+    g.sfx.play('click');
+    if (act === 'signin') { void a.signIn(el.dataset.prov ?? ''); return; }
+    if (act === 'deleteAcct') {
+      if (!confirm('Delete your account? Your level, coins, wardrobe, catalogue and feats in it are removed from the server for good.')) return;
+      if (!confirm('Last check: this cannot be undone. Delete the account?')) return;
+    }
+    this.busy = true; this.render();
+    try {
+      if (act === 'signout') await a.signOut();
+      else if (act === 'retry') await a.load();
+      else if (act === 'startFresh') await a.start(null);
+      else if (act === 'startImport') {
+        // the guest profile goes into the account once; this browser then starts over, so it cannot be brought in twice
+        if (await a.start(g.guest)) { g.guest = newProfile(); saveProfile(g.guest); }
+      } else if (act === 'deleteAcct') { if (await a.deleteAccount()) this.toast('Your account has been deleted.'); }
+    } finally { this.busy = false; g.useProfile(); this.render(); }
+  }
+
+  /**
+   * Make a change to the profile (buy, wear, title): at once here, and on the server when signed in. If the server
+   * says no, its copy comes back and replaces this one.
+   */
+  private commit(c: Change): boolean {
+    const g = this.game, r = applyChange(g.profile, c);
+    if (!r.ok) { g.sfx.play('deny'); this.toast(r.why ?? ''); return false; }
+    g.applyKit();
+    const a = this.account;
+    if (a?.on) void a.change(c).then((res) => { if (!res.ok) { g.sfx.play('deny'); this.toast(res.why ?? 'That change was not saved.'); void a.load(); } });
+    return true;
   }
 
   /** The buy / wear / locked label on a tile. */
@@ -272,9 +349,10 @@ export class ProfileUi {
     const pv = t.closest<HTMLElement>('[data-pv]')?.dataset.pv;
     if (pv !== undefined) { g.previewPop(Number(pv)); return; }
     const wear = t.closest<HTMLElement>('[data-wear]')?.dataset.wear;
-    if (wear) { p.kit.title = wear; g.applyKit(); g.sfx.play('click'); this.render(); return; }
-    const act = t.closest<HTMLElement>('[data-act]')?.dataset.act;
+    if (wear) { if (this.commit({ op: 'title', id: wear })) g.sfx.play('click'); this.render(); return; }
+    const actEl = t.closest<HTMLElement>('[data-act]'), act = actEl?.dataset.act;
     if (act === 'close') { this.onExit(); return; }
+    if (act && actEl && ['signin', 'signout', 'retry', 'startFresh', 'startImport', 'deleteAcct'].includes(act)) { void this.accountAct(act, actEl); return; }
     if (act === 'export') { void this.exportSave(t); return; }
     if (act === 'import') { this.importSave(); return; }
     const id = t.closest<HTMLElement>('[data-item]')?.dataset.item;
@@ -282,14 +360,13 @@ export class ProfileUi {
     const it = ITEMS[id];
     const show = () => { if (it.slot === 'pop') g.previewPop(POPS.indexOf(it as Pop)); else if (it.slot === 'gun' || it.slot === 'trail' || it.slot === 'char') g.previewShot(); };
     if (owns(p, id)) {
-      equip(p, id); this.confirm = ''; g.applyKit(); g.sfx.play('click'); show();
+      this.confirm = '';
+      if (this.commit({ op: 'equip', id })) { g.sfx.play('click'); show(); }
     } else if ('price' in it.how) {
       if (this.confirm !== id) { this.confirm = id; g.sfx.play(p.coins >= it.how.price ? 'click' : 'deny'); }
       else {
-        const r = buyItem(p, id);
         this.confirm = '';
-        if (r.ok) { equip(p, id); g.applyKit(); g.sfx.play('levelup'); show(); }
-        else { g.sfx.play('deny'); this.toast(r.why ?? ''); }
+        if (this.commit({ op: 'buy', id })) { g.sfx.play('levelup'); show(); }
       }
     } else { g.sfx.play('deny'); this.toast(`Unlocks at: ${unlockText(it)}`); }
     this.render();
@@ -297,7 +374,7 @@ export class ProfileUi {
 
   private onChange(e: Event) {
     const t = e.target as HTMLSelectElement;
-    if (t.dataset.act === 'title') { this.game.profile.kit.title = t.value; this.game.applyKit(); this.game.sfx.play('click'); }
+    if (t.dataset.act === 'title' && this.commit({ op: 'title', id: t.value })) this.game.sfx.play('click');
   }
 
   private toast(msg: string) {
@@ -314,13 +391,14 @@ export class ProfileUi {
   }
 
   private importSave() {
+    if (this.account?.on) { this.toast('Save codes restore a guest profile. Sign out first.'); return; }
     const code = prompt('Paste a save code (it starts with PP1.):');
     if (!code) return;
     const next = importCode(code);
     if (!next) { this.toast('That is not a valid save code.'); this.game.sfx.play('deny'); return; }
     const a = xpLevel(this.game.profile.xp), b = xpLevel(next.xp);
     if (!confirm(`Replace the profile in this browser (level ${a}, ${n(this.game.profile.coins)} coins) with the one in the code (level ${b}, ${n(next.coins)} coins)?`)) return;
-    this.game.profile = next;
+    this.game.guest = this.game.profile = next;
     this.game.applyKit();
     this.game.sfx.play('levelup');
     this.render();

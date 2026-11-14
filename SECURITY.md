@@ -1,7 +1,8 @@
 # Security
 
-PROP PANIC is a public game server that anyone can connect to, with no accounts. This file says what the
-server defends against, how, and what it does not.
+PROP PANIC is a public game server that anyone can connect to. Accounts are optional (Discord or Google through
+Supabase Auth, `docs/ACCOUNTS.md`); most players are guests. This file says what the server defends against, how, and
+what it does not.
 
 ## Threat model
 
@@ -17,6 +18,10 @@ server defends against, how, and what it does not.
 | Inject script or markup through a name | Names are normalised and stripped of markup, control and invisible characters on the server, and escaped again when drawn. Chat is a fixed list of phrases, not free text. A content security policy forbids inline script. |
 | Drive the game from another website | Sockets are only accepted from the game's own origin (plus any listed in `PP_ORIGINS`). The page cannot be framed elsewhere unless `PP_FRAME_ANCESTORS` allows it. |
 | Read files off the server | Static serving is confined to the build directory; traversal, dotfiles and non-GET methods are refused. |
+| Sign in as someone else, or forge a signed-in seat | The server never decides who someone is from what the browser says: every access token is checked with Supabase Auth (`/auth/v1/user`), which also rejects signed-out and deleted users; a verdict is remembered for at most five minutes or until the token expires. A hello with a token Auth does not recognise gets a guest seat. Sign-in uses the PKCE flow, so a one-time code that leaks from the address bar is useless without the verifier kept in that tab. |
+| Read or change someone else's profile | Profiles are read and written only by the server, with the secret key, by the account id Auth returned for the token. Row level security is on with no policies, so the publishable key handed to browsers reaches no profile. |
+| Award themselves coins, items, levels or a look (signed in) | A signed-in player's rounds are banked by the server from its own results; buying, wearing and titles go through the same rules on the server; what others see them wear, and their level, come from the account. The browser's claims are ignored. |
+| Drive the account API from another website, or flood it | Changes (`POST /api/me/...`) are refused from other origins; there are no cookies, only a bearer token, so there is nothing ambient to ride on. 64 KB body cap, 120 requests a minute per address. |
 
 `npm run test:security` attacks a real server with each of these and fails if any defence regresses.
 
@@ -33,13 +38,19 @@ server defends against, how, and what it does not.
   it tells them nothing about living props.
 - **Aim assistance.** A modified client can aim perfectly at whatever it has identified.
 - **Teammates sharing information** over voice chat or a second screen (spectators and props see everything).
-- **The profile: level, coins, wardrobe, catalogue, feats.** All of it lives in the browser's storage; there are no
-  accounts to check it against. The server decides how many coins a round pays and what each player did in it, but
-  the running totals, and what a player owns, are the client's word. A modified client can wear any look, any title
-  and any level badge. The server checks only that the kit and level are in range (`cleanKit`), so nothing malformed
-  reaches other players. Every item is cosmetic and nothing is sold for money, which is why this is acceptable for
-  now. Before anything is sold for real money, or a look or title is meant to prove something, the profile has to
-  move to the server behind a login. The rules in `shared/progress.ts` are pure so that move is not a rewrite.
+- **A guest's profile: level, coins, wardrobe, catalogue, feats.** A guest's profile lives in the browser's storage.
+  The server decides how many coins a round pays and what each player did in it, but a guest's running totals, and
+  what they own, are the client's word: a modified client can wear any look, any title and any level badge. The server
+  checks only that the kit and level are in range (`cleanKit`), so nothing malformed reaches other players. Every item
+  is cosmetic and nothing is sold for money, which is why this is acceptable. Signed-in players are not affected:
+  their profile is the server's (above). Anything that is meant to prove something (a leaderboard, a paid item) should
+  count signed-in profiles only.
+- **What a signed-in profile started from.** The first sign-in may bring the browser's guest profile into the account,
+  once, and that guest profile was the client's word. It is cleaned up like a save code and the row is marked
+  `imported`, so anything that must count only progress earned on the server can leave those rows out. Making many
+  accounts to bring the same edited profile into each is possible but pointless while everything is cosmetic.
+- **Farming with several tabs or accounts.** Two seats earn twice, as two guests would. The coin cap per round still
+  applies to each seat.
 - **Volumetric denial of service.** The limits above handle abusive clients, not a flood of traffic; that needs
   a network-level service in front (the host's, or a CDN).
 - **Per-address limits behind shared addresses.** Behind a proxy the server reads `CF-Connecting-IP` or the
@@ -63,7 +74,10 @@ server defends against, how, and what it does not.
 | `PP_PASS_MS` | 30000 | How long a freed seat is held for the person at the front of the line. |
 | `PP_BRAKE_MS` | 20 | How late (smoothed) the game loop may run before new players wait regardless of seats. 0 turns it off. |
 | `PP_ADMIN_KEY` | none | Password for `/admin` (8+ characters). Unset: the page does not exist. |
-| `SUPABASE_URL`, `SUPABASE_KEY` | none | Where play statistics are kept (`docs/ADMIN.md`). Unset: nothing is sent anywhere. |
+| `SUPABASE_URL`, `SUPABASE_KEY` | none | Where play statistics are kept (`docs/ADMIN.md`), and signed-in profiles. Unset: nothing is sent anywhere. |
+| `SUPABASE_PUBLISHABLE_KEY` | none | With the two above, turns on optional accounts (`docs/ACCOUNTS.md`). Public by design. `SUPABASE_ANON_KEY` also works. |
+| `PP_AUTH_PROVIDERS` | `discord,google` | Sign-in buttons offered, in order. They must be enabled in Supabase too. |
+| `PP_ACCOUNTS` | on when the keys are set | `0` turns accounts off without removing the keys. |
 
 ## The admin page and statistics
 
