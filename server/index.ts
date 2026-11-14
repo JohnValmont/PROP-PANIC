@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import { randomInt } from 'node:crypto';
+import { monitorEventLoopDelay } from 'node:perf_hooks';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CFG } from '../shared/constants';
@@ -186,7 +187,7 @@ const server = http.createServer((req, res) => {
     if (url.pathname === '/health') {
       let humans = 0;
       for (const r of rooms.values()) humans += r.humans;
-      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ ok: true, rooms: rooms.size, humans }));
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ ok: true, rooms: rooms.size, humans, tick: tickStats() }));
       return;
     }
     if (url.pathname === '/status') {
@@ -328,6 +329,25 @@ setInterval(() => {
 }, 10_000).unref();
 
 // ---------------------------------------------------------------- main loop
+const tickMs: number[] = [];
+const loopLag = monitorEventLoopDelay({ resolution: 10 });
+loopLag.enable();
+setInterval(() => loopLag.reset(), 10_000).unref();
+
+/**
+ * Room tick cost and event-loop lag over the last few seconds, for /health. A tick that takes long, or a loop that
+ * runs late, is lag every player on this server feels (pings and inputs wait for it): this shows it before they do.
+ */
+function tickStats() {
+  const s = [...tickMs].sort((a, b) => a - b);
+  const r1 = (v: number) => Math.round(v * 10) / 10;
+  return {
+    avg: s.length ? r1(s.reduce((a, b) => a + b, 0) / s.length) : 0,
+    p99: s.length ? r1(s[Math.min(s.length - 1, Math.floor(s.length * 0.99))]) : 0,
+    lag: r1(loopLag.percentile(99) / 1e6),
+  };
+}
+
 let lastLoop = performance.now(), lastPump = 0;
 setInterval(() => {
   // how late this tick is: when the CPU quota runs out, the whole process stalls and ticks arrive late
@@ -336,9 +356,12 @@ setInterval(() => {
   lastLoop = t0;
   let humans = 0;
   for (const [code, r] of rooms) {
+    const t = performance.now();
     try { r.tick(); } catch (e) { console.error(`[room ${code}] tick failed`, e); }
+    tickMs.push(performance.now() - t);
     if (r.closed) rooms.delete(code); else humans += r.humans;
   }
+  if (tickMs.length > 4000) tickMs.splice(0, tickMs.length - 2000);
   observe(humans, rooms.size);
   if (t0 - lastPump >= 1000) { lastPump = t0; try { gate.pump(); } catch (e) { console.error('[gate] pump failed', e); } }
 }, 1000 / CFG.TICK);

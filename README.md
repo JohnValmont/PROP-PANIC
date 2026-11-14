@@ -193,6 +193,24 @@ monthly allowance. Elsewhere, see `SECURITY.md` for the variables that matter
 behind a proxy (`PP_TRUST_PROXY`), on a second domain (`PP_ORIGINS`) or inside a portal's frame
 (`PP_FRAME_ANCESTORS`).
 
+### Lag and hosting
+
+Every room runs in the one server process, so they all share its CPU. Render's free plan gives that process a
+tenth of a CPU. Once it has used its share of a 100 ms period, the kernel freezes it for the rest of that period,
+and every player in every room waits: pings jump by up to ~90 ms and movement stutters. `npm run test:load` with
+`LOAD_CPU=0.1` reproduces this: with 4 rooms of 8 players, stalls already add 40-125 ms to the slowest 5% of pings.
+The seat limit above keeps a free instance below that point. To raise `PP_SEATS`, move to a plan with more CPU
+(Starter is half a CPU, five times the headroom), then check the new limit with `npm run test:load`.
+
+`/health` reports `tick.avg` / `tick.p99` (ms per room tick) and `tick.lag` (99th percentile event-loop delay, ms).
+Open it while a game feels laggy. A `lag` of tens of milliseconds means the server is starved for CPU. If it stays
+around 10 ms or less, the lag is the network (distance to the server's region) or the player's device (the in-game
+connection badge says when a low frame rate is the cause).
+
+The server's region also sets the lowest ping anyone can get. Render puts a service in Oregon unless the blueprint
+says otherwise, and the region cannot be changed once a service exists (a new service is needed). Pick the one
+nearest your players.
+
 ## Admin page and statistics
 
 Set `PP_ADMIN_KEY` and open `/admin` (any user name, the key as the password) to see who is online, the rooms open,
@@ -247,6 +265,7 @@ npm run test:security    # attacks a real server: crashes, floods, traversal, hi
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 npm run test:gate        # the line: seats and tables run out, passes, reconnects skip the line, private codes stay secret
 npm run build && npm run test:lineup # in a browser: the table board, the line, practice while waiting, the call to take the seat
+npm run test:load    # rooms full of browser-like clients: ping, snapshot rate and size, server CPU (LOAD_CPU=0.1 = Render free)
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
