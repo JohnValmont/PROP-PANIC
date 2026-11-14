@@ -194,7 +194,7 @@ async function visibility() {
 
 async function main() {
   const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
-    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HUNT_MS: '600000', PP_MAX_PER_IP: '6', PP_NEW_PER_MIN: '100000', PP_SEATS: '200', PP_TABLES: '100', PP_BRAKE_MS: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HUNT_MS: '600000', PP_MAX_PER_IP: '6', PP_NEW_PER_MIN: '100000', PP_SEATS: '200', PP_PRIVATE_TABLES: '100', PP_BRAKE_MS: '0' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   let log = '';
   server.stdout.on('data', (d) => (log += d)); server.stderr.on('data', (d) => (log += d));

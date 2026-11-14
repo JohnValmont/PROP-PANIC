@@ -283,6 +283,7 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
       // the front door: a seat now, or a place in line (server/gate.ts)
       const door = gate.admit(ws, { mode, code }, m.pass);
       if (door === 'busy') return fail('So many people are waiting that the line is full. Please try again in a few minutes.');
+      if (door === 'noTable') return fail(`All ${GATE.privateTables} private rooms are in use right now. Press PLAY to join a public game, or try again in a few minutes.`);
       if (door === 'line') { waiting = true; return; }
       if (mode === 'join') {
         const r = rooms.get(code);
@@ -358,4 +359,4 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => {
   flushStats().finally(() => setTimeout(() => process.exit(0), 300));
 });
 
-server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''} · ${GATE.seats} seats at ${GATE.tables} tables`));
+server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''} · ${GATE.seats} seats, ${GATE.privateTables} private rooms`));

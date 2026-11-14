@@ -784,8 +784,8 @@ body.calm #menu *, body.calm #menu, body.calm .overlay * { animation: none !impo
 .tables { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; border-radius: 18px; background: rgba(10, 12, 36, 0.55); border: 2px solid var(--line); max-width: 480px; }
 .tHead { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 600; }
 .tHead b { color: var(--yellow); font-variant-numeric: tabular-nums; } .tHead .tFree { color: #7ff5e6; }
-.tList { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 6px; }
-.tbl { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 7px 9px 8px; border-radius: 12px; border: 2px solid transparent; font: 600 12px var(--font); color: #fff; text-align: left; background: rgba(255, 255, 255, 0.1); position: relative; }
+.tList { display: grid; grid-template-columns: repeat(auto-fit, minmax(78px, 1fr)); gap: 6px; }
+.tbl { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; overflow: hidden; padding: 7px 8px 8px; border-radius: 12px; border: 2px solid transparent; font: 600 12px var(--font); color: #fff; text-align: left; background: rgba(255, 255, 255, 0.1); position: relative; }
 .tbl b { font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; } .tbl span { opacity: 0.75; white-space: nowrap; }
 .tbl svg { position: absolute; top: 7px; right: 7px; width: 14px !important; height: 14px !important; opacity: 0.7; }
 button.tbl { cursor: pointer; transition: border-color 0.12s, transform 0.08s, background 0.12s; }
@@ -793,9 +793,10 @@ button.tbl:hover:not(:disabled) { border-color: var(--yellow); background: rgba(
 button.tbl:disabled { cursor: default; opacity: 0.6; }
 .tbl.pub { background: rgba(46, 196, 182, 0.22); }
 .tbl.free { border: 2px dashed rgba(127, 245, 230, 0.55); background: transparent; } .tbl.free b { color: #7ff5e6; }
-.tbl.priv { background: rgba(155, 93, 229, 0.25); }
+.tbl.priv { background: rgba(155, 93, 229, 0.25); } .tbl.priv b, .tbl.locked b { padding-right: 16px; }
 .tbl.locked { background: repeating-linear-gradient(135deg, rgba(255, 255, 255, 0.05) 0 6px, transparent 6px 12px); border: 2px dashed rgba(255, 255, 255, 0.18); color: rgba(255, 255, 255, 0.55); }
-.pips { display: flex; gap: 2px; margin-top: 3px; } .pips i { width: 7px; height: 7px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); } .pips i.on { background: var(--yellow); }
+.pips { display: flex; gap: 2px; margin-top: 3px; } .pips i { width: 6px; height: 6px; border-radius: 50%; background: rgba(255, 255, 255, 0.22); } .pips i.on { background: var(--yellow); }
+.tMore { display: none; align-items: center; gap: 6px; font-size: 11.5px; opacity: 0.75; } #menu .tMore svg { width: 13px; height: 13px; }
 .tNote { font-size: 12.5px; opacity: 0.85; line-height: 1.3; } .tNote:empty { display: none; }
 .seatNote { font-size: 12.5px; text-align: center; color: #ffd9a0; line-height: 1.3; margin-top: -4px; } .seatNote:empty { display: none; }
 .practiceBtn { align-self: center; display: inline-flex; align-items: center; gap: 4px; background: none; border: 0; padding: 2px 4px; font: 700 13px var(--font); color: #7ff5e6; cursor: pointer; }
@@ -823,5 +824,5 @@ body.practice #copyLink { display: none; }
 #lineChip.lost { border-color: var(--pink); }
 @keyframes seatCall { 50% { box-shadow: 0 0 0 6px rgba(255, 209, 102, 0.35), 0 6px 20px rgba(0, 0, 0, 0.35); } }
 body.calm #lineChip.ready { animation: none; }
-@media (max-width: 720px) { .tables { max-width: none; width: 100%; padding: 8px 10px; gap: 6px; } .tables .tNote { display: none; } .tList { grid-template-columns: repeat(3, 1fr); } .tbl { padding: 5px 8px 6px; } .luPos b { font-size: 56px; } }
+@media (max-width: 720px) { .tables { max-width: none; width: 100%; padding: 8px 10px; gap: 6px; } .tables .tNote { display: none; } .tList { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 5px; } .tbl.priv, .tbl.locked { display: none; } .tMore { display: flex; } .tbl { padding: 5px 8px 6px; } .luPos b { font-size: 56px; } }
 @media (max-height: 620px) { .tables .tNote { display: none; } }

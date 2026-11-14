@@ -20,7 +20,7 @@ const bot = (hello) => new Promise((res) => { const ws = new WebSocket(`ws://loc
 
 (async () => {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_SEATS: '2', PP_TABLES: '1', PP_BRAKE_MS: '0' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_SEATS: '2', PP_BRAKE_MS: '0' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((r) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) r(); }));
   const browser = await chromium.launch({ args: ['--use-gl=swiftshader', '--enable-unsafe-swiftshader'] });
   try {
@@ -32,7 +32,7 @@ const bot = (hello) => new Promise((res) => { const ws = new WebSocket(`ws://loc
     await page.goto(URL);
     await page.waitForFunction(() => document.querySelector('#tSeats')?.textContent.includes('seats'), null, { timeout: 30000 });
     ok((await page.textContent('#tSeats')).includes('0 of 2'), 'the board shows free seats before anyone plays');
-    ok(await page.locator('.tbl.free').count() === 1 && await page.locator('.tbl.locked').count() === 2, 'one open table and two locked until after alpha');
+    ok(await page.locator('.tbl.free').count() === 1 && await page.locator('.tbl.priv').count() === 1 && await page.locator('.tbl.locked').count() === 1, 'a free table, the private rooms, and more locked until after alpha');
     await sleep(800); await shot(page, 'lineup-board.png');
 
     // two people take both seats at the only table
@@ -41,6 +41,7 @@ const bot = (hello) => new Promise((res) => { const ws = new WebSocket(`ws://loc
     await page.evaluate(() => window.dispatchEvent(new Event('focus')));
     await page.waitForFunction(() => document.querySelector('#quickBtn').textContent === 'GET IN LINE', null, { timeout: 20000 }).catch(() => {});
     ok(await page.textContent('#quickBtn') === 'GET IN LINE', 'when full, Play says it will put you in line');
+    ok(/Estimated wait: (under a minute|about \d+ min)/.test(await page.textContent('#seatNote')), `the Play card shows the estimated wait (${await page.textContent('#seatNote')})`);
     ok(await page.locator('.tbl.pub').count() === 1, 'the running public table is on the board');
     await shot(page, 'lineup-full.png');
 
@@ -49,6 +50,7 @@ const bot = (hello) => new Promise((res) => { const ws = new WebSocket(`ws://loc
     await page.waitForSelector('#lineup:not(.hidden)', { timeout: 10000 });
     ok((await page.textContent('#luPos')) === '#1', 'first in line');
     ok((await page.textContent('#luMsg')).includes('alpha'), 'the line explains the alpha limit politely');
+    ok(/Estimated wait: (under a minute|about \d+ min)/.test(await page.textContent('#luEta')), `the line shows an estimated wait (${await page.textContent('#luEta')})`);
     await sleep(500); await shot(page, 'lineup-line.png');
 
     console.log('practice while waiting');

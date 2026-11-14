@@ -169,10 +169,15 @@ The server needs no configuration on Render.
 
 ### How many people can play at once (the alpha front door)
 
-A free Render instance has a tenth of a CPU, so the server limits itself to `PP_SEATS` players (default 24) at
-`PP_TABLES` tables (default 4). Everyone else gets a place in a fair line with a live position, and can play a
-practice game against bots in their own browser while they wait; when a seat frees they are called in. Nobody
-already playing is ever removed. The Play page shows the tables live (`GET /status`). Details: `server/gate.ts`.
+A free Render instance has a tenth of a CPU, so the server has `PP_SEATS` seats (default 24). While a seat is free,
+Play gets you in: quick play fills public tables of 8, so 24 players sit at exactly 3 tables. Once all 24 are taken,
+Play says GET IN LINE and shows an estimated wait; pressing it gives a place in a fair line with a live position and
+estimate, and a practice game against bots in your own browser while you wait. When a seat frees you are called in.
+Nobody already playing is ever removed. Private rooms have their own small limit (`PP_PRIVATE_TABLES`, default 3),
+because one person can fill one with bots. The Play page shows the tables live (`GET /status`). Details: `server/gate.ts`.
+
+The estimated wait is the measured rate at which seats have freed up over the last 20 minutes; until there is enough
+history, it is the time until the next round ends at any table plus one round-gap per place ahead in line.
 
 What the defaults are based on (measured on the server process, real snapshots, rounds in the hunt phase):
 
@@ -181,7 +186,7 @@ What the defaults are based on (measured on the server process, real snapshots, 
 | 24 humans at 3 full public tables | ~0.07 | ~7 KB/s |
 | 16 private rooms, each 1 human + 7 bots | ~0.11 | ~5 KB/s |
 
-Bots cost more CPU than humans, which is why tables are limited as well as seats. A free instance's CPU is likely
+Bots cost more CPU than humans, which is why private rooms are limited as well as seats. A free instance's CPU is likely
 slower than the machine these were measured on, so watch `/admin` and `/status` (`hot: true` means the load brake is
 on) before raising the limits. Bandwidth matters too: one player for an hour is roughly 25 MB, so check your plan's
 monthly allowance. Elsewhere, see `SECURITY.md` for the variables that matter

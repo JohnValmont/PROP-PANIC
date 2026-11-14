@@ -1,20 +1,27 @@
 /**
  * The front door: how many people this server lets play at once, and a fair line for everyone else.
  *
- * A free hosting plan has a sliver of a CPU and a monthly bandwidth allowance, so the server runs a fixed number of
- * TABLES (rooms) and SEATS (human players across all tables). When they are taken, a newcomer is not turned away:
- * their socket stays open, they get a place in line and a live position, and when a seat frees the person at the
- * front is handed a short-lived PASS that reserves it for them. Nobody already playing is ever removed to make room,
- * and a player reconnecting to a seat they hold always gets back in.
+ * A free hosting plan has a sliver of a CPU and a monthly bandwidth allowance, so the server has a fixed number of
+ * SEATS (human players across every room). Seats are the only thing people wait in line for: while one is free,
+ * Play gets you in. When all are taken, a newcomer is not turned away: their socket stays open, they get a place in
+ * line with a live position and a waiting-time estimate, and when a seat frees the person at the front is handed a
+ * short-lived PASS that reserves it for them. Nobody already playing is ever removed to make room, and a player
+ * reconnecting to a seat they hold always gets back in.
+ *
+ * Public tables (quick play) need no limit of their own: quick play fills the busiest table first and only opens a
+ * new one when every public table has 8 people, so 24 seats never need more than 3. Private rooms are different (one
+ * person can open one and fill it with bots, which cost CPU), so they have a few PRIVATE TABLES of their own. When
+ * those are in use, Private room says so straight away rather than putting someone in line with seats still free.
  *
  * On top of the fixed limits sits a LOAD BRAKE: if the game loop starts running late (the CPU quota is being hit),
  * new players wait in line until it recovers, whatever the seat count says.
  *
- * Settings (environment): PP_SEATS (default 24), PP_TABLES (default 4), PP_LINE_MAX (default 400),
+ * Settings (environment): PP_SEATS (default 24), PP_PRIVATE_TABLES (default 3), PP_LINE_MAX (default 400),
  * PP_BRAKE_MS (how late, smoothed, the game loop may run before the brake engages; default 20, 0 turns the brake off).
  */
 import { randomBytes } from 'node:crypto';
 import type { WebSocket } from 'ws';
+import { CFG } from '../shared/constants';
 import { MAP_NAMES } from '../shared/map';
 import type { Room } from './room';
 
@@ -22,7 +29,7 @@ const num = (name: string, fallback: number) => { const v = Number(process.env[n
 
 export const GATE = {
   seats: num('PP_SEATS', 24),
-  tables: num('PP_TABLES', 4),
+  privateTables: num('PP_PRIVATE_TABLES', 3),
   lineMax: num('PP_LINE_MAX', 400),
   /** How long a pass holds a seat for the person it was given to. */
   passMs: num('PP_PASS_MS', 30_000),
@@ -43,7 +50,7 @@ export interface Waiter {
   /** Set once this person has been handed a pass. */
   pass: string;
   passUntil: number;
-  /** Did the pass need a table of its own (a new private room, or quick play with no public table to join)? */
+  /** Did the pass need a private table of its own? */
   newTable: boolean;
   lastPos: number;
 }
@@ -70,8 +77,12 @@ export class Gate {
   /** Humans holding a seat (a dropped player keeps theirs through the reconnect grace period). */
   used(): number { let n = 0; for (const r of this.rooms.values()) if (!r.closed) n += r.humanSlots; return n; }
   private reserved(): number { return this.passes.size; }
-  private reservedTables(): number { let n = 0; for (const p of this.passes.values()) if (p.newTable) n++; return n; }
-  private liveTables(): number { let n = 0; for (const r of this.rooms.values()) if (!r.closed) n++; return n; }
+  private reservedPrivate(): number { let n = 0; for (const p of this.passes.values()) if (p.newTable) n++; return n; }
+  private livePrivate(): number { let n = 0; for (const r of this.rooms.values()) if (!r.closed && !r.isPublic) n++; return n; }
+  /** Tables quick play can need for every seat to be usable. */
+  get publicTables(): number { return Math.ceil(GATE.seats / GATE.publicSeats); }
+  private seatFree(): boolean { return !this.hot && this.used() + this.reserved() < GATE.seats; }
+  private privateFree(): boolean { return this.livePrivate() + this.reservedPrivate() < GATE.privateTables; }
 
   /** A public table quick play can drop someone into right now. */
   publicTable(): Room | null {
@@ -83,23 +94,16 @@ export class Gate {
     return best;
   }
 
-  /** Does this intent need a table that is not running yet? */
-  private needsTable(intent: Intent): boolean {
-    if (intent.mode === 'create') return true;
-    if (intent.mode === 'quick') return !this.publicTable();
-    return false;
-  }
-
   /** Is there room for one more player with this intent, counting seats that passes are holding? (The line itself is checked by the caller.) */
   private fits(intent: Intent): boolean {
-    if (this.hot) return false;
-    if (this.used() + this.reserved() >= GATE.seats) return false;
-    if (this.needsTable(intent) && this.liveTables() + this.reservedTables() >= GATE.tables) return false;
-    return true;
+    return this.seatFree() && (intent.mode !== 'create' || this.privateFree());
   }
 
-  /** Called for a fresh hello. 'ok': let them in now. 'line': they have been put in line. 'busy': the line itself is full. */
-  admit(ws: WebSocket, intent: Intent, passKey: unknown): 'ok' | 'line' | 'busy' {
+  /**
+   * Called for a fresh hello. 'ok': let them in now. 'line': they have been put in line (every seat is taken).
+   * 'noTable': a seat is free but every private table is in use (tell them; Play still works). 'busy': the line is full.
+   */
+  admit(ws: WebSocket, intent: Intent, passKey: unknown): 'ok' | 'line' | 'noTable' | 'busy' {
     // a pass is a seat the line already reserved for this person
     if (typeof passKey === 'string' && passKey.length <= 64) {
       const p = this.passes.get(passKey);
@@ -107,6 +111,8 @@ export class Gate {
     }
     // nobody jumps the line: walk-ins only get a seat when nobody is waiting for one
     if (!this.line.length && this.fits(intent)) { this.admittedSince++; return 'ok'; }
+    // seats to spare and only the private tables taken: waiting in line would be waiting for nothing
+    if (intent.mode === 'create' && this.seatFree() && !this.privateFree()) return 'noTable';
     if (this.line.length >= GATE.lineMax) return 'busy';
     const w: Waiter = { ws, intent, since: Date.now(), pass: '', passUntil: 0, newTable: false, lastPos: 0 };
     this.line.push(w);
@@ -159,8 +165,8 @@ export class Gate {
         try { w.ws.close(1000, 'missed'); } catch { /* ignore */ }
       }
     }
-    // hand out passes, front of the line first; someone whose intent cannot fit yet (a new table) does not block
-    // the people behind them who only need a seat, but only a few places are looked past
+    // hand out passes, front of the line first; someone waiting for a private table does not block the people
+    // behind them who only need a seat, but only a few places are looked past
     let looked = 0;
     for (const w of this.line) {
       if (w.pass) continue;
@@ -168,19 +174,42 @@ export class Gate {
       if (!this.fits(w.intent)) continue;
       w.pass = randomBytes(18).toString('base64url');
       w.passUntil = t + GATE.passMs;
-      w.newTable = this.needsTable(w.intent);
+      w.newTable = w.intent.mode === 'create';
       this.passes.set(w.pass, { key: w.pass, until: w.passUntil, newTable: w.newTable, ws: w.ws });
       this.send(w.ws, { t: 'ready', pass: w.pass, ms: GATE.passMs });
     }
     for (const w of this.line) this.tell(w, false);
   }
 
-  /** Seconds until a seat frees for someone at this position, from how often seats freed recently; 0 = no idea yet. */
-  private eta(pos: number): number {
-    if (this.releases.length < 3) return 0;
-    const span = Math.max(60_000, Date.now() - this.releases[0]);
-    const perSec = this.releases.length / (span / 1000);
-    return Math.round(pos / perSec);
+  /**
+   * Seconds until a seat frees for someone at this position: always a number, never "no idea".
+   * With some history (3+ seats freed in the last 20 minutes) it is the measured rate. Before that, a model of the
+   * game: people tend to leave when a round ends, so it is the time until the soonest round end at any table, plus one
+   * more gap between round ends (a round's length shared across the tables running) for every place ahead.
+   */
+  eta(pos: number): number {
+    let sec: number;
+    if (this.releases.length >= 3) {
+      const span = Math.max(60_000, Date.now() - this.releases[0]);
+      sec = pos / (this.releases.length / (span / 1000));
+    } else {
+      const roundS = (CFG.HIDE_MS + CFG.HUNT_MS + CFG.END_MS) / 1000;
+      const live = [...this.rooms.values()].filter((r) => !r.closed);
+      sec = this.nextRoundEnd(live, roundS) + (pos - 1) * (roundS / Math.max(1, live.length));
+    }
+    return Math.max(20, Math.round(sec));
+  }
+
+  /** Seconds until the next round ends at any table (a table still in its lobby counts as half a round away). */
+  private nextRoundEnd(live: Room[], roundS: number): number {
+    const t = performance.now();
+    let best = Infinity;
+    for (const r of live) {
+      const left = Math.max(0, (r.phaseEnds - t) / 1000);
+      const s = r.phase === 'hiding' ? left + CFG.HUNT_MS / 1000 : r.phase === 'hunt' || r.phase === 'end' ? left : roundS / 2;
+      best = Math.min(best, s);
+    }
+    return Number.isFinite(best) ? best : 60;
   }
 
   private tell(w: Waiter, force: boolean) {
@@ -212,8 +241,11 @@ export class Gate {
     const used = this.used();
     this.statusCache = JSON.stringify({
       alpha: true, seats: GATE.seats, used, reserved: this.reserved(), line: this.line.length,
-      tables: GATE.tables, locked: GATE.lockedShown, hot: this.hot, eta: this.eta(Math.max(1, this.line.length + 1)),
-      list: tables.slice(0, GATE.tables + 4),
+      // the wait the next person to press Play would face
+      eta: this.eta(this.line.length + 1),
+      publicTables: this.publicTables, privateTables: GATE.privateTables, privateUsed: this.livePrivate(),
+      locked: GATE.lockedShown, hot: this.hot,
+      list: tables.filter((x) => x.pub).slice(0, this.publicTables + 2),
     });
     this.statusAt = t;
     return this.statusCache;

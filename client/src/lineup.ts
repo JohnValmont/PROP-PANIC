@@ -13,7 +13,8 @@ import type { Game } from './game';
 
 export interface Intent { mode: 'quick' | 'create' | 'join'; code: string; }
 interface Status {
-  seats: number; used: number; reserved: number; line: number; tables: number; locked: number; hot: boolean; eta: number;
+  seats: number; used: number; reserved: number; line: number; eta: number; hot: boolean;
+  publicTables: number; privateTables: number; privateUsed: number; locked: number;
   list: { code: string; pub: boolean; map: string; phase: string; humans: number; bots: number; cap: number }[];
 }
 interface Hooks {
@@ -34,11 +35,10 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 const SHORT: Record<string, string> = { "Tumbleton's Emporium": 'Emporium', 'Sunny Meadow': 'Meadow' };
 const LOCK = '<svg viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
 
-/** "about 3 min", from seconds; 0 means the server does not know yet. */
+/** "about 3 min", from the server's estimate in seconds. */
 function eta(sec: number): string {
-  if (!sec) return '';
   if (sec < 50) return 'under a minute';
-  if (sec < 100) return 'about a minute';
+  if (sec < 100) return 'about 1 min';
   return `about ${Math.round(sec / 60)} min`;
 }
 
@@ -46,6 +46,7 @@ export class Lineup {
   private ws: WebSocket | null = null;
   private intent: Intent | null = null;
   private pos = 0;
+  private etaSec = 0;
   private pass = '';
   private passUntil = 0;
   /** True between pressing Join (with a pass) and the server's welcome. */
@@ -103,25 +104,29 @@ export class Lineup {
     const free = Math.max(0, s.seats - s.used - s.reserved);
     $('tSeats').innerHTML = `<b>${s.used}</b> of ${s.seats} seats taken${s.line ? ` · <b>${s.line}</b> in line` : free ? ` · <b class="tFree">${free} free</b>` : ''}`;
     const tiles: string[] = [];
-    const live = s.list.slice(0, s.tables);
-    for (let i = 0; i < s.tables; i++) {
+    // the public tables (enough for every seat), running or free
+    const live = s.list.slice(0, Math.max(s.publicTables, s.list.length));
+    for (let i = 0; i < Math.max(s.publicTables, live.length); i++) {
       const t = live[i];
-      if (!t) { tiles.push(`<button class="tbl free" role="listitem" title="Start a new game here"><b>Free table</b><span>Press Play</span></button>`); continue; }
+      if (!t) { tiles.push(`<button class="tbl free" role="listitem" title="Start a new game here"><b>Open</b><span>Press Play</span></button>`); continue; }
       const pips = Array.from({ length: Math.min(t.cap, 8) }, (_, k) => `<i class="${k < t.humans ? 'on' : ''}"></i>`).join('');
-      if (!t.pub) { tiles.push(`<div class="tbl priv" role="listitem" title="A private game among friends">${LOCK}<b>Private</b><span>${t.humans} playing</span></div>`); continue; }
       const full = t.humans >= t.cap;
       tiles.push(`<button class="tbl pub" role="listitem" data-code="${esc(t.code)}" ${full ? 'disabled' : ''} title="${full ? 'This table is full' : 'Join this table'}"><b>${esc(SHORT[t.map] ?? t.map)}</b><span>${esc(t.phase)}</span><em class="pips">${pips}</em></button>`);
     }
-    for (let i = 0; i < s.locked; i++) tiles.push(`<div class="tbl locked" role="listitem" title="More tables open once the game leaves alpha">${LOCK}<b>Locked</b><span>After alpha</span></div>`);
+    // private rooms: how many are in use, never which
+    tiles.push(`<div class="tbl priv" role="listitem" title="Private rooms among friends (Private room button)">${LOCK}<b>Private</b><span>${s.privateUsed} of ${s.privateTables} rooms</span></div>`);
+    if (s.locked) tiles.push(`<div class="tbl locked" role="listitem" title="${s.locked} more tables open once the game leaves alpha">${LOCK}<b>Locked</b><span>After alpha</span></div>`);
     $('tList').innerHTML = tiles.join('');
+    // phones show only the public tables as tiles; the rest fits on one line
+    $('tMore').innerHTML = `${LOCK}<span>Private rooms: ${s.privateUsed} of ${s.privateTables} in use · ${s.locked} more tables after alpha</span>`;
     const full = this.full();
     $('tNote').textContent = s.hot ? 'The server is catching its breath: new seats open in a moment.'
-      : full ? 'Every seat is taken. Press Play to get a place in line, or practice offline.' : '';
+      : full && this.waiting ? 'You are in line: your seat is on its way.' : ''; // the Play card itself says when it is full
     // the Play button says what it will do
     const q = $<HTMLButtonElement>('quickBtn');
     if (!q.disabled) q.textContent = full && !this.waiting ? 'GET IN LINE' : 'PLAY NOW';
     const wait = eta(s.eta);
-    $('seatNote').textContent = full && !this.waiting ? `Full right now: you'll be seated ${wait ? `in ${wait}` : 'as soon as a game ends'}. Practice while you wait.` : '';
+    $('seatNote').textContent = full && !this.waiting ? `All ${s.seats} seats are taken. Estimated wait: ${wait}. You can practice while you wait.` : '';
   }
 
   // ------------------------------------------------------------------------------------------ the line
@@ -142,14 +147,15 @@ export class Lineup {
 
   private onMsg(m: any) {
     if (m.t === 'line') {
-      this.pos = m.pos;
+      this.pos = m.pos; this.etaSec = Number(m.eta) || 0;
       $('luPos').textContent = `#${m.pos}`;
-      const w = eta(m.eta);
-      $('luEta').textContent = w ? `${w} to go` : 'Seats open as games end';
+      $('luEta').textContent = `Estimated wait: ${eta(m.eta)}`;
       $('luFill').style.width = `${Math.min(100, Math.round((m.used / Math.max(1, m.seats)) * 100))}%`;
       $('luSeats').textContent = `${m.used} of ${m.seats} seats in use · ${m.size} waiting`;
-      $('luMsg').innerHTML = (m.hot ? '<b>The server is catching its breath.</b> ' : '')
-        + `PROP PANIC is in <b>alpha</b> and runs on one small free server, so only <b>${m.seats} people</b> can play at once. `
+      const full = m.used >= m.seats;
+      $('luTitle').textContent = full ? 'All seats are taken' : 'One moment';
+      $('luMsg').innerHTML = (m.hot && !full ? '<b>The server is busy catching up</b>, so new players wait a moment. ' : '')
+        + `PROP PANIC is in <b>alpha</b> and runs on one small free server, so only <b>${m.seats} people</b> can play at once${full ? `, and all ${m.seats} seats are taken` : ''}. `
         + 'Keep this tab open: when your turn comes, you will be seated automatically.';
       this.renderChip();
     } else if (m.t === 'ready') {
@@ -238,7 +244,7 @@ export class Lineup {
       $('pSeatBtn').classList.remove('hidden');
       $('pSeatBtn').textContent = `Take your seat (${left}s)`;
     } else {
-      $('lcTxt').innerHTML = `In line for a seat: <b>#${this.pos}</b>`;
+      $('lcTxt').innerHTML = `In line for a seat: <b>#${this.pos}</b> · ${eta(this.etaSec)}`;
       chip.className = 'waiting';
       $('pSeatBtn').classList.add('hidden');
     }
