@@ -22,7 +22,7 @@ const shot = (page, name) => page.screenshot({ path: path.join(SHOTS, name), tim
 const dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
 // one ghost per run: three software-rendered browsers at once starve each other on a machine with no GPU
 async function run(touch) {
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '3000', PP_HUNT_MS: '110000', PP_END_MS: '4000', PP_JOIN_MS: '100000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HIDE_MS: '3000', PP_HUNT_MS: '110000', PP_END_MS: '4000', PP_JOIN_MS: '100000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   const browsers = [], errors = [];
   const open = async (name, extra = {}) => {

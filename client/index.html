@@ -68,7 +68,7 @@
     <div id="roleCard"><div class="rcTop" id="rcTop"></div><div class="rcTitle" id="rcTitle"></div><div class="rcSub" id="rcSub"></div></div>
 
     <div id="lobby" class="panel">
-      <div class="lobbyHead"><div><div class="tiny">ROOM CODE</div><div id="lobbyCode">----</div></div><button id="copyLink" class="btn small teal">Copy invite link</button></div>
+      <div class="lobbyHead"><div><div class="tiny" id="lobbyCodeL">ROOM CODE</div><div id="lobbyCode">----</div></div><button id="copyLink" class="btn small teal">Copy invite link</button></div>
       <div id="lobbyPlayers"></div>
       <div id="lobbyBots" class="row"><span>Bots</span><button class="btn tiny" id="botsMinus">−</button><b id="botsN">0</b><button class="btn tiny" id="botsPlus">+</button></div>
       <button id="mapBtn" class="btn small ghost">Map: Alternate</button>
@@ -118,7 +118,13 @@
             <div class="feat"><i class="fi f3"></i><div><b>Caught? You are not out</b><span>Come back as a ghost and rattle the furniture until a hunter shoots the wrong thing.</span></div></div>
           </div>
           <button id="soonTeaser" class="soonTeaser" data-go="soon"></button>
-          <div id="online"></div>
+          <!-- the server's tables, live (client/src/lineup.ts, server/gate.ts) -->
+          <div id="tables" class="tables">
+            <div class="tHead"><i class="alphaTag">ALPHA</i><span id="tSeats">Checking the tables…</span></div>
+            <div id="tList" class="tList" role="list"></div>
+            <div id="tMore" class="tMore"></div>
+            <div id="tNote" class="tNote"></div>
+          </div>
         </div>
         <div class="menuCard playCard">
           <label class="fieldL" for="nameInput">YOUR NAME</label>
@@ -127,11 +133,13 @@
           <div id="modes" class="modes" role="group" aria-label="Game mode"></div>
           <div id="modeInfo" class="modeInfo" aria-live="polite"></div>
           <button id="quickBtn" class="btn big yellow">PLAY NOW</button>
+          <div id="seatNote" class="seatNote" aria-live="polite"></div>
           <div class="row split">
             <button id="createBtn" class="btn teal">Private room</button>
             <div class="joinBox"><input id="codeInput" maxlength="4" placeholder="CODE" autocomplete="off" spellcheck="false" /><button id="joinBtn" class="btn pink">Join</button></div>
           </div>
           <div id="menuError"></div>
+          <button id="practiceBtn" class="practiceBtn" title="A game against bots that runs in your browser: no server seat needed">Practice offline vs bots <svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg></button>
           <div id="jobsMini" class="jobsMini" title="Today's odd jobs: open your profile"></div>
         </div>
       </section>
@@ -235,6 +243,23 @@
     </main>
   </div>
 
+  <!-- the line: every seat is taken, so this person waits for one (client/src/lineup.ts) -->
+  <div id="lineup" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="luTitle">
+    <div class="menuCard small luCard">
+      <i class="alphaTag">ALPHA</i>
+      <h2 id="luTitle">All seats are taken</h2>
+      <div class="luPos"><small>YOUR PLACE IN LINE</small><b id="luPos">#1</b><span id="luEta"></span></div>
+      <div class="luMeter" aria-hidden="true"><i id="luFill"></i></div>
+      <div id="luSeats" class="luSeats"></div>
+      <p id="luMsg" class="luMsg"></p>
+      <button id="luPractice" class="btn big yellow">Practice while you wait</button>
+      <div class="luSub">Bots, in your browser. We'll call you the moment your seat is ready.</div>
+      <button id="luLeave" class="btn small ghost">Leave the line</button>
+    </div>
+  </div>
+  <!-- during practice: your place in line, then the call to take your seat -->
+  <div id="lineChip" class="hidden" aria-live="polite"><span id="lcTxt"></span><button id="lcJoin" class="btn small yellow">Join now</button></div>
+
   <div id="pause" class="overlay hidden">
     <div class="menuCard small pauseCard">
       <h2 id="pauseTitle">Paused</h2>
@@ -245,6 +270,7 @@
         <button id="pFsBtn" class="btn ghost fsOnly">Full screen</button>
         <button id="muteBtn" class="btn ghost">Sound: On</button>
       </div>
+      <button id="pSeatBtn" class="btn big teal hidden">Take your seat</button>
       <button id="leaveBtn" class="btn pink">Leave game</button>
       <div class="keys"><kbd>Esc</kbd> pause · <kbd>Tab</kbd> scores · <kbd>Enter</kbd> quick chat · <kbd>M</kbd> mute</div>
     </div>

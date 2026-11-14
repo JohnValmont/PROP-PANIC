@@ -1,6 +1,6 @@
 # Changelog
 
-## 2.12.1
+## 2.13.1
 
 Smoother online play with many players, and a way to tell where lag comes from.
 
@@ -10,8 +10,6 @@ Smoother online play with many players, and a way to tell where lag comes from.
   405,000 random steps and 180,000 sight tests matched the old code bit for bit. Snapshots are ~9% smaller.
 - **One write per player per tick.** A tick's snapshot, events, roster and cooldowns, and a shot together with the
   hit it caused, now reach the kernel in one write per socket, not one per message.
-- **Slow connections stop queueing lag.** A player who cannot keep up now skips snapshots once 16 KB is waiting
-  for them (it was 96 KB). The deeper queue added seconds of delay, and their pings and events waited behind it.
 - **Steadier movement on jittery connections.** The client's clock follows the snapshots that arrive soonest,
   not an average that every late packet dragged back. Other players are drawn with a delay that grows with
   measured jitter (110 ms, up to 300 ms) and eases back as the connection settles, so they glide instead of
@@ -21,6 +19,33 @@ Smoother online play with many players, and a way to tell where lag comes from.
 - **Diagnostics.** `/health` now reports room tick time and event-loop lag. `npm run test:load` fills rooms
   with browser-like clients and reports ping, snapshot rate and size, and server CPU. It can emulate a CPU-limited
   host (`LOAD_CPU=0.1`, the Render free plan). See "Lag and hosting" in the README.
+
+## 2.13.0
+
+An alpha front door: a full server puts people in line instead of turning them away, and they can play while they wait.
+
+- **24 seats.** `PP_SEATS` (default 24) players across all rooms. Seats are the only thing anyone waits for: while
+  one is free, Play gets you in (quick play fills public tables of 8, so 24 players sit at exactly 3 tables). Private
+  rooms have their own limit, `PP_PRIVATE_TABLES` (default 3); when they are all in use, Private room says so straight
+  away. Nobody already playing is ever removed to make room, and a player reconnecting to a seat they hold always gets
+  back in.
+- **The line.** When all 24 seats are taken, the Play button says GET IN LINE with an estimated wait, and pressing it
+  gives you a place in line with a live position and estimate (measured from how fast seats have freed lately, or,
+  until there is enough history, from when the next rounds end). When a seat frees, it is held for the person at the front
+  for 30 seconds. Walk-ins never jump the line. Someone waiting for a new table (a private room) does not hold up the
+  people behind them who only need a seat at a public table.
+- **Practice while you wait.** A practice game against bots that runs entirely in your browser: the real server room,
+  in a Web Worker, so it costs the server nothing. Your place in line rides along at the bottom of the screen; when
+  your seat is ready you are called in (the mouse is handed back so you can click Join now). Also on the Play card as
+  "Practice offline vs bots" at any time.
+- **Table board.** The Play page shows the tables live: the 3 public tables (map, phase, seats; click one to join),
+  how many private rooms are in use (never their codes), and two tables locked until after the alpha.
+- **Load brake.** If the game loop starts running late (the CPU quota is running out), new players wait in line until it
+  recovers, whatever the seat count says (`PP_BRAKE_MS`, default 20 ms; 0 turns it off).
+- **`GET /status`** serves the board: seats, tables, line length and the running tables. Cached for a second.
+- **Fix:** joining a public room by its code could seat a ninth player; public tables now stop at eight like quick play.
+- New tests: `npm run test:gate` (the line, passes, reconnects, private codes kept out of the status) and
+  `npm run test:lineup` (the whole flow in a browser).
 
 ## 2.12.0
 

@@ -17,7 +17,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import WebSocket from 'ws';
 
-const PORT = Number(process.env.LOAD_PORT ?? 8097);
+const PORT = Number(process.env.LOAD_PORT ?? 8093);
 const ROOMS = Number(process.env.LOAD_ROOMS ?? 4);
 const PLAYERS = Number(process.env.LOAD_PLAYERS ?? 8);
 const SECONDS = Number(process.env.LOAD_SECONDS ?? 25);
@@ -106,7 +106,9 @@ async function main() {
   // LOAD_PIN=1: the server gets core 0 to itself (run this script under `taskset -c 1-3`) so the load does not skew the numbers
   const args = [...(process.env.LOAD_NODE_ARGS ?? '').split(' ').filter(Boolean), '--import', 'tsx', 'server/index.ts'];
   const server = spawn(process.env.LOAD_PIN ? 'taskset' : process.execPath, process.env.LOAD_PIN ? ['-c', '0', process.execPath, ...args] : args, {
-    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '2000', PP_HUNT_MS: String((SECONDS + 30) * 1000), PP_MAX_PER_IP: '1000', PP_NEW_PER_MIN: '10000' },
+    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '2000', PP_HUNT_MS: String((SECONDS + 30) * 1000), PP_MAX_PER_IP: '1000', PP_NEW_PER_MIN: '10000',
+      // this measures what the server itself can carry, so the front door (server/gate.ts) is opened wide
+      PP_SEATS: '100000', PP_PRIVATE_TABLES: '10000', PP_BRAKE_MS: '0' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   let stderr = '';

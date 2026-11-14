@@ -18,11 +18,6 @@ const r2 = (v: number) => Math.round(v * 100) / 100;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
 /** Rounding error stays under 0.05 mm, below the physics' 0.1 mm contact epsilon, so a rounded position can never sit inside a wall. */
 const r4 = (v: number) => Math.round(v * 10000) / 10000;
-/**
- * A client this far behind on reading (bytes queued in this process) skips snapshots until it catches up. Kept to a
- * few snapshots' worth: a deeper queue only adds delay, and everything queued behind it (pongs, events) waits too.
- */
-const SNAP_BACKLOG = 16_000;
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const pickOf = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const TAU = Math.PI * 2;
@@ -154,7 +149,7 @@ export class Room {
     if (!ws || ws.readyState !== 1) return;
     const queued = ws.bufferedAmount ?? 0;
     if (queued > 1_000_000) { try { ws.terminate(); } catch { /* ignore */ } return; }
-    if (droppable && queued > SNAP_BACKLOG) return;
+    if (droppable && queued > 96_000) return;
     this.hold((ws as any)._socket);
     ws.send(s);
   }
