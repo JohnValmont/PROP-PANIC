@@ -137,11 +137,15 @@ function securityHeaders(req: http.IncomingMessage): Record<string, string> {
 /** Text assets are compressed once and kept; keyed by path, invalidated by size and mtime. */
 const packed = new Map<string, { tag: string; raw: Buffer; gzip: Buffer; br: Buffer }>();
 
+/** Short addresses for the static legal pages (the files themselves live in client/public). */
+const PAGES: Record<string, string> = { '/privacy': '/privacy.html', '/terms': '/terms.html' };
+
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: URL) {
   let rel: string;
   try { rel = decodeURIComponent(url.pathname); } catch { res.writeHead(400).end(); return; }
   if (rel.includes('\0') || rel.split(/[\\/]/).some((seg) => seg.startsWith('.') && seg.length > 1)) { res.writeHead(404).end(); return; }
-  if (rel === '/' || !path.extname(rel)) rel = '/index.html';
+  if (rel in PAGES) rel = PAGES[rel];
+  else if (rel === '/' || !path.extname(rel)) rel = '/index.html';
   const file = path.join(STATIC_DIR, path.normalize(rel));
   if (!file.startsWith(STATIC_DIR + path.sep)) { res.writeHead(403).end(); return; }
   fs.stat(file, (err, st) => {
