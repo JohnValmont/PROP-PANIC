@@ -1,5 +1,33 @@
 # Changelog
 
+## 2.14.0
+
+Optional accounts: sign in with Discord or Google and your profile is kept on the server, so clearing the browser or
+switching devices no longer starts you over. Guests play exactly as before; nothing on the way into a game asks anyone
+to sign in.
+
+- **Sign in from Profile → Overview.** *Continue with Discord* or *Continue with Google* (Supabase Auth, OAuth with
+  PKCE, no SDK in the client). Coming back from the sign-in page reopens the profile and keeps the room link you had open.
+- **First sign-in: bring your progress or start fresh.** The browser's guest profile can be brought into a new account
+  once; the browser then starts a fresh guest profile, so the same progress cannot go into a second account. Brought-in
+  profiles are cleaned up like save codes and marked `imported`.
+- **The server owns a signed-in profile.** It banks every round itself from its own results, decides every purchase and
+  change of look with the same rules the browser shows (`applyChange`, `roundInput` in `shared/progress.ts`), and shows
+  others only what the account owns at the level it has earned, whatever a modified browser claims. Changes are written
+  to Supabase a couple of seconds later and once more at shutdown; one process holds each profile, so two tabs cannot
+  overwrite each other.
+- **Practice games are not banked** into an account (they run in the browser), and the game says so. If the account
+  cannot be reached when a game starts, the player plays on and is told those rounds are not saved.
+- **Sign out and Delete account** (removes the profile and the sign-in from Supabase, after two confirmations).
+- A teal dot on the menu's price tag means the profile is saved to an account.
+- **`/api/config`, `/api/me`, `/api/me/start`, `/api/me/change`, `/api/me/delete`** (`server/accounts.ts`). Changes are
+  refused from other origins; 64 KB body cap; 120 requests a minute per address.
+- `/admin` shows whether accounts are on, profiles in memory, saves and the last error.
+- Setup (one table, the Discord and Google apps, `SUPABASE_PUBLISHABLE_KEY`): `docs/ACCOUNTS.md`. Without it accounts
+  are off and nothing changes.
+- New tests: `npm run test:accounts` (against a stand-in Supabase: tokens, first sign-in, purchases, a server-banked
+  round, deletion, writes at shutdown) and `npm run test:signin` (the whole sign-in flow in a browser).
+
 ## 2.13.1
 
 Smoother online play with many players, and a way to tell where lag comes from.

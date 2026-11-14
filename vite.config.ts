@@ -21,6 +21,6 @@ export default defineConfig({
   build: { outDir: '../dist/client', emptyOutDir: true, target: 'es2022', chunkSizeWarningLimit: 1200 },
   server: {
     port: 5173,
-    proxy: { '/ws': { target: 'ws://localhost:8080', ws: true }, '/status': 'http://localhost:8080', '/health': 'http://localhost:8080' },
+    proxy: { '/ws': { target: 'ws://localhost:8080', ws: true }, '/status': 'http://localhost:8080', '/health': 'http://localhost:8080', '/api': 'http://localhost:8080' },
   },
 });

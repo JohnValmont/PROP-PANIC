@@ -138,14 +138,17 @@ the wardrobe run from 150 to 1,200, blasters and trails from 250 to 2,500, and c
 
 ### Where the profile lives
 
-In the browser, as one record (`pp_profile`), because there are no accounts. **Overview → Backup** copies a save code
-that restores it in another browser. A 2.6 profile (XP, coins and look) is carried over on first load; a player who
-had the Crown keeps it, though it now unlocks at level 20.
+**Guests (the default):** in the browser, as one record (`pp_profile`). **Overview → Backup** copies a save code that
+restores it in another browser. A 2.6 profile (XP, coins and look) is carried over on first load; a player who had the
+Crown keeps it, though it now unlocks at level 20. Anyone can edit a guest profile with the browser's developer tools,
+and the server only checks that what a guest wears is a valid item, not that they own it (`SECURITY.md`).
 
-Anyone can edit their own profile with the browser's developer tools. The server only checks that what a player
-wears is a valid item, not that they own it (`SECURITY.md`). Nothing is sold for money and every look is cosmetic,
-so that is an acceptable trade until there are accounts. All the rules are pure functions in `shared/progress.ts`,
-so they can move to the server behind a login without a rewrite.
+**Signed in (optional):** **Overview** offers *Continue with Discord* or *Continue with Google*. The profile then lives
+on the server (Supabase), which banks every round itself, decides every purchase, and shows others only what the account
+owns at the level it has earned. On the first sign-in the player can bring their guest profile in, once, or start fresh.
+Nothing on the way into a game asks anyone to sign in. The rules are the same pure functions in `shared/progress.ts`
+on both sides. Setup (a table, the Discord and Google apps, three environment variables): `docs/ACCOUNTS.md`. Without it,
+accounts are simply off.
 
 ## Controls
 
@@ -222,7 +225,7 @@ paste into Supabase: `docs/ADMIN.md`.
 
 ```
 shared/   deterministic map generator, AABB character physics, prop catalog, protocol, progression rules
-server/   Node + ws: rooms, matchmaking, round flow, hit detection, abilities, bots
+server/   Node + ws: rooms, matchmaking, round flow, hit detection, abilities, bots, optional accounts
 client/   Three.js + Vite: rendering, prediction, HUD, synthesised audio
 test/     protocol test (WebSocket clients) and browser test (two Chromium clients)
 ```
@@ -261,16 +264,18 @@ npm run test:mechanics   # bonk, escape bonus, sneeze, last-prop showdown, check
 npm run test:audio       # every instrument, effect and song renders clean (finite, unclipped, no DC offset)
 npm run test:progress    # levels, catalogue, feats, odd jobs, wardrobe, banking a round, save codes
 npm run test:stats       # admin page password and lockout, statistics written to (a stand-in for) Supabase
+npm run test:accounts    # accounts against a stand-in Supabase: tokens, first sign-in, purchases, server-banked rounds, delete
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
 npm run test:gate        # the line: seats and tables run out, passes, reconnects skip the line, private codes stay secret
 npm run build && npm run test:lineup # in a browser: the table board, the line, practice while waiting, the call to take the seat
+npm run build && npm run test:signin # in a browser: sign in (PKCE redirect), bring the guest profile, a banked round, sign out
 npm run test:load    # rooms full of browser-like clients: ping, snapshot rate and size, server CPU (LOAD_CPU=0.1 = Render free)
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security, statistics, line and protocol tests on every push.
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security, statistics, accounts, line and protocol tests on every push.
 
 ## Tuning
 

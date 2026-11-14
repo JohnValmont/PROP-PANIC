@@ -22,9 +22,10 @@
   <section class="tldr">
     <h2>The short version</h2>
     <ul>
-      <li>No accounts, no email sign-up, no cookies, no ads, no third-party analytics or tracking pixels, no payments.</li>
+      <li>You never need an account to play. No email sign-up, no cookies, no ads, no third-party analytics or tracking pixels, no payments.</li>
+      <li><strong>Optional:</strong> if you choose to sign in with Discord or Google, we keep your game profile and an account ID on our server so your progress follows you. Your email and account name are never shown to other players, and you can delete the account yourself at any time.</li>
       <li>The nickname you type is shown to the other players in your room. It is not saved on our server after you leave. Please don't use your real name.</li>
-      <li>Your level, coins, cosmetics and settings are kept <strong>in your own browser</strong>, not on our server.</li>
+      <li>If you don't sign in, your level, coins, cosmetics and settings are kept <strong>in your own browser</strong>, not on our server.</li>
       <li>For play statistics we record a random ID your browser makes up, plus how long you played and how many rounds. It is not linked to your name or IP address.</li>
       <li>Your IP address is used only in memory, to stop abuse. The game does not write it to logs or a database.</li>
       <li>Fonts are loaded from Google Fonts, so Google sees your IP address when the page loads.</li>
@@ -65,6 +66,12 @@
         <td>Up to 24 months.</td>
       </tr>
       <tr>
+        <td><strong>Account</strong> (only if you choose to sign in): the account ID, your email address, and the name and picture Discord or Google shares with the sign-in service; your game profile (level, XP, coins, owned and equipped cosmetics, catalogue, feats, odd jobs, lifetime game stats); whether the profile was started from your browser's progress</td>
+        <td>Our sign-in service and database (Supabase). The game shows other players only your nickname, cosmetics and level, never your email or account name.</td>
+        <td>To keep your progress safe and let you use it on any device; to check purchases and rewards on the server.</td>
+        <td>Until you delete the account (Profile, Overview, Delete account), which removes the profile and the sign-in. If an account is unused for 24 months we may delete it.</td>
+      </tr>
+      <tr>
         <td><strong>IP address</strong> and basic connection details</td>
         <td>The game server's memory. Our hosting provider may keep standard request logs (see section 4).</td>
         <td>Security: rate limits, blocking abusive connections, keeping the waiting line fair.</td>
@@ -84,6 +91,7 @@
     <li><strong>Your profile:</strong> level, XP, coins, unlocked and equipped cosmetics, feats.</li>
     <li><strong>Settings:</strong> nickname, volume, music, mouse sensitivity, field of view, quality, key bindings, help and notices you have dismissed.</li>
     <li><strong>Session helpers:</strong> a short-lived seat token so a dropped connection can rejoin the same seat, and the random browser ID used for statistics.</li>
+    <li><strong>If you sign in:</strong> sign-in tokens (not your password: we never see it) and a copy of your account's profile, so the game shows it straight away. Signing out removes them.</li>
   </ul>
   <p>To delete it, clear this site's data in your browser settings. That resets your progress, and we cannot restore
     it, because we never had a copy.</p>
@@ -92,8 +100,13 @@
   <ul>
     <li><strong>Hosting:</strong> the game runs on <a href="https://render.com/privacy" rel="noopener">Render</a>. Like
       any host, Render processes your IP address to deliver the site and may keep request logs under its own policy.</li>
-    <li><strong>Statistics database:</strong> visit records and round results (section 2) are stored with
-      <a href="https://supabase.com/privacy" rel="noopener">Supabase</a>. Only the game server can read or write them.</li>
+    <li><strong>Database and sign-in:</strong> visit records, round results and, if you sign in, your account and profile
+      (section 2) are stored with <a href="https://supabase.com/privacy" rel="noopener">Supabase</a>, which also runs the
+      sign-in. Only the game server can read or write the game data.</li>
+    <li><strong>Sign-in providers (only if you use them):</strong> when you choose "Continue with Discord" or "Continue
+      with Google", that company confirms who you are and shares your account ID, email address, name and picture with
+      our sign-in service. See <a href="https://discord.com/privacy" rel="noopener">Discord's privacy policy</a> and
+      <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy policy</a>.</li>
     <li><strong>Fonts:</strong> the page loads the Fredoka font from Google Fonts. Your browser requests it directly from
       Google, which receives your IP address and browser details. See
       <a href="https://policies.google.com/privacy" rel="noopener">Google's privacy policy</a>. The game still works if
@@ -103,7 +116,8 @@
 
   <h2>5. Legal bases (EU / UK visitors)</h2>
   <ul>
-    <li><strong>Running the game you asked to play</strong> (performance of a contract): nickname, gameplay data.</li>
+    <li><strong>Running the game you asked to play</strong> (performance of a contract): nickname, gameplay data, and,
+      if you sign in, your account and profile.</li>
     <li><strong>Legitimate interests</strong> in keeping the service secure and understanding how it is used: IP-based
       abuse protection, round results, visit records. We keep this data minimal and don't link it to you, so the impact
       on you is low. You can object at any time (section 7).</li>
@@ -118,7 +132,9 @@
     access, correct, delete, or restrict the use of your personal information, to object to its use, and to complain to
     your local data protection authority. California residents: we do not sell or share personal information as those
     terms are defined in the CCPA/CPRA.</p>
-  <p>Because we have no accounts, we usually can't tell which records are yours. Your progress and settings are on
+  <p>If you have an account, you can delete it yourself in the game (Profile, Overview, Delete account): that removes your
+    profile and your sign-in from our database. Email us if you want a copy of what we hold about your account.</p>
+  <p>Without an account, we usually can't tell which records are yours. Your progress and settings are on
     your device, and you can delete them yourself (section 3). Clearing site data also gives you a new random browser
     ID, so future visits aren't linked to past ones. For anything else, email <a href="mailto:archonstudioshq@gmail.com">archonstudioshq@gmail.com</a>
     and we'll help where we can. We reply within 30 days.</p>

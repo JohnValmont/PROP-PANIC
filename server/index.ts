@@ -4,6 +4,7 @@
  *   GET /health      liveness + room counts
  *   GET /status      the menu's table board: seats, tables, the line (server/gate.ts)
  *   GET /admin       private statistics page (only when PP_ADMIN_KEY is set; see docs/ADMIN.md)
+ *   /api/*           optional accounts: sign-in config and the signed-in player's profile (server/accounts.ts, docs/ACCOUNTS.md)
  *   WS  /ws          game protocol (see shared/protocol.ts)
  *
  * Everything that arrives from the network is treated as hostile: see SECURITY.md for the threat model.
@@ -17,8 +18,9 @@ import { monitorEventLoopDelay } from 'node:perf_hooks';
 import type { Duplex } from 'node:stream';
 import { WebSocketServer, type WebSocket } from 'ws';
 import { CFG } from '../shared/constants';
-import { cleanKit } from '../shared/progress';
-import { Room, type Player } from './room';
+import { cleanKit, kitToWire, roundInput, utcDay, xpLevel, type Profile } from '../shared/progress';
+import { Room, roomHooks, type Player } from './room';
+import { accountHooks, accountsEnabled, authOrigin, bankForAccount, flushAccounts, handleAccountApi, profileForSeat, verifyToken } from './accounts';
 import { handleAdmin } from './admin';
 import { Gate, GATE } from './gate';
 import { cleanAid, flush as flushStats, observe } from './stats';
@@ -120,7 +122,7 @@ function securityHeaders(req: http.IncomingMessage): Record<string, string> {
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "font-src 'self' https://fonts.gstatic.com",
       "img-src 'self' data: blob:",
-      `connect-src 'self' data: blob: ws://${host} wss://${host}`,
+      `connect-src 'self' data: blob: ws://${host} wss://${host}${authOrigin ? ' ' + authOrigin : ''}`,
       "worker-src 'self' blob:",
       "object-src 'none'", "base-uri 'none'", "form-action 'none'",
       `frame-ancestors ${FRAME_ANCESTORS}`,
@@ -186,8 +188,9 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, url: U
 
 const server = http.createServer((req, res) => {
   try {
-    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
     const url = new URL(req.url ?? '/', 'http://x');
+    if (handleAccountApi(req, res, url.pathname, clientIp(req), securityHeaders(req), originAllowed(req))) return;
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, { allow: 'GET, HEAD' }).end(); return; }
     if (url.pathname === '/health') {
       let humans = 0;
       for (const r of rooms.values()) humans += r.humans;
@@ -244,6 +247,8 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
   let room: Room | null = null;
   let player: Player | null = null;
   let waiting = false;
+  /** Only the first hello counts (a signed-in one is answered after a moment, while the account is looked up). */
+  let helloSeen = false;
   const info: Meta = { alive: true, pingAt: 0, player: null };
   meta.set(ws, info);
   let winAt = Date.now(), msgs = 0, bytes = 0;
@@ -266,51 +271,72 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
       if (player && room) { room.onMessage(player, m); return; }
       // someone waiting in line can only leave it; their seat arrives as a pass on a fresh connection
       if (waiting) { if (m.t === 'leave') { gate.drop(ws, true); waiting = false; try { ws.close(1000, 'left'); } catch { /* ignore */ } } return; }
-      if (m.t !== 'hello') return;
+      if (m.t !== 'hello' || helloSeen) return;
+      helloSeen = true;
       clearTimeout(helloTimer);
-      const code = typeof m.code === 'string' ? m.code.slice(0, 16).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) : '';
-      // reconnect to a held seat
-      if (typeof m.token === 'string' && m.token.length <= 64 && code) {
-        const r = rooms.get(code);
-        const p = r && !r.closed ? r.reattach(m.token, ws) : null;
-        if (r && p) { room = r; player = info.player = p; return; }
+      // a signed-in player: find out whose account this is before seating them, so the seat carries it from the start
+      if (accountsEnabled && typeof m.auth === 'string' && m.auth && typeof m.token !== 'string') {
+        void (async () => {
+          const uid = await verifyToken(m.auth);
+          const profile = uid ? await profileForSeat(uid) : null;
+          if (ws.readyState !== 1) return;
+          try { seat(m, uid && profile ? { uid, profile } : null); } catch (e) { console.error('[ws] hello failed', e); try { ws.close(1011, 'error'); } catch { /* ignore */ } }
+        })();
+        return;
       }
-      // a rejoin that did not match a held seat ends here: it must never fall through into a fresh seat
-      if (m.mode === 'rejoin') return fail('That game has ended.');
-      const mode = m.mode === 'join' || m.mode === 'create' ? m.mode : 'quick';
-      if (mode === 'join') {
-        // a wrong or full room is an answer, not a reason to wait in line
-        if (st.badJoins >= LIMITS.badJoinsPerMin) return fail('Too many attempts. Wait a minute and try again.');
-        const r = rooms.get(code);
-        if (!r || r.closed) { st.badJoins++; return fail(`Room ${code || '????'} not found.`); }
-        if (r.humanSlots >= (r.isPublic ? GATE.publicSeats : CFG.MAX_PLAYERS)) return fail('That room is full.');
-      }
-      // the front door: a seat now, or a place in line (server/gate.ts)
-      const door = gate.admit(ws, { mode, code }, m.pass);
-      if (door === 'busy') return fail('So many people are waiting that the line is full. Please try again in a few minutes.');
-      if (door === 'noTable') return fail(`All ${GATE.privateTables} private rooms are in use right now. Press PLAY to join a public game, or try again in a few minutes.`);
-      if (door === 'line') { waiting = true; return; }
-      if (mode === 'join') {
-        const r = rooms.get(code);
-        if (!r || r.closed) return fail(`Room ${code || '????'} not found.`);
-        room = r;
-      } else if (mode === 'create') {
-        if (rooms.size >= LIMITS.rooms) return fail('Server is busy, try again soon.');
-        room = new Room(newCode(), false);
-        rooms.set(room.code, room);
-      } else {
-        if (rooms.size >= LIMITS.rooms * 2) return fail('Server is busy, try again soon.');
-        room = findPublic();
-      }
-      // what a player wears and their level come from their browser: checked for shape and range, not ownership (SECURITY.md)
-      const lvl = typeof m.lvl === 'number' && Number.isFinite(m.lvl) ? Math.max(1, Math.min(999, Math.floor(m.lvl))) : 1;
-      player = info.player = room.addPlayer(cleanName(m.name), ws, false, cleanKit(m.kit), lvl, cleanAid(m.aid));
+      seat(m, null);
     } catch (e) {
       // a handler bug must cost one connection, never the whole server
       console.error('[ws] message handler failed', e);
       try { ws.close(1011, 'error'); } catch { /* ignore */ }
     }
   });
+
+  /** The hello, once we know whether it comes from a signed-in player: back into a held seat, a new seat, or the line. */
+  function seat(m: any, acct: { uid: string; profile: Profile } | null) {
+    const code = typeof m.code === 'string' ? m.code.slice(0, 16).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) : '';
+    // reconnect to a held seat
+    if (typeof m.token === 'string' && m.token.length <= 64 && code) {
+      const r = rooms.get(code);
+      const p = r && !r.closed ? r.reattach(m.token, ws) : null;
+      if (r && p) { room = r; player = info.player = p; return; }
+    }
+    // a rejoin that did not match a held seat ends here: it must never fall through into a fresh seat
+    if (m.mode === 'rejoin') return fail('That game has ended.');
+    const mode = m.mode === 'join' || m.mode === 'create' ? m.mode : 'quick';
+    if (mode === 'join') {
+      // a wrong or full room is an answer, not a reason to wait in line
+      if (st.badJoins >= LIMITS.badJoinsPerMin) return fail('Too many attempts. Wait a minute and try again.');
+      const r = rooms.get(code);
+      if (!r || r.closed) { st.badJoins++; return fail(`Room ${code || '????'} not found.`); }
+      if (r.humanSlots >= (r.isPublic ? GATE.publicSeats : CFG.MAX_PLAYERS)) return fail('That room is full.');
+    }
+    // the front door: a seat now, or a place in line (server/gate.ts)
+    const door = gate.admit(ws, { mode, code }, m.pass);
+    if (door === 'busy') return fail('So many people are waiting that the line is full. Please try again in a few minutes.');
+    if (door === 'noTable') return fail(`All ${GATE.privateTables} private rooms are in use right now. Press PLAY to join a public game, or try again in a few minutes.`);
+    if (door === 'line') { waiting = true; return; }
+    if (mode === 'join') {
+      const r = rooms.get(code);
+      if (!r || r.closed) return fail(`Room ${code || '????'} not found.`);
+      room = r;
+    } else if (mode === 'create') {
+      if (rooms.size >= LIMITS.rooms) return fail('Server is busy, try again soon.');
+      room = new Room(newCode(), false);
+      rooms.set(room.code, room);
+    } else {
+      if (rooms.size >= LIMITS.rooms * 2) return fail('Server is busy, try again soon.');
+      room = findPublic();
+    }
+    if (acct) {
+      // a signed-in player wears what their account owns, at the level it has earned
+      player = info.player = room.addPlayer(cleanName(m.name), ws, false, kitToWire(acct.profile), xpLevel(acct.profile.xp), cleanAid(m.aid), acct.uid);
+      return;
+    }
+    // a guest's look and level come from their browser: checked for shape and range, not ownership (SECURITY.md)
+    const lvl = typeof m.lvl === 'number' && Number.isFinite(m.lvl) ? Math.max(1, Math.min(999, Math.floor(m.lvl))) : 1;
+    player = info.player = room.addPlayer(cleanName(m.name), ws, false, cleanKit(m.kit), lvl, cleanAid(m.aid));
+  }
 
   ws.on('close', () => {
     clearTimeout(helloTimer);
@@ -331,6 +357,23 @@ setInterval(() => {
     try { ws.ping(); } catch { /* closing */ }
   }
 }, 10_000).unref();
+
+// ---------------------------------------------------------------- accounts (server/accounts.ts)
+const seatsOf = function* (uid: string) {
+  for (const r of rooms.values()) for (const p of r.players.values()) if (p.uid === uid) yield [r, p] as const;
+};
+// after each round, the server banks a signed-in player's round itself and sends them the outcome
+roomHooks.roundOver = (room, results) => {
+  for (const p of room.players.values()) {
+    if (!p.uid) continue;
+    const input = roundInput(results, p.id, `${room.code}:${results.n}:${room.seed}`, utcDay());
+    if (!input) continue;
+    void bankForAccount(p.uid, input).then((r) => { if (r && p.uid) room.tell(p, { t: 'acct', p: r.p, rep: r.rep }); });
+  }
+};
+// a level gained or a look bought shows up on the player in any room they sit in
+accountHooks.change = (uid, prof) => { for (const [r, p] of seatsOf(uid)) r.setLook(p, kitToWire(prof), xpLevel(prof.xp)); };
+accountHooks.gone = (uid) => { for (const [, p] of seatsOf(uid)) p.uid = ''; };
 
 // ---------------------------------------------------------------- main loop
 const tickMs: number[] = [];
@@ -383,7 +426,7 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => {
   server.close();
   const exit = setTimeout(() => process.exit(0), 5000);
   exit.unref();
-  flushStats().finally(() => setTimeout(() => process.exit(0), 300));
+  Promise.allSettled([flushStats(), flushAccounts()]).finally(() => setTimeout(() => process.exit(0), 300));
 });
 
-server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''} · ${GATE.seats} seats, ${GATE.privateTables} private rooms`));
+server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''} · ${GATE.seats} seats, ${GATE.privateTables} private rooms${accountsEnabled ? ' · accounts on' : ''}`));

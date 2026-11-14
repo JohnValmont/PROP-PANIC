@@ -224,8 +224,9 @@ async function main() {
     await d.connect({ mode: 'quick' });
     await d.wait((m) => m.t === 'welcome', 3000, 'welcome');
     ok(c.code === d.code && c.code !== a.code, 'quick play puts strangers in the same public room');
-    await c.wait((m) => m.t === 'roster' && m.p.length === 5, 3000, 'fill');
-    ok(c.roster.filter((r: any) => r.bot).length === 3, 'public room topped up with bots to 5 players');
+    // the roster that includes Dave: an earlier one (Carol and four bots) may already be in Carol's history
+    const filled = await c.wait((m) => m.t === 'roster' && m.p.length === 5 && m.p.some((r: any) => r.id === d.id), 3000, 'fill');
+    ok(filled.p.filter((r: any) => r.bot).length === 3, 'public room topped up with bots to 5 players');
     await c.wait((m) => m.t === 'phase' && m.phase === 'hiding', 5000, 'autostart');
     ok(true, 'public room auto-starts after a short countdown');
     const late = new Client('Eve');

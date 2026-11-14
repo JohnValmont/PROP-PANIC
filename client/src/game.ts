@@ -10,8 +10,9 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { GTAOPass } from 'three/examples/jsm/postprocessing/GTAOPass.js';
 import { CFG, F, QUICK_CHAT, ROUNDS_DEFAULT, TAUNTS, type Phase, type Team } from '../../shared/constants';
-import { GUNS, KIT, bankRound, kitToWire, utcDay, xpLevel, type Profile, type Report, type WireKit } from '../../shared/progress';
+import { GUNS, KIT, bankRound, kitToWire, roundInput, utcDay, xpLevel, type Profile, type Report, type WireKit } from '../../shared/progress';
 import { loadProfile, saveProfile } from './profile';
+import type { Account } from './account';
 import { buildMap, BOUNDS, MAP_NAMES, type GameMap } from '../../shared/map';
 import { World, aimDir, newBody, type Body, type Cmd } from '../../shared/physics';
 import { PROPS, PROP_INDEX, propBody } from '../../shared/props';
@@ -141,8 +142,17 @@ export class Game {
   helpOn = true;
   private slowSecs = 0;
   baseFov = 78;
-  /** Level, coins, wardrobe, catalogue, feats and jobs. Kept in the browser: there are no accounts to keep it against. */
-  profile: Profile = loadProfile();
+  /** The guest profile kept in this browser (`pp_profile`). */
+  guest: Profile = loadProfile();
+  /**
+   * Level, coins, wardrobe, catalogue, feats and jobs: the account's (kept by the server) when signed in, else the
+   * guest profile. Set through useProfile().
+   */
+  profile: Profile = this.guest;
+  /** Optional sign-in (client/src/account.ts), set by main. */
+  account: Account | null = null;
+  /** The server banks this seat's rounds into an account (the welcome said so). */
+  private acctSeat = false;
   /** What the last round banked, for the results panel. */
   report: Report | null = null;
   /** Called after a round is banked (the menu redraws the profile from it). */
@@ -285,9 +295,10 @@ export class Game {
   serverNow(): number { return performance.now() + this.offset; }
   private nameOf(id: number): string { return this.roster.get(id)?.name ?? 'Someone'; }
 
-  join(name: string, mode: Mode, code?: string, pass?: string) {
+  /** `auth`: a signed-in player's access token, so the server banks their rounds into their account. */
+  join(name: string, mode: Mode, code?: string, pass?: string, auth?: string) {
     this.sfx.unlock();
-    this.net.connect(name, mode, code, kitToWire(this.profile), xpLevel(this.profile.xp), pass);
+    this.net.connect(name, mode, code, kitToWire(this.profile), xpLevel(this.profile.xp), pass, mode === 'practice' ? undefined : auth);
   }
 
   leave() {
@@ -323,9 +334,23 @@ export class Game {
   }
   private preview = new THREE.Group();
 
+  /** Switch between the guest profile and the account's, as the sign-in state changes, and redraw. */
+  useProfile() {
+    const acct = this.account?.on && this.account.profile ? this.account.profile : null;
+    if (!acct && this.profile !== this.guest) this.guest = loadProfile(); // the guest profile may have been handed to an account meanwhile
+    this.profile = acct ?? this.guest;
+    this.drawKit();
+  }
+
   /** Save the profile and redraw the menu's hunter (and the googly-eyed box beside it) in what the player now wears. */
   applyKit() {
-    saveProfile(this.profile);
+    // an account's profile is the server's: the profile screen sends each change there (Account.change)
+    if (this.account?.on && this.profile === this.account.profile) this.account.cache();
+    else saveProfile(this.profile);
+    this.drawKit();
+  }
+
+  private drawKit() {
     const w = kitToWire(this.profile);
     this.preview.clear();
     this.previewRig = new HunterRig(w[KIT.paint], w[KIT.hat], w[KIT.char], w[KIT.gun]);
@@ -489,6 +514,8 @@ export class Game {
     switch (m.t) {
       case 'welcome':
         this.myId = m.id; this.code = m.code; this.pub = m.pub; this.inGame = true;
+        this.acctSeat = m.acct === 1;
+        if (this.account?.on && !this.acctSeat && !this.net.local) this.hud.feed([{ b: 'Your account could not be reached.' }, ' Rounds in this game are not saved to it.'], 'kill');
         this.haveOffset = false; this.lateLog.length = 0; this.interpWant = this.interpMs = INTERP_MIN_MS; this.seq = 0; this.pending.length = 0; this.outbox.length = 0;
         this.pingOut.clear(); this.pingLog.length = 0; this.rtt = -1; this.jitter = 0; this.pingNextAt = 0;
         this.joinCard = true;
@@ -497,6 +524,7 @@ export class Game {
         if (m.pub) this.requestLock();
         break;
       case 'phase': this.onPhase(m); break;
+      case 'acct': if (m.p && m.rep) this.onAccountBank(m.p, m.rep); break;
       case 'roster': this.onRoster(m.p); break;
       case 's': this.onSnap(m); break;
       case 'pong': this.onPong(m.c); break;
@@ -549,22 +577,19 @@ export class Game {
       const won = (res.winner === 'props' && this.team === 'prop') || (res.winner === 'hunters' && this.team === 'hunter');
       this.sfx.play(won || this.team === 'spec' ? 'win' : 'lose');
       const mine = res.board.find((r) => r.id === this.myId);
-      // bank this round's rewards once: results are sent again to a client that reconnects or reloads during them
+      // bank this round's rewards once: results are sent again to a client that reconnects or reloads during them.
+      // A signed-in player's round is banked by the server instead, which sends the outcome a moment later ('acct').
       const key = `${this.code}:${res.n}:${m.seed}`;
-      if (mine && mine.st && this.profile.paid !== key) {
-        const fin = res.final?.find((r) => r.id === this.myId);
-        const rep = bankRound(this.profile, {
-          key, day: utcDay(), team: mine.team, won: mine.team !== 'spec' && (mine.team === 'prop') === (res.winner === 'props'),
-          survived: mine.survived, pts: mine.round, coins: (mine.coins | 0) + ((fin?.coins ?? 0) | 0), st: mine.st,
-          gameOver: !!res.final, place: fin && res.final ? res.final.indexOf(fin) + 1 : 0, players: res.final?.length ?? 0,
-        });
+      const input = mine ? roundInput(res, this.myId, key, utcDay()) : null;
+      if (this.account?.on) {
+        if (input && this.profile.paid !== key) {
+          this.report = null;
+          if (this.net.local) { this.profile.paid = key; this.hud.feed([{ b: 'Practice rounds' }, ' are not saved to your account.'], 'chaos'); }
+        }
+      } else if (input && this.profile.paid !== key) {
+        const rep = bankRound(this.profile, input);
         saveProfile(this.profile);
-        this.report = rep;
-        this.onBanked(rep);
-        this.hud.popup(`+${rep.xp} XP`);
-        if (rep.coins) this.hud.popup(`+${rep.coins} coins`);
-        // a jingle as the board comes up if the round brought anything new; the panel itself lists what (see Hud.progress)
-        if (rep.levelTo > rep.levelFrom || rep.feats.length || rep.unlocked.length || rep.shift) window.setTimeout(() => this.sfx.play('levelup'), Math.max(0, this.resultsAt - performance.now()) + 300);
+        this.showBanked(rep);
       } else if (!mine) this.report = null;
       // celebratory confetti a few steps ahead, so it never fills a first-person view
       if (this.hasMe) { const [fx, , fz] = aimDir(this.yaw, 0); this.fx.burst(this.body.x + fx * 3, this.body.y + 1.2, this.body.z + fz * 3, 70, CONFETTI, 4, 6, 1.1, 1.8); }
@@ -578,6 +603,23 @@ export class Game {
     }
   }
   private bannerPending = '';
+
+  /** The server banked this round into the player's account. */
+  private onAccountBank(p: Profile, rep: Report) {
+    if (!this.account?.on) return;
+    this.account.banked(p);
+    this.profile = this.account.profile!;
+    this.showBanked(rep);
+  }
+
+  private showBanked(rep: Report) {
+    this.report = rep;
+    this.onBanked(rep);
+    this.hud.popup(`+${rep.xp} XP`);
+    if (rep.coins) this.hud.popup(`+${rep.coins} coins`);
+    // a jingle as the board comes up if the round brought anything new; the panel itself lists what (see Hud.progress)
+    if (rep.levelTo > rep.levelFrom || rep.feats.length || rep.unlocked.length || rep.shift) window.setTimeout(() => this.sfx.play('levelup'), Math.max(0, this.resultsAt - performance.now()) + 300);
+  }
 
   private onRoster(list: RosterEntry[]) {
     const seen = new Set<number>();

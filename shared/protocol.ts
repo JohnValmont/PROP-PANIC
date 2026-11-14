@@ -3,13 +3,17 @@
  * High-frequency messages use positional arrays to keep packets compact.
  */
 import type { Phase, Team } from './constants';
-import type { RoundStats, WireKit } from './progress';
+import type { Profile, Report, RoundStats, WireKit } from './progress';
 
 // ------------------------------------------------------------------ client -> server
 export type ClientMsg =
   /** `kit` is what the player wears ([paint, hat, eyes, pop, title], see shared/progress.ts) and `lvl` their level. */
   /** `pass`: a seat the line reserved for this browser (see the 'ready' message and server/gate.ts). */
-  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number; /** anonymous browser id, for the admin statistics only */ aid?: string; pass?: string }
+  /**
+   * `auth`: a signed-in player's access token (server/accounts.ts). The server then takes the kit and level from the
+   * profile it keeps rather than from `kit` and `lvl`, and banks every round into it. Without it the player is a guest.
+   */
+  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number; /** anonymous browser id, for the admin statistics only */ aid?: string; pass?: string; auth?: string }
   /** Someone waiting in line gives up their place. */
   | { t: 'leave' }
   /** Batched movement commands: [seq, dt, mx, mz, yaw, pitch, buttons, facing]. buttons: 1 jump, 2 dash. */
@@ -62,7 +66,8 @@ export interface PhaseMsg {
 }
 
 export interface WelcomeMsg {
-  t: 'welcome'; id: number; token: string; code: string; pub: boolean; now: number;
+  /** `acct`: 1 when this seat belongs to a signed-in player whose rounds the server banks into their account. */
+  t: 'welcome'; id: number; token: string; code: string; pub: boolean; now: number; acct?: 0 | 1;
 }
 
 /** Entity row: [id, x, y, z, facing, pitch, flags] */
@@ -122,6 +127,8 @@ export type ServerMsg =
   | { t: 'decoys'; d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }[] }
   | { t: 'lobby'; bots: number; countdown: number; canStart: boolean; map: number; rounds: number }
   | { t: 'pong'; c: number; now: number }
+  /** A signed-in player's round was banked into their account: the profile as the server now has it, and what changed. */
+  | { t: 'acct'; p: Profile; rep: Report }
   /**
    * The server is full and this connection is waiting in line (server/gate.ts). Sent again whenever the position
    * changes. `eta` is a guess in seconds (0 = not enough history to guess); `hot` = the load brake is on.

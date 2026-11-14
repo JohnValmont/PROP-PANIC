@@ -46,12 +46,12 @@ export class Net {
     return `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
   }
 
-  /** `pass`: a seat the line has reserved for this browser. */
-  connect(name: string, mode: Mode, code: string | undefined, kit: number[], lvl: number, pass?: string) {
+  /** `pass`: a seat the line has reserved for this browser. `auth`: a signed-in player's access token (client/src/account.ts). */
+  connect(name: string, mode: Mode, code: string | undefined, kit: number[], lvl: number, pass?: string, auth?: string) {
     this.close();
     this.name = name; this.wantClose = false; this.welcomed = false; this.tries = 0; this.token = ''; this.code = ''; this.lastErr = '';
     this.local = mode === 'practice';
-    this.open({ t: 'hello', name, mode, code, kit, lvl, aid: this.local ? '' : anonId(), pass });
+    this.open({ t: 'hello', name, mode, code, kit, lvl, aid: this.local ? '' : anonId(), pass, auth: auth || undefined });
   }
 
   /** Try to reclaim the seat saved by a previous page load. Returns false if there is none. */
