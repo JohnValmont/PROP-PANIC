@@ -21,7 +21,7 @@ const waitPhase = (page, phase, timeout = 40000) => page.waitForFunction((p) => 
 
 (async () => {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '2500', PP_HUNT_MS: '8000', PP_END_MS: '12000', PP_FINAL_MS: '12000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HIDE_MS: '2500', PP_HUNT_MS: '8000', PP_END_MS: '12000', PP_FINAL_MS: '12000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   const browser = await chromium.launch({ args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--mute-audio'] });
   const errors = [];

@@ -54,7 +54,7 @@ async function walkTo(page, x, z) {
 
 async function main() {
   fs.mkdirSync(SHOTS, { recursive: true });
-  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '30000', PP_HUNT_MS: '60000', PP_END_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['dist/server.cjs'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HIDE_MS: '30000', PP_HUNT_MS: '60000', PP_END_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   // One browser per client: a background page in a shared headless browser gets its animation loop throttled.
   const browsers = [];

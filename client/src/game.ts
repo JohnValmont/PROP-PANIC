@@ -19,7 +19,7 @@ import type { Results, RosterEntry } from '../../shared/protocol';
 import { Sfx } from './audio';
 import { Fx, makeBeacon, textSprite } from './fx';
 import { Hud, esc, type AbilityView } from './hud';
-import { Net } from './net';
+import { Net, type Mode } from './net';
 import { assets } from './assets';
 import { HunterRig, buildEyes, buildViewmodel } from './hunter';
 import { WorldView } from './world';
@@ -271,9 +271,9 @@ export class Game {
   serverNow(): number { return performance.now() + this.offset; }
   private nameOf(id: number): string { return this.roster.get(id)?.name ?? 'Someone'; }
 
-  join(name: string, mode: 'quick' | 'create' | 'join', code?: string) {
+  join(name: string, mode: Mode, code?: string, pass?: string) {
     this.sfx.unlock();
-    this.net.connect(name, mode, code, kitToWire(this.profile), xpLevel(this.profile.xp));
+    this.net.connect(name, mode, code, kitToWire(this.profile), xpLevel(this.profile.xp), pass);
   }
 
   leave() {

@@ -41,7 +41,7 @@ const db = http.createServer((req, res) => {
 
 function startServer(port: number, env: Record<string, string>): Promise<ChildProcess> {
   const s = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
-    env: { ...process.env, PORT: String(port), PP_FAST: '1', PP_HIDE_MS: '300', PP_HUNT_MS: '1500', PP_END_MS: '600', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
+    env: { ...process.env, PORT: String(port), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HIDE_MS: '300', PP_HUNT_MS: '1500', PP_END_MS: '600', ...env }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   s.stderr!.on('data', (d) => process.stderr.write(`[server] ${d}`));
   return new Promise((res) => s.stdout!.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(s); }));

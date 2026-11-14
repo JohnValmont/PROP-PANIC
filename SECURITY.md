@@ -12,7 +12,8 @@ server defends against, how, and what it does not.
 | Move faster, teleport, fire faster, shoot through walls | The server simulates all movement from inputs with a time bank, and decides every hit, cooldown, transform and score itself. Clients only send intent. |
 | See props through walls or read who is disguised as what | Hunters are sent a prop only while they have line of sight to it, and its disguise travels with that position update rather than in the player list. Nothing is sent while the props hide or a prop has vanished. Decoys reach a hunter only once in view and never say whose they are; the puff of a prop changing shape reaches a hunter only if that prop is in view; taunts are not sent during the hiding phase. |
 | Take over someone's seat | Seat tokens are 144 random bits from the OS, compared in constant time, and only valid for a short grace period after a disconnect. |
-| Guess private room codes | Wrong codes are limited to 12 a minute per address. |
+| Guess private room codes | Wrong codes are limited to 12 a minute per address. The public table board (`/status`) lists public rooms by code; private rooms appear only as a count. |
+| Jump the line or hold seats | A freed seat is reserved by a 144-bit single-use pass sent only to the person at the front of the line, valid for 30 seconds. A hello without a valid pass waits behind everyone already in line. Waiting sockets count toward the per-address and global socket limits, and the line itself is capped. |
 | Inject script or markup through a name | Names are normalised and stripped of markup, control and invisible characters on the server, and escaped again when drawn. Chat is a fixed list of phrases, not free text. A content security policy forbids inline script. |
 | Drive the game from another website | Sockets are only accepted from the game's own origin (plus any listed in `PP_ORIGINS`). The page cannot be framed elsewhere unless `PP_FRAME_ANCESTORS` allows it. |
 | Read files off the server | Static serving is confined to the build directory; traversal, dotfiles and non-GET methods are refused. |
@@ -55,7 +56,12 @@ server defends against, how, and what it does not.
 | `PP_MAX_CONNS` | 1500 | Sockets in total. |
 | `PP_MAX_PER_IP` | 32 | Sockets per address. |
 | `PP_NEW_PER_MIN` | 120 | Socket opens per address per minute. |
-| `PP_MAX_ROOMS` | 400 | Private rooms. |
+| `PP_MAX_ROOMS` | 400 | Private rooms (an absolute cap; `PP_PRIVATE_TABLES` is the one that normally applies). |
+| `PP_SEATS` | 24 | Players across all rooms. Past this, newcomers wait in line (`server/gate.ts`). |
+| `PP_PRIVATE_TABLES` | 3 | Private rooms running at once. When all are in use, Private room says so (Play still works). |
+| `PP_LINE_MAX` | 400 | People waiting in line. Past this, a newcomer is asked to come back later. |
+| `PP_PASS_MS` | 30000 | How long a freed seat is held for the person at the front of the line. |
+| `PP_BRAKE_MS` | 20 | How late (smoothed) the game loop may run before new players wait regardless of seats. 0 turns it off. |
 | `PP_ADMIN_KEY` | none | Password for `/admin` (8+ characters). Unset: the page does not exist. |
 | `SUPABASE_URL`, `SUPABASE_KEY` | none | Where play statistics are kept (`docs/ADMIN.md`). Unset: nothing is sent anywhere. |
 

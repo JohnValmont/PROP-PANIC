@@ -20,4 +20,5 @@ jobs:
       - run: npm run test:mechanics
       - run: npm run test:security
       - run: npm run test:stats
+      - run: npm run test:gate
       - run: npm test

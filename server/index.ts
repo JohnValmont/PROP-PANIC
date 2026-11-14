@@ -2,6 +2,7 @@
  * PROP PANIC server: one Node process that serves the built client and hosts every game room.
  *   GET /            static client (dist/client)
  *   GET /health      liveness + room counts
+ *   GET /status      the menu's table board: seats, tables, the line (server/gate.ts)
  *   GET /admin       private statistics page (only when PP_ADMIN_KEY is set; see docs/ADMIN.md)
  *   WS  /ws          game protocol (see shared/protocol.ts)
  *
@@ -18,6 +19,7 @@ import { CFG } from '../shared/constants';
 import { cleanKit } from '../shared/progress';
 import { Room, type Player } from './room';
 import { handleAdmin } from './admin';
+import { Gate, GATE } from './gate';
 import { cleanAid, flush as flushStats, observe } from './stats';
 
 const PORT = Number(process.env.PORT ?? 8080);
@@ -47,6 +49,8 @@ if (process.env.PP_FAST) {
 if (process.env.PP_CHAOS) CFG.CHAOS_PASSIVE = Number(process.env.PP_CHAOS); // test-only: fill the chaos meter fast
 
 const rooms = new Map<string, Room>();
+/** Seats, tables and the line for everyone who arrives when they are full. */
+const gate = new Gate(rooms);
 
 function newCode(): string {
   const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -68,11 +72,7 @@ function cleanName(raw: unknown): string {
 }
 
 function findPublic(): Room {
-  let best: Room | null = null;
-  for (const r of rooms.values()) {
-    if (!r.isPublic || r.closed || r.humanSlots >= 8) continue;
-    if (!best || r.humanSlots > best.humanSlots) best = r; // fill the busiest room first
-  }
+  const best = gate.publicTable(); // the busiest public table with a free seat
   if (best) return best;
   const r = new Room(newCode(), true);
   rooms.set(r.code, r);
@@ -189,6 +189,10 @@ const server = http.createServer((req, res) => {
       res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' }).end(JSON.stringify({ ok: true, rooms: rooms.size, humans }));
       return;
     }
+    if (url.pathname === '/status') {
+      res.writeHead(200, { ...securityHeaders(req), 'content-type': 'application/json', 'cache-control': 'no-store' }).end(gate.status());
+      return;
+    }
     if (handleAdmin(req, res, url.pathname, clientIp(req), rooms, securityHeaders(req))) return;
     serveStatic(req, res, url);
   } catch {
@@ -234,6 +238,7 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
   st.open++;
   let room: Room | null = null;
   let player: Player | null = null;
+  let waiting = false;
   const info: Meta = { alive: true, pingAt: 0, player: null };
   meta.set(ws, info);
   let winAt = Date.now(), msgs = 0, bytes = 0;
@@ -254,6 +259,8 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
     if (!m || typeof m !== 'object' || Array.isArray(m)) return;
     try {
       if (player && room) { room.onMessage(player, m); return; }
+      // someone waiting in line can only leave it; their seat arrives as a pass on a fresh connection
+      if (waiting) { if (m.t === 'leave') { gate.drop(ws, true); waiting = false; try { ws.close(1000, 'left'); } catch { /* ignore */ } } return; }
       if (m.t !== 'hello') return;
       clearTimeout(helloTimer);
       const code = typeof m.code === 'string' ? m.code.slice(0, 16).toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4) : '';
@@ -265,13 +272,24 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
       }
       // a rejoin that did not match a held seat ends here: it must never fall through into a fresh seat
       if (m.mode === 'rejoin') return fail('That game has ended.');
-      if (m.mode === 'join') {
+      const mode = m.mode === 'join' || m.mode === 'create' ? m.mode : 'quick';
+      if (mode === 'join') {
+        // a wrong or full room is an answer, not a reason to wait in line
         if (st.badJoins >= LIMITS.badJoinsPerMin) return fail('Too many attempts. Wait a minute and try again.');
         const r = rooms.get(code);
         if (!r || r.closed) { st.badJoins++; return fail(`Room ${code || '????'} not found.`); }
-        if (r.humanSlots >= CFG.MAX_PLAYERS) return fail('That room is full.');
+        if (r.humanSlots >= (r.isPublic ? GATE.publicSeats : CFG.MAX_PLAYERS)) return fail('That room is full.');
+      }
+      // the front door: a seat now, or a place in line (server/gate.ts)
+      const door = gate.admit(ws, { mode, code }, m.pass);
+      if (door === 'busy') return fail('So many people are waiting that the line is full. Please try again in a few minutes.');
+      if (door === 'noTable') return fail(`All ${GATE.privateTables} private rooms are in use right now. Press PLAY to join a public game, or try again in a few minutes.`);
+      if (door === 'line') { waiting = true; return; }
+      if (mode === 'join') {
+        const r = rooms.get(code);
+        if (!r || r.closed) return fail(`Room ${code || '????'} not found.`);
         room = r;
-      } else if (m.mode === 'create') {
+      } else if (mode === 'create') {
         if (rooms.size >= LIMITS.rooms) return fail('Server is busy, try again soon.');
         room = new Room(newCode(), false);
         rooms.set(room.code, room);
@@ -292,6 +310,7 @@ function onConnection(ws: WebSocket, ip: string, st: IpState) {
   ws.on('close', () => {
     clearTimeout(helloTimer);
     st.open = Math.max(0, st.open - 1);
+    if (waiting) gate.drop(ws);
     if (room && player && player.ws === ws) room.disconnect(player);
   });
   ws.on('error', () => { /* close follows */ });
@@ -309,13 +328,19 @@ setInterval(() => {
 }, 10_000).unref();
 
 // ---------------------------------------------------------------- main loop
+let lastLoop = performance.now(), lastPump = 0;
 setInterval(() => {
+  // how late this tick is: when the CPU quota runs out, the whole process stalls and ticks arrive late
+  const t0 = performance.now();
+  gate.sample(t0 - lastLoop - 1000 / CFG.TICK);
+  lastLoop = t0;
   let humans = 0;
   for (const [code, r] of rooms) {
     try { r.tick(); } catch (e) { console.error(`[room ${code}] tick failed`, e); }
     if (r.closed) rooms.delete(code); else humans += r.humans;
   }
   observe(humans, rooms.size);
+  if (t0 - lastPump >= 1000) { lastPump = t0; try { gate.pump(); } catch (e) { console.error('[gate] pump failed', e); } }
 }, 1000 / CFG.TICK);
 
 // ---------------------------------------------------------------- lifecycle
@@ -334,4 +359,4 @@ for (const sig of ['SIGTERM', 'SIGINT'] as const) process.on(sig, () => {
   flushStats().finally(() => setTimeout(() => process.exit(0), 300));
 });
 
-server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''}`));
+server.listen(PORT, () => console.log(`PROP PANIC server on http://localhost:${PORT}${process.env.PP_FAST ? ' (fast test mode)' : ''} · ${GATE.seats} seats, ${GATE.privateTables} private rooms`));
