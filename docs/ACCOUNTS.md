@@ -73,26 +73,75 @@ Supabase → **Authentication** → **URL Configuration**:
 
 The game sends players back to exactly `origin + path`, so the entry must match.
 
+Discord and Google both follow one pattern: **create an app with the provider → give it Supabase's callback address →
+copy its Client ID and Client Secret → paste both into Supabase.** Menu names in these dashboards change from time to
+time; the steps do not.
+
+**First, copy the callback address.** Supabase → **Authentication** → **Sign In / Providers** → click **Discord**. The
+panel shows a **Callback URL** like `https://abcdefghijklmnop.supabase.co/auth/v1/callback`. Copy it. This address goes
+to Discord and Google. Your game's own address never does: it goes only into Supabase (step 2).
+
 ### 3. Discord
 
-1. [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application** (name it
-   Prop Panic).
-2. **OAuth2** → copy the **Client ID**, then **Reset Secret** and copy the **Client Secret**.
-3. **OAuth2 → Redirects** → **Add Redirect**: `https://<your-project-ref>.supabase.co/auth/v1/callback` (Supabase shows
-   this exact address on the Discord provider page). Save.
-4. Supabase → **Authentication** → **Sign In / Providers** → **Discord** → enable, paste the Client ID and Secret, save.
+1. Open [discord.com/developers/applications](https://discord.com/developers/applications) and log in with your Discord
+   account.
+2. **New Application** (top right). Name it **Prop Panic**: players see this name on the *Authorize* screen. Accept the
+   terms, **Create**.
+3. Optional: **General Information** → an icon and a short description, also shown on the authorize screen.
+4. Sidebar → **OAuth2**.
+5. **Client information**:
+   - **Client ID** → **Copy**.
+   - **Client Secret** → **Reset Secret**, confirm (Discord may ask for your 2FA code), and copy it **at once**: it is
+     shown only once. Lost it? Reset again and use the new one.
+6. **Redirects** → **Add Redirect** → paste the Supabase callback address.
+7. **Save Changes** (the bar at the bottom of the page; easy to miss).
+8. Supabase → **Authentication** → **Sign In / Providers** → **Discord** → switch on **Enable Sign in with Discord**,
+   paste the Client ID and Client Secret, **Save**.
+
+No bot, no permissions and no review by Discord are needed.
 
 ### 4. Google
 
-1. [console.cloud.google.com](https://console.cloud.google.com) → create a project (or pick one).
-2. **APIs & Services → OAuth consent screen**: External, app name Prop Panic, your support email. Scopes: the default
-   `email`, `profile`, `openid` are enough. Publish the app (while it is in *Testing*, only listed test users can sign in).
-3. **APIs & Services → Credentials → Create credentials → OAuth client ID**: type *Web application*.
-   **Authorised redirect URIs**: `https://<your-project-ref>.supabase.co/auth/v1/callback`. Create, copy the Client ID and
-   Secret.
-4. Supabase → **Authentication** → **Sign In / Providers** → **Google** → enable, paste them, save.
+Google wants the app described before it creates a sign-in client.
 
-Only want one of the two? Set `PP_AUTH_PROVIDERS` (below) to just that one.
+**Project**
+
+1. Open [console.cloud.google.com](https://console.cloud.google.com).
+2. Project picker (top left, next to the logo) → **New Project** → name **Prop Panic** → **Create**. Make sure it is the
+   selected project afterwards.
+
+**Consent screen** (what players see)
+
+1. Search for **OAuth consent screen** (now part of **Google Auth Platform**). If it shows **Get started**, click it.
+2. **App information:** app name **Prop Panic**, user support email: yours. **Next**.
+3. **Audience:** **External**. **Next**.
+4. **Contact information:** your email. **Next**, agree, **Create**.
+5. **Do not upload a logo yet.** A logo triggers a brand review that can take days; without one, sign-in works at once.
+6. Add no scopes: Supabase asks only for email, profile and openid, which need no review.
+
+**Client**
+
+1. Google Auth Platform → **Clients** → **Create client** (older menus: APIs & Services → Credentials → Create
+   credentials → OAuth client ID).
+2. **Application type:** Web application. **Name:** anything.
+3. **Authorized JavaScript origins:** leave empty.
+4. **Authorized redirect URIs** → **Add URI** → the Supabase callback address.
+5. **Create**. Copy the **Client ID** and **Client secret** now (or **Download JSON**): Google may not show the secret
+   again. Lost it? Open the client and add a new secret.
+
+**Publish** (do not skip)
+
+1. Google Auth Platform → **Audience**. **Publishing status** says **Testing**: only Google accounts you list by hand as
+   test users can sign in.
+2. **Publish app** → confirm. It should say **In production**. With only the basic scopes, no review is needed.
+
+**Paste into Supabase:** **Authentication** → **Sign In / Providers** → **Google** → switch on **Enable Sign in with
+Google**, **Client IDs**: the Client ID, **Client Secret (for OAuth)**: the secret. Leave the other options alone. **Save**.
+
+Expect Google's screen to say *"to continue to abcdefghijklmnop.supabase.co"* rather than your game's name. It is only
+cosmetic; removing it needs a custom domain for Supabase (a paid add-on).
+
+Only want one of the two providers? Set `PP_AUTH_PROVIDERS` (below) to just that one.
 
 ### 5. Turn it on in the game server
 
@@ -119,8 +168,11 @@ in simply see their guest profile until it is back on; nothing in their accounts
   `{"accounts":false}` in that case.
 - **"redirect_to is not allowed" or you land on the Supabase site URL instead of the game:** step 2, the redirect URL
   must match the game's address exactly, trailing slash included.
-- **Discord or Google shows an error about the redirect:** the provider's redirect must be the Supabase callback
-  (`.../auth/v1/callback`), not the game.
+- **Discord says "Invalid OAuth2 redirect_uri" or Google says "Error 400: redirect_uri_mismatch":** the provider's
+  redirect must be the Supabase callback (`.../auth/v1/callback`), exactly, not the game. On Discord, remember **Save
+  Changes**.
+- **Google says "Access blocked" or that the app is being tested:** step 4, **Publish app**.
+- **"Unsupported provider: provider is not enabled":** the provider is switched off in Supabase, or not saved.
 - **"Your account could not be reached":** the table from step 1 is missing or the secret key is wrong; `/admin` shows
   the last error. Players keep playing; rounds in that game are not saved to their account, and they are told so.
 - **Delete account fails:** deleting the sign-in needs the secret key to be accepted by Supabase's Auth admin API. If your
@@ -130,7 +182,9 @@ in simply see their guest profile until it is back on; nothing in their accounts
 
 ## Privacy
 
+The game's Privacy Policy and Terms (`client/public/privacy.html`, `terms.html`) already describe optional sign-in; the
+sign-in panel links to the policy. Read them over before you turn accounts on.
+
 Signing in stores, in Supabase Auth, the account's email address and the name and picture the provider shares; in
 `pp_profiles`, the profile and the account id. The game shows other players only the name the player types in the menu,
-never the account name or email. If you publish the game beyond friends, add a privacy notice saying this, how long it
-is kept (until the player deletes the account), and that **Profile → Overview → Delete account** removes it.
+never the account name or email. **Profile → Overview → Delete account** removes the profile and the sign-in.

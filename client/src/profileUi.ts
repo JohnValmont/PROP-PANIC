@@ -213,7 +213,7 @@ export class ProfileUi {
       const btns = (a.cfg?.providers ?? []).map((pv) => `<button class="btn small prov prov-${esc(pv)}" data-act="signin" data-prov="${esc(pv)}"${dis}>Continue with ${esc(PROVIDER_NAMES[pv] ?? pv)}</button>`).join('');
       return sect('SAVE YOUR PROGRESS · OPTIONAL', `<div class="dim small">Right now your profile lives only in this browser. Clearing its data, a private window or another device starts you again at level 1. `
         + `Sign in to keep it on the server and pick it up anywhere. You never need an account to play.</div>${err}<div class="row">${btns}</div>`
-        + `<div class="dim small">Kept: your profile and an account id. Your name and email are never shown to other players; you choose your in-game name as before.</div>`);
+        + `<div class="dim small">Kept: your profile and an account id. Your name and email are never shown to other players; you choose your in-game name as before. <a href="/privacy.html" target="_blank" rel="noopener">Privacy Policy</a></div>`);
     }
     if (a.state === 'loading') return sect('ACCOUNT', `<div class="dim small">Loading your account…</div>`);
     if (a.state === 'error') {
