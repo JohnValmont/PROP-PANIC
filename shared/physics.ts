@@ -38,10 +38,16 @@ const CELL = 2;
 export class World {
   boxes: AABB[] = [];
   gravScale = 1;
-  private grid = new Map<number, number[]>();
+  /** Uniform grid over the map's footprint, CELL metres square, row-major in x: box indices per cell (null = empty). */
+  private grid: (number[] | null)[] = [];
+  private gx0 = 0; private gz0 = 0; private gw = 0; private gh = 0;
   private stamp: Int32Array;
   private stampV = 0;
   private scratch: number[] = [];
+  /** moveH's own copy of a query result: the step-up test inside its loop runs another query. */
+  private scratchH: number[] = [];
+  /** Walls and fixtures only (no loose objects): all that a sight line has to be tested against. */
+  private walls: AABB[] = [];
 
   constructor(public map: GameMap) {
     for (const s of map.statics) this.boxes.push({ x0: s.x0, y0: s.y0, z0: s.z0, x1: s.x1, y1: s.y1, z1: s.z1, decor: -1 });
@@ -50,15 +56,25 @@ export class World {
       const [hx, hz] = footprint(def, d.yaw);
       this.boxes.push({ x0: d.x - hx, y0: d.y, z0: d.z - hz, x1: d.x + hx, y1: d.y + def.h, z1: d.z + hz, decor: d.id });
     }
+    this.walls = this.boxes.filter((b) => b.decor < 0);
     this.stamp = new Int32Array(this.boxes.length);
+    // a flat array rather than a hash map: a query is a few array reads, and cells keep the same contents in the same order
+    let gx0 = 0, gz0 = 0, gx1 = 0, gz1 = 0;
+    this.boxes.forEach((b, i) => {
+      const ix0 = Math.floor(b.x0 / CELL), ix1 = Math.floor(b.x1 / CELL), iz0 = Math.floor(b.z0 / CELL), iz1 = Math.floor(b.z1 / CELL);
+      if (i === 0 || ix0 < gx0) gx0 = ix0;
+      if (i === 0 || iz0 < gz0) gz0 = iz0;
+      if (i === 0 || ix1 > gx1) gx1 = ix1;
+      if (i === 0 || iz1 > gz1) gz1 = iz1;
+    });
+    this.gx0 = gx0; this.gz0 = gz0; this.gw = gx1 - gx0 + 1; this.gh = gz1 - gz0 + 1;
+    this.grid = new Array(this.boxes.length ? this.gw * this.gh : 0).fill(null);
     this.boxes.forEach((b, i) => {
       const ix0 = Math.floor(b.x0 / CELL), ix1 = Math.floor(b.x1 / CELL);
       const iz0 = Math.floor(b.z0 / CELL), iz1 = Math.floor(b.z1 / CELL);
       for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
-        const k = (ix + 512) * 1024 + (iz + 512);
-        let cell = this.grid.get(k);
-        if (!cell) this.grid.set(k, (cell = []));
-        cell.push(i);
+        const k = (ix - gx0) * this.gh + (iz - gz0);
+        (this.grid[k] ??= []).push(i);
       }
     });
   }
@@ -68,10 +84,11 @@ export class World {
     const out = this.scratch;
     out.length = 0;
     const sv = ++this.stampV;
-    const ix0 = Math.floor(x0 / CELL), ix1 = Math.floor(x1 / CELL);
-    const iz0 = Math.floor(z0 / CELL), iz1 = Math.floor(z1 / CELL);
+    // cells outside the grid hold nothing: clamp the range to it
+    const ix0 = Math.max(Math.floor(x0 / CELL), this.gx0), ix1 = Math.min(Math.floor(x1 / CELL), this.gx0 + this.gw - 1);
+    const iz0 = Math.max(Math.floor(z0 / CELL), this.gz0), iz1 = Math.min(Math.floor(z1 / CELL), this.gz0 + this.gh - 1);
     for (let ix = ix0; ix <= ix1; ix++) for (let iz = iz0; iz <= iz1; iz++) {
-      const cell = this.grid.get((ix + 512) * 1024 + (iz + 512));
+      const cell = this.grid[(ix - this.gx0) * this.gh + (iz - this.gz0)];
       if (!cell) continue;
       for (let i = 0; i < cell.length; i++) {
         const bi = cell[i];
@@ -98,7 +115,9 @@ export class World {
   private moveH(b: Body, d: number, axisX: boolean, wasGround: boolean) {
     if (d === 0) return;
     if (axisX) b.x += d; else b.z += d;
-    const c = this.query(b.x - b.hw, b.z - b.hw, b.x + b.hw, b.z + b.hw).slice();
+    const q = this.query(b.x - b.hw, b.z - b.hw, b.x + b.hw, b.z + b.hw), c = this.scratchH;
+    c.length = q.length;
+    for (let i = 0; i < q.length; i++) c[i] = q[i];
     for (let i = 0; i < c.length; i++) {
       const o = this.boxes[c[i]];
       if (!(b.x + b.hw > o.x0 + E && b.x - b.hw < o.x1 - E && b.y + b.h > o.y0 + E && b.y < o.y1 - E && b.z + b.hw > o.z0 + E && b.z - b.hw < o.z1 - E)) continue;
@@ -167,10 +186,12 @@ export class World {
   sightClear(ax: number, ay: number, az: number, bx: number, by: number, bz: number): boolean {
     const dx = bx - ax, dy = by - ay, dz = bz - az;
     const ix = 1 / dx, iy = 1 / dy, iz = 1 / dz;
-    const boxes = this.boxes;
+    // the segment's own bounding box rules out most walls with six comparisons, before any division-heavy slab test
+    const sx0 = Math.min(ax, bx), sx1 = Math.max(ax, bx), sy0 = Math.min(ay, by), sy1 = Math.max(ay, by), sz0 = Math.min(az, bz), sz1 = Math.max(az, bz);
+    const boxes = this.walls;
     for (let i = 0; i < boxes.length; i++) {
       const b = boxes[i];
-      if (b.decor >= 0) continue;
+      if (b.x0 > sx1 || b.x1 < sx0 || b.z0 > sz1 || b.z1 < sz0 || b.y0 > sy1 || b.y1 < sy0) continue;
       let t0 = (b.x0 - ax) * ix, t1 = (b.x1 - ax) * ix;
       let tmin = Math.min(t0, t1), tmax = Math.max(t0, t1);
       t0 = (b.y0 - ay) * iy; t1 = (b.y1 - ay) * iy;

@@ -16,6 +16,13 @@ import { recordRound, recordSession } from './stats';
 const now = () => performance.now();
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const r3 = (v: number) => Math.round(v * 1000) / 1000;
+/** Rounding error stays under 0.05 mm, below the physics' 0.1 mm contact epsilon, so a rounded position can never sit inside a wall. */
+const r4 = (v: number) => Math.round(v * 10000) / 10000;
+/**
+ * A client this far behind on reading (bytes queued in this process) skips snapshots until it catches up. Kept to a
+ * few snapshots' worth: a deeper queue only adds delay, and everything queued behind it (pongs, events) waits too.
+ */
+const SNAP_BACKLOG = 16_000;
 const fin = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const pickOf = <T>(a: T[]): T => a[Math.floor(Math.random() * a.length)];
 const TAU = Math.PI * 2;
@@ -147,8 +154,28 @@ export class Room {
     if (!ws || ws.readyState !== 1) return;
     const queued = ws.bufferedAmount ?? 0;
     if (queued > 1_000_000) { try { ws.terminate(); } catch { /* ignore */ } return; }
-    if (droppable && queued > 96_000) return;
+    if (droppable && queued > SNAP_BACKLOG) return;
+    this.hold((ws as any)._socket);
     ws.send(s);
+  }
+
+  /**
+   * Coalescing: the first message to a socket corks it, and everything sent to it until the flush (the end of the
+   * tick, or the end of this pass of the event loop for messages sent while handling input, such as a shot and the
+   * hit it caused) goes to the kernel in one write. Nothing waits for a timer: it only saves system calls.
+   */
+  private corked = new Set<{ cork(): void; uncork(): void; destroyed?: boolean }>();
+  private flushQueued = false;
+  private hold(sock: any) {
+    if (!sock || sock.destroyed || typeof sock.cork !== 'function' || this.corked.has(sock)) return;
+    sock.cork();
+    this.corked.add(sock);
+    if (!this.flushQueued) { this.flushQueued = true; setImmediate(() => this.flush()); }
+  }
+  private flush() {
+    this.flushQueued = false;
+    for (const sock of this.corked) { try { sock.uncork(); } catch { /* socket gone */ } }
+    this.corked.clear();
   }
   private send(p: Player, msg: object) { this.out(p, JSON.stringify(msg)); }
   private broadcast(msg: object, filter?: (p: Player) => boolean) {
@@ -802,7 +829,15 @@ export class Room {
   }
 
   // ================================================================ tick
+  /**
+   * One simulation step. Every message a tick produces for a player (snapshot, events, roster, cooldowns) is handed
+   * to the kernel in one write when the tick ends, instead of one system call per message (see hold).
+   */
   tick() {
+    try { this.step(); } finally { this.flush(); }
+  }
+
+  private step() {
     const t = (this.now = now());
     const dt = Math.min(0.2, (t - this.lastTick) / 1000);
     this.lastTick = t;
@@ -1039,7 +1074,7 @@ export class Room {
   }
 
   private snapshot(t: number) {
-    const rows: { p: Player; row: number[] }[] = [];
+    const rows: { p: Player; json: string }[] = [];
     const flagsOf = new Map<Player, number>();
     for (const p of this.players.values()) {
       if (!p.alive || p.team === 'spec') continue;
@@ -1051,13 +1086,14 @@ export class Room {
       if (p.revealUntil > t) f |= F.REVEAL;
       if (p.bonkUntil > t) f |= F.DIZZY;
       flagsOf.set(p, f);
-      rows.push({ p, row: [p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f, p.team === 'prop' ? p.disguise : -1] });
+      // serialised once per tick and shared by every recipient: only the list each recipient may see differs
+      rows.push({ p, json: JSON.stringify([p.id, r2(p.body.x), r2(p.body.y), r2(p.body.z), r2(p.facing), r2(p.pitch), f, p.team === 'prop' ? p.disguise : -1]) });
     }
     const st = Math.round(t), ch = Math.round(this.chaos);
     for (const p of this.players.values()) {
       if (!p.ws || p.ws.readyState !== 1) continue;
       const isHunter = p.team === 'hunter' && p.alive;
-      const list: number[][] = [];
+      const list: string[] = [];
       for (const r of rows) {
         if (r.p === p) continue;
         // hunters get no data about props while blindfolded, nor about ghosted props,
@@ -1066,7 +1102,7 @@ export class Room {
           if (this.phase === 'hiding' || r.p.ghostUntil > t) continue;
           if (this.phase === 'hunt' && !this.inView(p, r.p, t)) continue;
         }
-        list.push(r.row);
+        list.push(r.json);
       }
       // a decoy is first mentioned to a hunter when it comes into view; after that it is just an object that sits there
       if (isHunter && this.phase === 'hunt') for (const d of this.decoys) {
@@ -1076,9 +1112,9 @@ export class Room {
       }
       const b = p.body;
       const me = p.alive && p.team !== 'spec'
-        ? [b.x, b.y, b.z, b.vx, b.vy, b.vz, b.ground ? 1 : 0, b.dashLeft, b.dashCd, this.speedOf(p, t), this.jumpOf(p, t), p.hp, Math.round(p.focus), b.hw, b.h, this.world.gravScale, this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0, b.air]
-        : null;
-      this.out(p, JSON.stringify({ t: 's', st, ack: p.ack, me, p: list, ch }), true);
+        ? JSON.stringify([r4(b.x), r4(b.y), r4(b.z), r3(b.vx), r3(b.vy), r3(b.vz), b.ground ? 1 : 0, r3(b.dashLeft), r3(b.dashCd), r3(this.speedOf(p, t)), r3(this.jumpOf(p, t)), Math.round(p.hp), Math.round(p.focus), r4(b.hw), r4(b.h), r3(this.world.gravScale), this.canMove(p) ? 1 : 0, flagsOf.get(p) ?? 0, r3(b.air)])
+        : 'null';
+      this.out(p, `{"t":"s","st":${st},"ack":${p.ack | 0},"me":${me},"p":[${list.join(',')}],"ch":${ch}}`, true);
       if (p.cdDirty) { p.cdDirty = false; this.send(p, { t: 'cd', ...p.cd }); }
     }
   }

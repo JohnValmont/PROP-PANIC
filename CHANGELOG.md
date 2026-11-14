@@ -1,5 +1,27 @@
 # Changelog
 
+## 2.12.1
+
+Smoother online play with many players, and a way to tell where lag comes from.
+
+- **Less server work per player.** Collision lookups use a flat grid instead of a hash map, and sight lines are
+  tested against walls only, after a cheap bounding-box check. Each player's snapshot row is serialised once per
+  tick and shared by every recipient. The room simulation uses about a third less CPU, with identical physics:
+  405,000 random steps and 180,000 sight tests matched the old code bit for bit. Snapshots are ~9% smaller.
+- **One write per player per tick.** A tick's snapshot, events, roster and cooldowns, and a shot together with the
+  hit it caused, now reach the kernel in one write per socket, not one per message.
+- **Slow connections stop queueing lag.** A player who cannot keep up now skips snapshots once 16 KB is waiting
+  for them (it was 96 KB). The deeper queue added seconds of delay, and their pings and events waited behind it.
+- **Steadier movement on jittery connections.** The client's clock follows the snapshots that arrive soonest,
+  not an average that every late packet dragged back. Other players are drawn with a delay that grows with
+  measured jitter (110 ms, up to 300 ms) and eases back as the connection settles, so they glide instead of
+  freezing and jumping. Shots are rewound to match.
+- **Actions are judged from where you are.** Shots, transforms, abilities, taunts and haunts send any movement
+  still waiting in the batch first.
+- **Diagnostics.** `/health` now reports room tick time and event-loop lag. `npm run test:load` fills rooms
+  with browser-like clients and reports ping, snapshot rate and size, and server CPU. It can emulate a CPU-limited
+  host (`LOAD_CPU=0.1`, the Render free plan). See "Lag and hosting" in the README.
+
 ## 2.12.0
 
 Hunters get characters, blasters you can see in their hands, and a locker of their own.

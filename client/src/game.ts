@@ -29,7 +29,19 @@ const STEP = 1 / 60;
 const DUCK_TYPE = PROP_INDEX['duck'];
 const PROP_INDEX_BOX = PROP_INDEX['box'];
 export type Quality = 'ultra' | 'high' | 'low';
-const INTERP_MS = 110;
+/**
+ * Other players are drawn this far in the past, so there are always two snapshots to blend between. The floor is
+ * one snapshot interval (50 ms) plus a margin; on a jittery connection it grows to cover how late snapshots arrive
+ * (see onSnap), so remote players keep gliding instead of freezing and jumping.
+ */
+const INTERP_MIN_MS = 110, INTERP_MAX_MS = 300;
+/**
+ * Movement commands go out about 60 times a second (a 240 Hz display must not trip the server's flood guard).
+ * Sending fewer saves server work, but with 20 Hz snapshots a 30 Hz cadence lands one batch in one snapshot and two
+ * in the next, and everyone else sees you move in a visible stutter. Actions (shots, transforms, abilities) flush
+ * the batch first, so they are always judged from where the player really is.
+ */
+const INPUT_SEND_MS = 15;
 const CONFETTI = [0xef476f, 0xffd166, 0x06d6a0, 0x118ab2, 0x9b5de5, 0xf78c2b, 0xffffff];
 const lerpAngle = (a: number, b: number, k: number) => { let d = (b - a) % (Math.PI * 2); if (d > Math.PI) d -= Math.PI * 2; if (d < -Math.PI) d += Math.PI * 2; return a + d * k; };
 
@@ -78,6 +90,8 @@ export class Game {
   private ents = new Map<number, Ent>();
   private decoys = new Map<number, DecoyView>();
   private offset = 0; private haveOffset = false;
+  /** How late (ms) each of the last few seconds' snapshots arrived compared with the quickest, and the delay that calls for. */
+  private lateLog: number[] = []; private interpWant = INTERP_MIN_MS; private interpMs = INTERP_MIN_MS;
   private ghostMat: THREE.MeshStandardMaterial;
 
   // local player
@@ -454,18 +468,20 @@ export class Game {
   private useAbility(k: 'decoy' | 'ghost' | 'pulse' | 'shock') {
     if (!this.alive) return;
     if (this.serverNow() < this.cd[k] - 60 || (k === 'ghost' && this.phase === 'lobby') || ((k === 'pulse' || k === 'shock') && (this.phase !== 'hunt' || this.quackedMe))) { this.sfx.play('deny'); return; }
+    this.flushInput();
     this.net.send({ t: 'ab', k });
   }
 
   private taunt(i: number) {
     if (this.team !== 'prop' || !this.alive) return;
     if (this.serverNow() < this.cd.taunt - 60) return;
+    this.flushInput();
     this.net.send({ t: 'taunt', i });
   }
 
   private tryTransform() {
     if (this.team !== 'prop' || !this.alive) return;
-    if (this.target >= 0) this.net.send({ t: 'tf', d: this.target });
+    if (this.target >= 0) { this.flushInput(); this.net.send({ t: 'tf', d: this.target }); }
   }
 
   // ================================================================ network
@@ -473,7 +489,7 @@ export class Game {
     switch (m.t) {
       case 'welcome':
         this.myId = m.id; this.code = m.code; this.pub = m.pub; this.inGame = true;
-        this.haveOffset = false; this.seq = 0; this.pending.length = 0; this.outbox.length = 0;
+        this.haveOffset = false; this.lateLog.length = 0; this.interpWant = this.interpMs = INTERP_MIN_MS; this.seq = 0; this.pending.length = 0; this.outbox.length = 0;
         this.pingOut.clear(); this.pingLog.length = 0; this.rtt = -1; this.jitter = 0; this.pingNextAt = 0;
         this.joinCard = true;
         this.hud.show(true);
@@ -697,8 +713,19 @@ export class Game {
 
   private onSnap(m: any) {
     const sample = m.st - performance.now();
-    if (!this.haveOffset || Math.abs(sample - this.offset) > 400) { this.offset = sample; this.haveOffset = true; }
-    else this.offset += (sample - this.offset) * 0.05;
+    // The clock follows the snapshots that arrive soonest: one that comes early means the path is quicker than we
+    // thought, so it counts fully; a late one is network jitter, not a clock change, and only nudges it down slowly
+    // (an averaged clock dragged everything on screen back and forth with every late packet).
+    if (!this.haveOffset || Math.abs(sample - this.offset) > 400) { this.offset = sample; this.haveOffset = true; this.lateLog.length = 0; }
+    else if (sample > this.offset) this.offset += (sample - this.offset) * 0.3;
+    else this.offset += (sample - this.offset) * 0.01;
+    // jitter: the 90th percentile of lateness over the last three seconds. One stall (a model loading, a GC pause)
+    // is ignored; a connection that is late again and again buys itself a deeper buffer until it settles.
+    this.lateLog.push(Math.max(0, this.offset - sample));
+    if (this.lateLog.length > 3 * CFG.TICK) this.lateLog.shift();
+    const sorted = [...this.lateLog].sort((x, y) => x - y);
+    const p90 = sorted[Math.floor(sorted.length * 0.9)] ?? 0;
+    this.interpWant = Math.max(INTERP_MIN_MS, Math.min(INTERP_MAX_MS, INTERP_MIN_MS + p90));
     this.chaos = m.ch;
     for (const row of m.p as number[][]) {
       const e = this.ents.get(row[0]);
@@ -979,7 +1006,8 @@ export class Game {
     const now = this.serverNow();
     if (now < this.nextFire) return;
     this.nextFire = now + CFG.FIRE_MS;
-    this.net.send({ t: 'fire', yaw: this.yaw, pitch: this.pitch, rt: now - INTERP_MS });
+    this.flushInput();
+    this.net.send({ t: 'fire', yaw: this.yaw, pitch: this.pitch, rt: now - this.interpMs });
     this.recoil = 1; this.muzzleT = 0.05; this.fovPunch = Math.max(this.fovPunch, 1.6);
     this.sfx.play('shoot');
     const extra = GUNS[kitToWire(this.profile)[KIT.gun]]?.sfx; // a little extra on your own shot only: everyone else hears the same zap
@@ -1002,7 +1030,10 @@ export class Game {
   }
 
   private updateEnts(dt: number) {
-    const now = this.serverNow(), rt = now - INTERP_MS;
+    // ease the delay towards what the connection needs: a few percent faster or slower for a moment, never a jump
+    const slew = (this.interpWant > this.interpMs ? 80 : 25) * dt;
+    this.interpMs += Math.max(-slew, Math.min(slew, this.interpWant - this.interpMs));
+    const now = this.serverNow(), rt = now - this.interpMs;
     const viewerHunter = this.team === 'hunter' && this.alive;
     const viewerSpec = !this.alive || this.team === 'spec';
     const firstPerson = viewerHunter && !this.quackedMe;
@@ -1138,6 +1169,12 @@ export class Game {
     }
   }
   private lastSend = 0;
+  /** Send the movement commands not yet sent, now. */
+  private flushInput() {
+    if (!this.outbox.length) return;
+    this.net.send({ t: 'in', c: this.outbox });
+    this.outbox = []; this.lastSend = performance.now();
+  }
   private camDistNow = 3.4;
   private myFlags = 0;
   private skipMouse = 0;
@@ -1435,6 +1472,7 @@ export class Game {
     const left = this.cd.haunt - this.serverNow();
     if (this.hauntTarget < 0) { this.sfx.play('deny'); this.hud.popup('Aim at an object to haunt it', true); return; }
     if (left > 60) { this.sfx.play('deny'); this.hud.popup(`Haunt ready in ${Math.ceil(left / 1000)}s`, true); return; }
+    this.flushInput();
     this.net.send({ t: 'haunt', d: this.hauntTarget });
   }
 
@@ -1617,8 +1655,8 @@ export class Game {
       let n = 0;
       while (this.acc >= STEP && n < 6) { this.stepLocal(); this.acc -= STEP; n++; }
       if (this.acc > STEP) this.acc = 0;
-      // batch inputs to about 60 messages a second: a 240 Hz display must not trip the server's flood guard
-      if (this.outbox.length && (t - this.lastSend >= 15 || this.outbox.length >= 8)) { this.net.send({ t: 'in', c: this.outbox }); this.outbox = []; this.lastSend = t; }
+      // batch inputs to about 60 messages a second, whatever the display's refresh rate (see INPUT_SEND_MS)
+      if (this.outbox.length && (t - this.lastSend >= INPUT_SEND_MS || this.outbox.length >= 8)) this.flushInput();
       const a = this.acc / STEP, b = this.body;
       this.smooth.multiplyScalar(Math.exp(-dt * 14));
       this.rpos.set(this.prev.x + (b.x - this.prev.x) * a + this.smooth.x, this.prev.y + (b.y - this.prev.y) * a + this.smooth.y, this.prev.z + (b.z - this.prev.z) * a + this.smooth.z);
