@@ -16,6 +16,7 @@
     "test:ghost": "node test/ghost.cjs",
     "test:match": "node test/match.cjs",
     "test:soak": "tsx test/soak.ts",
+    "test:load": "tsx test/load.ts",
     "test:mechanics": "tsx test/mechanics.ts",
     "test:maps": "tsx test/maps.ts",
     "test:security": "tsx test/security.ts",
