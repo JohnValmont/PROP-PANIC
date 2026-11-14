@@ -67,7 +67,7 @@ class Client {
 }
 
 async function main() {
-  const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HUNT_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
+  const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], { env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HUNT_MS: '9000' }, stdio: ['ignore', 'pipe', 'inherit'] });
   await new Promise<void>((res) => server.stdout.on('data', (d) => { if (String(d).includes('PROP PANIC server')) res(); }));
   try {
     console.log('rooms');

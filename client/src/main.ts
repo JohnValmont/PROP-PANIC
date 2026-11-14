@@ -6,6 +6,8 @@ import { initTouch, isTouchDevice } from './touch';
 import { AudioEngine, renderWav } from './audio';
 import { SFX } from './sound/dsp';
 import { STINGS } from './sound/songs';
+import { Lineup, type Intent } from './lineup';
+import type { Mode } from './net';
 
 declare const __BUILD__: string;
 
@@ -36,21 +38,26 @@ function setBusy(b: boolean) {
   if (b) err.textContent = 'Connecting…';
 }
 
-function play(mode: 'quick' | 'create' | 'join') {
+/** What the last Play / Private room / Join press asked for: if the server is full, the line keeps it. */
+let lastIntent: Intent = { mode: 'quick', code: '' };
+function play(mode: Mode, pass?: string) {
   if (connecting) return;
   const name = nameInput.value.trim() || 'Player';
-  localStorage.setItem('pp_name', name);
-  const code = codeInput.value.trim().toUpperCase();
+  try { localStorage.setItem('pp_name', name); } catch { /* private mode */ }
+  const code = mode === 'join' ? codeInput.value.trim().toUpperCase() : '';
   if (mode === 'join' && code.length !== 4) { err.textContent = 'Enter the 4-letter room code.'; return; }
+  if (mode !== 'practice') lastIntent = { mode, code };
   game.sfx.unlock(); game.sfx.play('click');
   go('play');
   setBusy(true);
-  game.join(name, mode, code);
+  if (mode === 'practice') err.textContent = 'Setting up the practice room…';
+  game.join(name, mode, code, pass);
 }
 
 $('quickBtn').onclick = () => play('quick');
 $('createBtn').onclick = () => play('create');
 $('joinBtn').onclick = () => play('join');
+$('practiceBtn').onclick = () => play('practice');
 codeInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') play('join'); });
 nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') play(codeInput.value.trim().length === 4 ? 'join' : 'quick'); });
 
@@ -65,19 +72,52 @@ function toMenu(message = '') {
   history.replaceState(null, '', location.pathname);
   game.sfx.music('lobby');
   game.onMenu();
+  document.body.classList.remove('practice');
+  // still waiting for a seat (say, after leaving a practice game): back to the line
+  if (lineup.waiting) lineup.showOverlay();
+  lineup.refresh();
 }
+
+// ---------------------------------------------------------------- the line (client/src/lineup.ts, server/gate.ts)
+const lineup = new Lineup(game, {
+  takeSeat(i, pass) {
+    if (game.inGame || game.net.local) toMenu();
+    if (i.mode === 'join') codeInput.value = i.code;
+    connecting = false;
+    play(i.mode, pass);
+  },
+  practice: () => play('practice'),
+  joinTable(code) { codeInput.value = code; play('join'); },
+  quick: () => play('quick'),
+  requeue(i) {
+    if (game.inGame || game.net.local) toMenu();
+    if (i.mode === 'join') codeInput.value = i.code;
+    play(i.mode);
+  },
+});
+game.net.onLine = (ws, first) => {
+  setBusy(false); err.textContent = '';
+  lineup.adopt(ws, first, lastIntent);
+};
 
 game.net.onState = (s, info) => {
   if (s === 'open') {
     setBusy(false); err.textContent = '';
     menu.classList.add('hidden'); conn.classList.add('hidden'); document.body.classList.add('ingame');
-    history.replaceState(null, '', `?room=${game.net.code}`);
+    const local = game.net.local;
+    document.body.classList.toggle('practice', local);
+    $('lobbyCodeL').textContent = local ? 'PRACTICE · OFFLINE' : 'ROOM CODE';
+    if (local) lineup.renderChip();
+    else { lineup.seated(); history.replaceState(null, '', `?room=${game.net.code}`); }
     // after a refresh the browser will not hand the mouse back without a click: say so instead of looking frozen
     // (not in the lobby, where the mouse is needed for the buttons)
     if (resuming && !isTouchDevice()) setTimeout(() => { if (game.inGame && game.phase !== 'lobby' && !game.locked) showPause(true); }, 50);
   } else if (s === 'reconnecting') {
     conn.classList.remove('hidden');
-  } else toMenu(resuming ? '' : info ?? 'Disconnected.');
+  } else {
+    if (lineup.claiming) lineup.claimFailed();
+    toMenu(resuming ? '' : info ?? 'Disconnected.');
+  }
   resuming = false;
 };
 
@@ -105,7 +145,7 @@ function closeSheet() {
 }
 function showPause(v: boolean) {
   pauseOpen = v; game.touchPaused = v; pause.classList.toggle('hidden', !v);
-  if (!v) closeSheet(); else syncSettings();
+  if (!v) closeSheet(); else { syncSettings(); lineup.renderChip(); }
 }
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === $('c');
@@ -267,7 +307,6 @@ document.addEventListener('mouseover', (e) => {
 });
 
 // ---------------------------------------------------------------- live player count + boot splash
-fetch('/health').then((r) => r.json()).then((h) => { if (h.humans > 0) $('online').textContent = `● ${h.humans} playing right now`; }).catch(() => {});
 {
   // hold the splash until the first map's models and textures are in (or ten seconds, on a slow line)
   const boot = $('boot'), bar = boot.querySelector<HTMLElement>('.bootBar i'), t0 = performance.now();

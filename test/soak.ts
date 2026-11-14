@@ -12,7 +12,7 @@ const SECONDS = Number(process.env.SOAK_SECONDS ?? 150);
 async function main() {
   let stderr = '';
   const server = spawn(process.execPath, ['--import', 'tsx', 'server/index.ts'], {
-    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_HIDE_MS: '2000', PP_HUNT_MS: '14000', PP_END_MS: '1000', PP_CHAOS: '22' },
+    env: { ...process.env, PORT: String(PORT), PP_FAST: '1', PP_BRAKE_MS: '0', PP_HIDE_MS: '2000', PP_HUNT_MS: '14000', PP_END_MS: '1000', PP_CHAOS: '22' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   server.stderr.on('data', (d) => (stderr += String(d)));

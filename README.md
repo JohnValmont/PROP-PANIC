@@ -165,7 +165,26 @@ a controls card for their current role.
 `render.yaml` is a Render blueprint (free plan, Docker). The menu shows a build stamp in the bottom-left
 corner (date and commit), so you can check which version a server is actually running.
 
-The server needs no configuration on Render. Elsewhere, see `SECURITY.md` for the variables that matter
+The server needs no configuration on Render.
+
+### How many people can play at once (the alpha front door)
+
+A free Render instance has a tenth of a CPU, so the server limits itself to `PP_SEATS` players (default 24) at
+`PP_TABLES` tables (default 4). Everyone else gets a place in a fair line with a live position, and can play a
+practice game against bots in their own browser while they wait; when a seat frees they are called in. Nobody
+already playing is ever removed. The Play page shows the tables live (`GET /status`). Details: `server/gate.ts`.
+
+What the defaults are based on (measured on the server process, real snapshots, rounds in the hunt phase):
+
+| Load | CPU (cores) | Sent to each player |
+| --- | --- | --- |
+| 24 humans at 3 full public tables | ~0.07 | ~7 KB/s |
+| 16 private rooms, each 1 human + 7 bots | ~0.11 | ~5 KB/s |
+
+Bots cost more CPU than humans, which is why tables are limited as well as seats. A free instance's CPU is likely
+slower than the machine these were measured on, so watch `/admin` and `/status` (`hot: true` means the load brake is
+on) before raising the limits. Bandwidth matters too: one player for an hour is roughly 25 MB, so check your plan's
+monthly allowance. Elsewhere, see `SECURITY.md` for the variables that matter
 behind a proxy (`PP_TRUST_PROXY`), on a second domain (`PP_ORIGINS`) or inside a portal's frame
 (`PP_FRAME_ANCESTORS`).
 
@@ -221,11 +240,13 @@ npm run test:progress    # levels, catalogue, feats, odd jobs, wardrobe, banking
 npm run test:stats       # admin page password and lockout, statistics written to (a stand-in for) Supabase
 npm run test:security    # attacks a real server: crashes, floods, traversal, hijacking, what hunters are sent
 npm run test:soak    # bots play many fast rounds with chaos events turned up; fails on any server error
+npm run test:gate        # the line: seats and tables run out, passes, reconnects skip the line, private codes stay secret
+npm run build && npm run test:lineup # in a browser: the table board, the line, practice while waiting, the call to take the seat
 ```
 
 `PP_FAST=1` shortens every phase for testing (`PP_HIDE_MS`, `PP_HUNT_MS`, `PP_END_MS`, `PP_FINAL_MS` override them).
 
-CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security, statistics and protocol tests on every push.
+CI (`.github/workflows/ci.yml`) runs the typecheck, build, audio, map, progression, mechanics, security, statistics, line and protocol tests on every push.
 
 ## Tuning
 

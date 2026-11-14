@@ -1,5 +1,30 @@
 # Changelog
 
+## 2.13.0
+
+An alpha front door: a full server puts people in line instead of turning them away, and they can play while they wait.
+
+- **Seats and tables.** The server runs a fixed number of tables (rooms) and seats (players across all of them):
+  `PP_SEATS` (default 24) and `PP_TABLES` (default 4). Nobody already playing is ever removed to make room, and a
+  player reconnecting to a seat they hold always gets back in.
+- **The line.** When every seat is taken, pressing Play gives you a place in line with a live position and, once the
+  server has seen a few seats free, a waiting-time estimate. When a seat frees, it is held for the person at the front
+  for 30 seconds. Walk-ins never jump the line. Someone waiting for a new table (a private room) does not hold up the
+  people behind them who only need a seat at a public table.
+- **Practice while you wait.** A practice game against bots that runs entirely in your browser: the real server room,
+  in a Web Worker, so it costs the server nothing. Your place in line rides along at the bottom of the screen; when
+  your seat is ready you are called in (the mouse is handed back so you can click Join now). Also on the Play card as
+  "Practice offline vs bots" at any time.
+- **Table board.** The Play page shows the tables live: public games (map, phase, seats) you can click to join,
+  private games (no code shown), free tables, and two tables locked until after the alpha. When the server is full, the
+  Play button says GET IN LINE and the note under it says roughly how long.
+- **Load brake.** If the game loop starts running late (the CPU quota is running out), new players wait in line until it
+  recovers, whatever the seat count says (`PP_BRAKE_MS`, default 20 ms; 0 turns it off).
+- **`GET /status`** serves the board: seats, tables, line length and the running tables. Cached for a second.
+- **Fix:** joining a public room by its code could seat a ninth player; public tables now stop at eight like quick play.
+- New tests: `npm run test:gate` (the line, passes, reconnects, private codes kept out of the status) and
+  `npm run test:lineup` (the whole flow in a browser).
+
 ## 2.12.0
 
 Hunters get characters, blasters you can see in their hands, and a locker of their own.

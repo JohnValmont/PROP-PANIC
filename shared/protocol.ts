@@ -8,7 +8,10 @@ import type { RoundStats, WireKit } from './progress';
 // ------------------------------------------------------------------ client -> server
 export type ClientMsg =
   /** `kit` is what the player wears ([paint, hat, eyes, pop, title], see shared/progress.ts) and `lvl` their level. */
-  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number; /** anonymous browser id, for the admin statistics only */ aid?: string }
+  /** `pass`: a seat the line reserved for this browser (see the 'ready' message and server/gate.ts). */
+  | { t: 'hello'; name: string; mode: 'quick' | 'create' | 'join'; code?: string; token?: string; kit?: WireKit; lvl?: number; /** anonymous browser id, for the admin statistics only */ aid?: string; pass?: string }
+  /** Someone waiting in line gives up their place. */
+  | { t: 'leave' }
   /** Batched movement commands: [seq, dt, mx, mz, yaw, pitch, buttons, facing]. buttons: 1 jump, 2 dash. */
   | { t: 'in'; c: number[][] }
   /** Fire the blaster. rt = server time the shooter was rendering other players at (lag compensation). */
@@ -119,4 +122,13 @@ export type ServerMsg =
   | { t: 'decoys'; d: { id: number; type: number; x: number; y: number; z: number; yaw: number; owner: number }[] }
   | { t: 'lobby'; bots: number; countdown: number; canStart: boolean; map: number; rounds: number }
   | { t: 'pong'; c: number; now: number }
+  /**
+   * The server is full and this connection is waiting in line (server/gate.ts). Sent again whenever the position
+   * changes. `eta` is a guess in seconds (0 = not enough history to guess); `hot` = the load brake is on.
+   */
+  | { t: 'line'; pos: number; size: number; eta: number; used: number; seats: number; hot: 0 | 1 }
+  /** A seat is held for this person for `ms`: connect again with this pass in the hello to take it. */
+  | { t: 'ready'; pass: string; ms: number }
+  /** The pass ran out unused; the place in line is gone. */
+  | { t: 'missed' }
   | { t: 'err'; msg: string };
